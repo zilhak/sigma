@@ -456,6 +456,10 @@ const mcpTools = [
 
 **목적:** JSON 데이터를 Figma 프레임으로 변환
 
+> **Target: Figma Desktop App Only**
+>
+> 이 플러그인은 **Figma Desktop App 전용**입니다. Figma Web 버전은 브라우저 샌드박스 환경에서 localhost 접근이 불가능하므로 지원하지 않습니다. Desktop App의 Electron 환경에서는 localhost WebSocket/HTTP 연결이 정상 동작합니다.
+
 #### 독립 사용 (Standalone)
 - 플러그인 UI에서 JSON 직접 붙여넣기
 - 가져오기 버튼으로 Figma 프레임 생성
@@ -692,9 +696,10 @@ sigma/
 │       │   └── constants.ts      # 포트 번호 등 상수
 │       └── package.json
 │
-├── CLAUDE.md                     # 이 파일
+├── CLAUDE.md                     # 구현 상세 문서
+├── README.md                     # 프로젝트 소개
 ├── package.json                  # 모노레포 설정
-└── pnpm-workspace.yaml
+└── bunfig.toml                   # Bun 설정 (workspace 포함)
 ```
 
 ---
@@ -704,10 +709,11 @@ sigma/
 | 모듈 | 기술 |
 |------|------|
 | Chrome Extension | TypeScript, Chrome Extension Manifest V3 |
-| Local Server | Node.js, TypeScript, Fastify, ws, @anthropic-ai/sdk |
+| Local Server | Bun, TypeScript, Hono, @modelcontextprotocol/sdk |
 | Figma Plugin | TypeScript, Figma Plugin API |
 | Shared | TypeScript |
-| Build | esbuild, pnpm workspace |
+| Build | esbuild (Extension/Plugin), Bun (Server) |
+| Package Manager | Bun workspace |
 | Dashboard | Vanilla JS 또는 Preact (경량) |
 
 ---
@@ -769,21 +775,21 @@ sigma/
 
 ```bash
 # 의존성 설치
-pnpm install
+bun install
 
 # 전체 개발 모드
-pnpm dev
+bun dev
 
 # 개별 패키지
-pnpm --filter @sigma/extension dev      # Extension (watch)
-pnpm --filter @sigma/server dev         # Server (watch)
-pnpm --filter @sigma/figma-plugin dev   # Figma Plugin (watch)
+bun run --filter @sigma/extension dev      # Extension (watch)
+bun run --filter @sigma/server dev         # Server (watch)
+bun run --filter @sigma/figma-plugin dev   # Figma Plugin (watch)
 
 # 빌드
-pnpm build
+bun run build
 
 # 서버 실행 (production)
-pnpm --filter @sigma/server start
+bun run --filter @sigma/server start
 
 # Extension 로드
 # chrome://extensions → 개발자 모드 → packages/chrome-extension/dist 로드
