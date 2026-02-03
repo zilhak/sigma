@@ -146,7 +146,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
  */
 async function createFrameFromJSON(node: ExtractedNode, name?: string, position?: { x: number; y: number }) {
   try {
-    // 폰트 로드
+    // 폰트 로드 (영문 + 한글)
     await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
     await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
     await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
@@ -211,6 +211,12 @@ async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNod
   // 레이아웃 모드 설정
   applyLayoutMode(frame, styles);
 
+  // Auto Layout에서 크기 고정 (HUG 방지)
+  if (frame.layoutMode !== 'NONE') {
+    frame.primaryAxisSizingMode = 'FIXED';
+    frame.counterAxisSizingMode = 'FIXED';
+  }
+
   // 정렬 설정
   applyAlignment(frame, styles);
 
@@ -234,19 +240,19 @@ async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNod
     frame.opacity = styles.opacity;
   }
 
+  // 부모의 텍스트 콘텐츠 먼저 추가 (자식이 있어도 부모 텍스트가 있으면 추가)
+  if (textContent) {
+    const textNode = createTextNode(textContent, styles);
+    if (textNode) {
+      frame.appendChild(textNode);
+    }
+  }
+
   // 자식 노드 추가
   for (const child of children) {
     const childNode = await createFigmaNode(child);
     if (childNode) {
       frame.appendChild(childNode);
-    }
-  }
-
-  // 텍스트 콘텐츠 추가 (자식이 없고 텍스트가 있는 경우)
-  if (children.length === 0 && textContent) {
-    const textNode = createTextNode(textContent, styles);
-    if (textNode) {
-      frame.appendChild(textNode);
     }
   }
 
@@ -458,37 +464,88 @@ function applyCornerRadius(frame: FrameNode, styles: ComputedStyles) {
 }
 
 /**
- * 그림자 적용
+ * 그림자 적용 (다중 그림자 지원)
  */
 function applyBoxShadow(frame: FrameNode, styles: ComputedStyles) {
   const { boxShadow } = styles;
 
   if (!boxShadow || boxShadow === 'none') return;
 
-  const shadow = parseBoxShadow(boxShadow);
-  if (shadow) {
-    frame.effects = [shadow];
+  const shadows = parseBoxShadows(boxShadow);
+  if (shadows.length > 0) {
+    frame.effects = shadows;
   }
 }
 
 /**
- * box-shadow CSS 파싱
+ * 다중 box-shadow CSS 파싱
  */
-function parseBoxShadow(shadowStr: string): DropShadowEffect | null {
-  // "0px 4px 6px rgba(0, 0, 0, 0.1)" 형식 파싱
-  const regex = /(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px(?:\s+([\d.]+)px)?\s+(.+)/;
-  const match = shadowStr.match(regex);
+function parseBoxShadows(shadowStr: string): DropShadowEffect[] {
+  const effects: DropShadowEffect[] = [];
 
-  if (!match) return null;
+  // 쉼표로 구분된 다중 그림자 분리 (rgba 내부의 쉼표 제외)
+  const shadowParts = splitShadows(shadowStr);
 
-  const offsetX = parseFloat(match[1]);
-  const offsetY = parseFloat(match[2]);
-  const blur = parseFloat(match[3]);
-  const spread = match[4] ? parseFloat(match[4]) : 0;
-  const colorStr = match[5];
+  for (const part of shadowParts) {
+    const shadow = parseSingleShadow(part.trim());
+    if (shadow) {
+      effects.push(shadow);
+    }
+  }
 
+  return effects;
+}
+
+/**
+ * 다중 그림자 문자열 분리 (rgba 내부 쉼표 무시)
+ */
+function splitShadows(shadowStr: string): string[] {
+  const results: string[] = [];
+  let current = '';
+  let parenDepth = 0;
+
+  for (const char of shadowStr) {
+    if (char === '(') parenDepth++;
+    else if (char === ')') parenDepth--;
+    else if (char === ',' && parenDepth === 0) {
+      results.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  if (current.trim()) {
+    results.push(current.trim());
+  }
+
+  return results;
+}
+
+/**
+ * 단일 box-shadow 파싱
+ */
+function parseSingleShadow(shadowStr: string): DropShadowEffect | null {
+  // "rgba(0, 0, 0, 0.1) 0px 4px 6px 0px" 또는 "0px 4px 6px rgba(0, 0, 0, 0.1)" 형식
+
+  // 색상 먼저 추출
+  const colorMatch = shadowStr.match(/rgba?\s*\([^)]+\)/);
+  if (!colorMatch) return null;
+
+  const colorStr = colorMatch[0];
   const color = parseColorFromCSS(colorStr);
   if (!color) return null;
+
+  // 색상 제거 후 숫자만 추출
+  const numbersStr = shadowStr.replace(colorStr, '').trim();
+  const numbers = numbersStr.match(/-?[\d.]+/g);
+
+  if (!numbers || numbers.length < 2) return null;
+
+  const offsetX = parseFloat(numbers[0]) || 0;
+  const offsetY = parseFloat(numbers[1]) || 0;
+  const blur = parseFloat(numbers[2]) || 0;
+  const spread = parseFloat(numbers[3]) || 0;
 
   return {
     type: 'DROP_SHADOW',
