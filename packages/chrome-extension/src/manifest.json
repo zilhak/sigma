@@ -11,7 +11,7 @@
   ],
   "host_permissions": [
     "<all_urls>",
-    "http://localhost:9801/*"
+    "http://localhost:19832/*"
   ],
   "action": {
     "default_popup": "popup.html",

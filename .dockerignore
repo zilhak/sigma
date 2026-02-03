@@ -1,0 +1,41 @@
+# Dependencies
+node_modules
+*/node_modules
+
+# Build outputs (not needed for server)
+packages/chrome-extension/dist
+packages/figma-plugin/dist
+
+# Development files
+.git
+.gitignore
+*.md
+!packages/*/README.md
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs
+
+# Test
+coverage
+*.test.ts
+*.spec.ts
+
+# Docker (prevent recursive copy)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Packages not needed in container
+packages/chrome-extension
+packages/figma-plugin

@@ -90,6 +90,14 @@ export const toolDefinitions = [
           type: 'string',
           description: '프레임 이름',
         },
+        position: {
+          type: 'object',
+          description: '프레임 생성 위치 (x, y 좌표)',
+          properties: {
+            x: { type: 'number', description: 'X 좌표' },
+            y: { type: 'number', description: 'Y 좌표' },
+          },
+        },
       },
       required: ['data'],
     },
@@ -108,8 +116,38 @@ export const toolDefinitions = [
           type: 'string',
           description: '프레임 이름 (선택사항)',
         },
+        position: {
+          type: 'object',
+          description: '프레임 생성 위치 (x, y 좌표)',
+          properties: {
+            x: { type: 'number', description: 'X 좌표' },
+            y: { type: 'number', description: 'Y 좌표' },
+          },
+        },
       },
       required: ['id'],
+    },
+  },
+  {
+    name: 'figma_get_frames',
+    description: 'Figma 현재 페이지의 모든 프레임 위치와 크기를 조회합니다',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'figma_delete_frame',
+    description: 'Figma에서 프레임을 삭제합니다',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeId: {
+          type: 'string',
+          description: '삭제할 노드 ID (예: "123:456")',
+        },
+      },
+      required: ['nodeId'],
     },
   },
 
@@ -262,7 +300,8 @@ export async function handleTool(
           };
         }
 
-        await wsServer.createFrame(args.data as ExtractedNode, args.name as string | undefined);
+        const position = args.position as { x: number; y: number } | undefined;
+        await wsServer.createFrame(args.data as ExtractedNode, args.name as string | undefined, position);
         return {
           content: [
             {
@@ -270,6 +309,7 @@ export async function handleTool(
               text: JSON.stringify({
                 success: true,
                 message: 'Figma에 프레임이 생성되었습니다',
+                position: position || 'auto',
               }),
             },
           ],
@@ -292,7 +332,8 @@ export async function handleTool(
           };
         }
 
-        await wsServer.createFrame(component.data, (args.name as string) || component.name);
+        const importPosition = args.position as { x: number; y: number } | undefined;
+        await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition);
         return {
           content: [
             {
@@ -300,6 +341,58 @@ export async function handleTool(
               text: JSON.stringify({
                 success: true,
                 message: `'${component.name}'이 Figma로 가져와졌습니다`,
+                position: importPosition || 'auto',
+              }),
+            },
+          ],
+        };
+      }
+
+      case 'figma_get_frames': {
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const frames = await wsServer.getFrames();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                count: frames.length,
+                frames: frames,
+              }),
+            },
+          ],
+        };
+      }
+
+      case 'figma_delete_frame': {
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const deleteResult = await wsServer.deleteFrame(args.nodeId as string);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: deleteResult.deleted,
+                message: deleteResult.deleted
+                  ? `프레임 '${deleteResult.name}'이 삭제되었습니다`
+                  : '삭제 실패',
+                nodeId: args.nodeId,
+                deletedName: deleteResult.name,
               }),
             },
           ],

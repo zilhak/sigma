@@ -8,7 +8,6 @@
   ],
   "scripts": {
     "start": "bun run --filter @sigma/server start",
-    "start:mcp": "bun run --filter @sigma/server start -- --mcp",
     "dev": "bun run --parallel dev:extension dev:server dev:figma",
     "dev:extension": "bun run --filter @sigma/chrome-extension dev",
     "dev:server": "bun run --filter @sigma/server dev",

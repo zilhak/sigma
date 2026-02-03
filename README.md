@@ -30,16 +30,33 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 ## 빠른 시작
 
+### 개발 환경
+
 ```bash
 # 의존성 설치
 bun install
 
-# 개발 모드
+# 개발 모드 (watch)
 bun dev
 
 # 서버만 실행
 bun run --filter @sigma/server start
 ```
+
+### 프로덕션 환경 (Docker)
+
+```bash
+# 서버 시작 (백그라운드, 자동 재시작)
+docker compose up -d
+
+# 로그 확인
+docker compose logs -f sigma
+
+# 서버 중지
+docker compose down
+```
+
+> Docker Desktop의 "Start on login" 옵션과 함께 사용하면 컴퓨터 부팅 시 자동으로 서버가 시작됩니다.
 
 ## 사용 방법
 
@@ -48,14 +65,30 @@ bun run --filter @sigma/server start
 2. Figma Plugin에서 JSON 붙여넣기 → 프레임 생성
 
 ### AI Agent 자동화
+
+**MCP 서버 등록 (Claude Code):**
+```bash
+claude mcp add --transport http sigma http://localhost:19832/api/mcp
+```
+
+**사용 예시:**
 ```
 User: "Storybook에서 Badge 컴포넌트를 Figma에 가져와줘"
 
 AI Agent:
 1. [Playwright] 페이지 이동
-2. [Sigma MCP] extract_component()
-3. [Sigma MCP] figma_create_frame()
+2. [Sigma MCP] figma_create_frame()
 ```
+
+**MCP 도구 목록:**
+| 도구 | 설명 |
+|------|------|
+| `figma_status` | Figma 연결 상태 확인 |
+| `figma_create_frame` | JSON 데이터로 Figma 프레임 생성 |
+| `figma_get_frames` | Figma 현재 페이지의 프레임 목록 조회 |
+| `figma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
+| `list_saved` | 저장된 컴포넌트 목록 |
+| `save_extracted` | 컴포넌트 저장 |
 
 ## 문서
 
@@ -65,8 +98,8 @@ AI Agent:
 
 | 서비스 | 포트 |
 |--------|------|
-| HTTP Server | 9801 |
-| WebSocket Server | 9800 |
+| HTTP Server | 19832 |
+| WebSocket Server | 19831 |
 
 ## 제약 사항
 

@@ -3,11 +3,136 @@ import type { ExtractedNode, ComputedStyles, RGBA } from '@sigma/shared';
 // UI 표시
 figma.showUI(__html__, { width: 320, height: 400 });
 
+// 마지막 생성 위치 추적
+let lastCreatedPosition: { x: number; y: number } | null = null;
+const OFFSET_X = 20; // 다음 프레임 X 오프셋
+const OFFSET_Y = 20; // 다음 프레임 Y 오프셋
+
+// Plugin Data Key
+const PLUGIN_DATA_KEY = 'sigma-file-key';
+
+// 저장된 fileKey 가져오기
+function getStoredFileKey(): string | null {
+  const stored = figma.root.getPluginData(PLUGIN_DATA_KEY);
+  return stored || null;
+}
+
+// fileKey 저장하기
+function saveFileKey(fileKey: string) {
+  figma.root.setPluginData(PLUGIN_DATA_KEY, fileKey);
+}
+
+// 유효한 fileKey 가져오기 (Figma API > 저장된 값)
+function getEffectiveFileKey(): { fileKey: string | null; source: 'api' | 'stored' | 'none' } {
+  if (figma.fileKey) {
+    return { fileKey: figma.fileKey, source: 'api' };
+  }
+  const stored = getStoredFileKey();
+  if (stored) {
+    return { fileKey: stored, source: 'stored' };
+  }
+  return { fileKey: null, source: 'none' };
+}
+
+// 파일 정보 전달
+function sendFileInfo() {
+  const { fileKey, source } = getEffectiveFileKey();
+  figma.ui.postMessage({
+    type: 'file-info',
+    fileKey,
+    fileKeySource: source,
+    storedFileKey: getStoredFileKey(),
+    fileName: figma.root.name,
+    pageId: figma.currentPage.id,
+    pageName: figma.currentPage.name,
+  });
+}
+
+// 초기 파일 정보 전달
+sendFileInfo();
+
+// 페이지 변경 시 업데이트
+figma.on('currentpagechange', () => {
+  sendFileInfo();
+});
+
 // 메시지 핸들러
 figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
   switch (msg.type) {
     case 'create-from-json':
-      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined);
+      const position = msg.position as { x: number; y: number } | undefined;
+      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position);
+      break;
+
+    case 'get-frames':
+      // 현재 페이지의 모든 최상위 프레임 정보 반환
+      const frames = figma.currentPage.children
+        .filter((node): node is FrameNode => node.type === 'FRAME')
+        .map((frame) => ({
+          id: frame.id,
+          name: frame.name,
+          x: frame.x,
+          y: frame.y,
+          width: frame.width,
+          height: frame.height,
+        }));
+      figma.ui.postMessage({ type: 'frames-list', frames });
+      break;
+
+    case 'delete-frame':
+      const nodeId = msg.nodeId as string;
+      if (!nodeId) {
+        figma.ui.postMessage({
+          type: 'delete-result',
+          success: false,
+          error: 'nodeId가 필요합니다',
+        });
+        break;
+      }
+
+      const nodeToDelete = figma.getNodeById(nodeId);
+      if (!nodeToDelete) {
+        figma.ui.postMessage({
+          type: 'delete-result',
+          success: false,
+          error: `노드를 찾을 수 없습니다: ${nodeId}`,
+        });
+        break;
+      }
+
+      const deletedName = nodeToDelete.name;
+      nodeToDelete.remove();
+      figma.ui.postMessage({
+        type: 'delete-result',
+        success: true,
+        result: { nodeId, name: deletedName },
+      });
+      break;
+
+    case 'get-file-info':
+      sendFileInfo();
+      break;
+
+    case 'save-file-key':
+      const newFileKey = msg.fileKey as string;
+      if (newFileKey && newFileKey.trim()) {
+        saveFileKey(newFileKey.trim());
+        figma.ui.postMessage({ type: 'success', message: 'File Key가 저장되었습니다.' });
+        // 저장 후 파일 정보 다시 전달
+        sendFileInfo();
+      } else {
+        figma.ui.postMessage({ type: 'error', message: 'File Key를 입력해주세요.' });
+      }
+      break;
+
+    case 'resize':
+      const { width, height } = msg.data as { width: number; height: number };
+      figma.ui.resize(width, height);
+      break;
+
+    case 'reset-position':
+      lastCreatedPosition = null;
+      figma.ui.postMessage({ type: 'info', message: '위치가 리셋되었습니다.' });
       break;
 
     case 'cancel':
@@ -19,7 +144,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 /**
  * JSON 데이터로 Figma 프레임 생성
  */
-async function createFrameFromJSON(node: ExtractedNode, name?: string) {
+async function createFrameFromJSON(node: ExtractedNode, name?: string, position?: { x: number; y: number }) {
   try {
     // 폰트 로드
     await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
@@ -34,10 +159,21 @@ async function createFrameFromJSON(node: ExtractedNode, name?: string) {
       // 이름 설정
       frame.name = name || node.className || node.tagName;
 
-      // 뷰포트 중앙에 배치
-      const center = figma.viewport.center;
-      frame.x = center.x - frame.width / 2;
-      frame.y = center.y - frame.height / 2;
+      // 위치 결정: 명시적 좌표 > 이전 위치 오프셋 > 뷰포트 중앙
+      if (position) {
+        frame.x = position.x;
+        frame.y = position.y;
+      } else if (lastCreatedPosition) {
+        frame.x = lastCreatedPosition.x + OFFSET_X;
+        frame.y = lastCreatedPosition.y + OFFSET_Y;
+      } else {
+        const center = figma.viewport.center;
+        frame.x = center.x - frame.width / 2;
+        frame.y = center.y - frame.height / 2;
+      }
+
+      // 마지막 위치 저장
+      lastCreatedPosition = { x: frame.x, y: frame.y };
 
       // 페이지에 추가
       figma.currentPage.appendChild(frame);
@@ -56,7 +192,8 @@ async function createFrameFromJSON(node: ExtractedNode, name?: string) {
  * ExtractedNode를 Figma 노드로 변환
  */
 async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNode | null> {
-  const { styles, textContent, children, boundingRect } = node;
+  const { styles, textContent, boundingRect } = node;
+  const children = node.children || [];
 
   // 텍스트만 있는 요소 (자식 없고 텍스트만)
   if (isTextOnlyElement(node)) {
@@ -123,13 +260,16 @@ function isTextOnlyElement(node: ExtractedNode): boolean {
   const textTags = ['span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'label', 'strong', 'em', 'b', 'i'];
 
   if (!textTags.includes(node.tagName)) return false;
-  if (node.children.length > 0) return false;
+  if (node.children && node.children.length > 0) return false;
   if (!node.textContent) return false;
 
-  // 배경색이나 패딩이 있으면 프레임으로 처리
+  // 배경색, 패딩, 테두리가 있으면 프레임으로 처리 (TextNode는 stroke 미지원)
   const { styles } = node;
   if (styles.backgroundColor && styles.backgroundColor.a > 0) return false;
   if (styles.paddingTop > 0 || styles.paddingBottom > 0) return false;
+  if (styles.paddingLeft > 0 || styles.paddingRight > 0) return false;
+  if (styles.borderTopWidth > 0 || styles.borderRightWidth > 0 ||
+      styles.borderBottomWidth > 0 || styles.borderLeftWidth > 0) return false;
 
   return true;
 }
@@ -161,12 +301,12 @@ function createTextNode(text: string, styles: ComputedStyles): TextNode | null {
   }
 
   // 줄 높이
-  if (styles.lineHeight > 0) {
+  if (styles.lineHeight != null && styles.lineHeight > 0) {
     textNode.lineHeight = { value: styles.lineHeight, unit: 'PIXELS' };
   }
 
   // 자간
-  if (styles.letterSpacing !== 0) {
+  if (styles.letterSpacing != null && styles.letterSpacing !== 0) {
     textNode.letterSpacing = { value: styles.letterSpacing, unit: 'PIXELS' };
   }
 

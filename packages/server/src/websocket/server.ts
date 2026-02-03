@@ -1,10 +1,18 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ExtractedNode } from '@sigma/shared';
 
+interface FigmaFileInfo {
+  fileKey: string | null;
+  fileName: string;
+  pageId: string;
+  pageName: string;
+}
+
 interface Client {
   ws: WebSocket;
   type: 'figma-plugin' | 'unknown';
   connectedAt: Date;
+  fileInfo?: FigmaFileInfo;
 }
 
 interface PendingCommand {
@@ -77,8 +85,30 @@ export class FigmaWebSocketServer {
       case 'REGISTER':
         if (message.client === 'figma-plugin') {
           client.type = 'figma-plugin';
-          console.log('[WebSocket] Figma Plugin registered');
+          // 파일 정보가 함께 왔으면 저장
+          if (message.fileKey !== undefined) {
+            client.fileInfo = {
+              fileKey: message.fileKey as string | null,
+              fileName: message.fileName as string,
+              pageId: message.pageId as string,
+              pageName: message.pageName as string,
+            };
+            console.log(`[WebSocket] Figma Plugin registered (file: ${client.fileInfo.fileName}, page: ${client.fileInfo.pageName})`);
+          } else {
+            console.log('[WebSocket] Figma Plugin registered');
+          }
         }
+        break;
+
+      case 'FILE_INFO':
+        // 파일 정보 업데이트
+        client.fileInfo = {
+          fileKey: message.fileKey as string | null,
+          fileName: message.fileName as string,
+          pageId: message.pageId as string,
+          pageName: message.pageName as string,
+        };
+        console.log(`[WebSocket] File info updated (file: ${client.fileInfo.fileName}, page: ${client.fileInfo.pageName})`);
         break;
 
       case 'PONG':
@@ -96,6 +126,33 @@ export class FigmaWebSocketServer {
             pending.resolve(message.result);
           } else {
             pending.reject(new Error(message.error as string || 'Unknown error'));
+          }
+        }
+        break;
+
+      case 'FRAMES_LIST':
+        // Handle frames list response
+        const framesCommandId = message.commandId as string;
+        const framesPending = this.pendingCommands.get(framesCommandId);
+        if (framesPending) {
+          clearTimeout(framesPending.timeout);
+          this.pendingCommands.delete(framesCommandId);
+          framesPending.resolve(message.frames);
+        }
+        break;
+
+      case 'DELETE_RESULT':
+        // Handle delete result
+        const deleteCommandId = message.commandId as string;
+        const deletePending = this.pendingCommands.get(deleteCommandId);
+        if (deletePending) {
+          clearTimeout(deletePending.timeout);
+          this.pendingCommands.delete(deleteCommandId);
+          if (message.success) {
+            const result = message.result as { nodeId: string; name: string } | undefined;
+            deletePending.resolve({ deleted: true, name: result?.name });
+          } else {
+            deletePending.reject(new Error(message.error as string || 'Delete failed'));
           }
         }
         break;
@@ -132,7 +189,7 @@ export class FigmaWebSocketServer {
   }
 
   // Send command to create frame in Figma
-  async createFrame(data: ExtractedNode, name?: string): Promise<void> {
+  async createFrame(data: ExtractedNode, name?: string, position?: { x: number; y: number }): Promise<void> {
     const figmaClients = this.getFigmaClients();
     if (figmaClients.length === 0) {
       throw new Error('Figma Plugin이 연결되어 있지 않습니다');
@@ -158,9 +215,73 @@ export class FigmaWebSocketServer {
         commandId,
         data,
         name,
+        position,
       });
 
       // Send to first connected Figma plugin
+      figmaClients[0].send(message);
+    });
+  }
+
+  // Get all frames from Figma
+  async getFrames(): Promise<Array<{ id: string; name: string; x: number; y: number; width: number; height: number }>> {
+    const figmaClients = this.getFigmaClients();
+    if (figmaClients.length === 0) {
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'GET_FRAMES',
+        commandId,
+      });
+
+      figmaClients[0].send(message);
+    });
+  }
+
+  // Delete a frame in Figma
+  async deleteFrame(nodeId: string): Promise<{ deleted: boolean; name?: string }> {
+    const figmaClients = this.getFigmaClients();
+    if (figmaClients.length === 0) {
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'DELETE_FRAME',
+        commandId,
+        nodeId,
+      });
+
       figmaClients[0].send(message);
     });
   }
@@ -186,12 +307,24 @@ export class FigmaWebSocketServer {
     this.wss.close();
   }
 
+  // Get connected Figma file info
+  getFigmaFileInfo(): FigmaFileInfo | null {
+    for (const client of this.clients.values()) {
+      if (client.type === 'figma-plugin' && client.ws.readyState === WebSocket.OPEN && client.fileInfo) {
+        return client.fileInfo;
+      }
+    }
+    return null;
+  }
+
   // Get status
   getStatus() {
+    const fileInfo = this.getFigmaFileInfo();
     return {
       totalClients: this.clients.size,
       figmaConnected: this.isFigmaConnected(),
       figmaClients: this.getFigmaClients().length,
+      figmaFileInfo: fileInfo,
     };
   }
 }

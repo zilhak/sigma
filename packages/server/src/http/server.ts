@@ -13,12 +13,7 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
   app.use(
     '*',
     cors({
-      origin: (origin) => {
-        if (!origin) return 'http://localhost:9801';
-        if (origin === 'http://localhost:9801') return origin;
-        if (origin.startsWith('chrome-extension://')) return origin;
-        return 'http://localhost:9801';
-      },
+      origin: '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type'],
     })
@@ -124,10 +119,16 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
   // Send data to Figma
   app.post('/api/figma/import', async (c) => {
     try {
-      const body = await c.req.json<{ data?: ExtractedNode; id?: string; name?: string }>();
+      const body = await c.req.json<{
+        data?: ExtractedNode;
+        id?: string;
+        name?: string;
+        position?: { x: number; y: number };
+      }>();
 
       let data: ExtractedNode;
       let name: string | undefined = body.name;
+      const position = body.position;
 
       // Load from storage if ID provided
       if (body.id) {
@@ -148,12 +149,31 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         return c.json({ error: 'Figma Plugin이 연결되어 있지 않습니다' }, 503);
       }
 
-      // Send to Figma
-      await wsServer.createFrame(data, name);
+      // Send to Figma with optional position
+      await wsServer.createFrame(data, name, position);
 
       return c.json({ success: true, message: 'Figma에 프레임이 생성되었습니다' });
     } catch (error) {
       console.error('[HTTP] Figma import error:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  // Get list of frames in Figma
+  app.get('/api/figma/frames', async (c) => {
+    try {
+      // Check Figma connection
+      if (!wsServer.isFigmaConnected()) {
+        return c.json({ error: 'Figma Plugin이 연결되어 있지 않습니다' }, 503);
+      }
+
+      // Get frames from Figma
+      const frames = await wsServer.getFrames();
+
+      return c.json({ success: true, frames });
+    } catch (error) {
+      console.error('[HTTP] Figma frames error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return c.json({ error: message }, 500);
     }

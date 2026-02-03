@@ -1,9 +1,11 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
-  CallToolRequestSchema,
+  isInitializeRequest,
   ListToolsRequestSchema,
+  CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { IncomingMessage, ServerResponse } from 'http';
 import { toolDefinitions, handleTool, type ToolContext } from './tools.js';
 
 export function createMcpServer(context: ToolContext) {
@@ -35,12 +37,86 @@ export function createMcpServer(context: ToolContext) {
   return server;
 }
 
-export async function startMcpServer(context: ToolContext) {
-  const server = createMcpServer(context);
-  const transport = new StdioServerTransport();
+// Session management for MCP
+const transports: Map<string, StreamableHTTPServerTransport> = new Map();
 
-  await server.connect(transport);
-  console.error('[MCP] Server started on stdio');
+export function createMcpRequestHandler(context: ToolContext) {
+  return async (req: IncomingMessage, res: ServerResponse, body?: any) => {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-  return server;
+    // Handle DELETE request for session cleanup
+    if (req.method === 'DELETE') {
+      if (sessionId && transports.has(sessionId)) {
+        const transport = transports.get(sessionId)!;
+        await transport.handleRequest(req, res);
+        transports.delete(sessionId);
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid session' }));
+      }
+      return;
+    }
+
+    // Handle GET request for SSE stream
+    if (req.method === 'GET') {
+      if (sessionId && transports.has(sessionId)) {
+        const transport = transports.get(sessionId)!;
+        await transport.handleRequest(req, res);
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid session' }));
+      }
+      return;
+    }
+
+    // Handle POST request
+    if (req.method === 'POST') {
+      let transport: StreamableHTTPServerTransport;
+
+      if (sessionId && transports.has(sessionId)) {
+        // Reuse existing session
+        transport = transports.get(sessionId)!;
+      } else if (!sessionId && isInitializeRequest(body)) {
+        // New session initialization
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => crypto.randomUUID(),
+          onsessioninitialized: (id) => {
+            transports.set(id, transport);
+            console.log('[MCP] Session initialized:', id);
+          },
+        });
+
+        transport.onclose = () => {
+          if (transport.sessionId) {
+            transports.delete(transport.sessionId);
+            console.log('[MCP] Session closed:', transport.sessionId);
+          }
+        };
+
+        const server = createMcpServer(context);
+        await server.connect(transport);
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Invalid session' },
+            id: null,
+          })
+        );
+        return;
+      }
+
+      await transport.handleRequest(req, res, body);
+      return;
+    }
+
+    // Method not allowed
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Method not allowed' }));
+  };
+}
+
+export function getMcpSessionCount(): number {
+  return transports.size;
 }

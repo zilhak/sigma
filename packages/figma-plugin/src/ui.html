@@ -216,18 +216,214 @@
       font-size: 10px;
       color: #999;
     }
+
+    /* Log container */
+    .log-container {
+      height: 220px;
+      overflow-y: auto;
+      background: #1e1e1e;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 10px;
+    }
+
+    .log-entry {
+      padding: 2px 0;
+      color: #d4d4d4;
+      word-break: break-all;
+    }
+
+    .log-entry.info {
+      color: #9cdcfe;
+    }
+
+    .log-entry.success {
+      color: #4ec9b0;
+    }
+
+    .log-entry.error {
+      color: #f14c4c;
+    }
+
+    .log-entry.warn {
+      color: #cca700;
+    }
+
+    .log-time {
+      color: #6a9955;
+      margin-right: 8px;
+    }
+
+    /* Minimize button */
+    .minimize-btn {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      color: #666;
+      font-size: 16px;
+    }
+
+    .minimize-btn:hover {
+      background: #f0f0f0;
+    }
+
+    /* Minimized view */
+    .minimized-view {
+      display: none;
+      padding: 8px 12px;
+      background: #fff;
+    }
+
+    .minimized-view.active {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .minimized-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .expand-btn {
+      padding: 4px 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+      background: #f5f5f5;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .expand-btn:hover {
+      background: #ebebeb;
+    }
+
+    /* Full view */
+    .full-view {
+      display: block;
+    }
+
+    .full-view.hidden {
+      display: none;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* FileKey Section */
+    .filekey-section {
+      margin-bottom: 12px;
+      padding: 10px;
+      background: #fafafa;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+    }
+
+    .filekey-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #333;
+    }
+
+    .filekey-status {
+      font-size: 10px;
+      font-weight: 400;
+    }
+
+    .filekey-status.auto {
+      color: #18a058;
+    }
+
+    .filekey-status.manual {
+      color: #f0a020;
+    }
+
+    .filekey-status.none {
+      color: #999;
+    }
+
+    .filekey-input-wrapper {
+      display: flex;
+      gap: 6px;
+    }
+
+    .filekey-input-wrapper input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+    }
+
+    .filekey-input-wrapper input:focus {
+      outline: none;
+      border-color: #18a058;
+    }
+
+    .btn-small {
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      background: #18a058;
+      color: white;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-small:hover {
+      background: #16914f;
+    }
+
+    .filekey-hint {
+      margin-top: 6px;
+      font-size: 10px;
+      color: #999;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="title">Sigma</div>
-    <div class="status">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText">연결 대기 중</span>
+  <!-- Minimized View -->
+  <div class="minimized-view" id="minimizedView">
+    <div class="minimized-status">
+      <div class="status-dot" id="statusDotMini"></div>
+      <span>Sigma</span>
     </div>
+    <button class="expand-btn" id="expandBtn">열기</button>
   </div>
 
-  <div class="tabs">
+  <!-- Full View -->
+  <div class="full-view" id="fullView">
+    <div class="header">
+      <div class="title">Sigma</div>
+      <div class="header-actions">
+        <div class="status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">연결 대기 중</span>
+        </div>
+        <button class="minimize-btn" id="minimizeBtn" title="최소화">−</button>
+      </div>
+    </div>
+
+    <div class="tabs">
     <div class="tab active" data-tab="paste">JSON 붙여넣기</div>
     <div class="tab" data-tab="server">서버 연동</div>
   </div>
@@ -241,13 +437,24 @@
 
   <div id="serverSection" class="section">
     <div class="server-info">
-      서버 URL: <strong>http://localhost:9801</strong>
+      서버 URL: <strong>http://localhost:19832</strong>
+    </div>
+
+    <div class="filekey-section">
+      <label class="filekey-label">
+        <span>File Key</span>
+        <span class="filekey-status" id="fileKeyStatus"></span>
+      </label>
+      <div class="filekey-input-wrapper">
+        <input type="text" id="fileKeyInput" placeholder="Figma File Key 입력..." />
+        <button class="btn-small" id="saveFileKeyBtn">저장</button>
+      </div>
+      <div class="filekey-hint" id="fileKeyHint"></div>
     </div>
 
     <div id="serverConnected" style="display: none;">
-      <p style="margin-bottom: 12px; color: #18a058;">서버와 연결됨. 데이터를 기다리는 중...</p>
-      <div class="recent-list" id="recentList">
-        <!-- 최근 수신된 데이터 목록 -->
+      <div class="log-container" id="logContainer">
+        <!-- 로그가 여기에 표시됨 -->
       </div>
     </div>
 
@@ -260,7 +467,8 @@
     </div>
   </div>
 
-  <div class="message" id="message"></div>
+    <div class="message" id="message"></div>
+  </div>
 
   <script src="ui.js"></script>
 </body>

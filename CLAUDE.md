@@ -2,6 +2,61 @@
 
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템
 
+---
+
+## Claude Code 작업 지침
+
+### 임시 파일 및 문서 저장 규칙
+
+Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서 등은 **프로젝트 루트의 `.claude/` 폴더**에 저장합니다.
+
+```
+sigma/
+├── .claude/                    # Claude 전용 작업 폴더 (gitignore됨)
+│   ├── screenshots/            # 스크린샷 저장
+│   ├── temp/                   # 임시 파일
+│   ├── docs/                   # 작업 중 문서
+│   └── logs/                   # 로그 파일
+├── src/
+└── ...
+```
+
+**규칙:**
+- `.claude/` 폴더는 global gitignore에 등록되어 소스코드에 포함되지 않음
+- 소스코드에 포함되어야 하는 문서만 `.claude/` 폴더 바깥에 작성
+- 임시 파일은 절대 Downloads 폴더나 시스템 /tmp에 저장하지 않음
+
+### Playwright MCP 사용 지침
+
+브라우저 자동화 시 Playwright MCP를 사용할 때 다음 규칙을 준수합니다:
+
+**창 크기:**
+```
+width: 1600
+height: 900
+```
+
+**스크린샷 저장:**
+```
+경로: {프로젝트루트}/.claude/screenshots/
+예시: /Users/ljh/workspace/etc/sigma/.claude/screenshots/
+```
+
+**사용 예시:**
+```typescript
+// 네비게이션
+playwright_navigate({ url: "...", width: 1600, height: 900 })
+
+// 스크린샷
+playwright_screenshot({
+  name: "component-name",
+  savePng: true,
+  downloadsDir: "/Users/ljh/workspace/etc/sigma/.claude/screenshots"
+})
+```
+
+---
+
 ## 핵심 철학
 
 **"서로 연동하면 최고의 효율, 따로따로도 사용 가능"**
@@ -28,7 +83,7 @@
             ▼                                ▼
 ┌───────────────────────────┐    ┌────────────────────────────────────────┐
 │      Chrome Browser       │    │            Local Server                 │
-│  ┌─────────────────────┐  │    │         http://localhost:9801           │
+│  ┌─────────────────────┐  │    │         http://localhost:19832           │
 │  │   Chrome Extension  │  │    │                                         │
 │  │  ┌───────────────┐  │  │    │  ┌─────────────┐  ┌─────────────────┐  │
 │  │  │ 컴포넌트 추출  │  │──────────▶│  HTTP API   │  │   WebSocket     │  │
@@ -98,7 +153,7 @@ Extension이 추출한 데이터를 서버로 전송. 서버는 명령을 보내
        │◀─────────────────────────────────│
        │                                  │
        │  서버 발견! WebSocket 연결       │
-       │  ws://localhost:9800             │
+       │  ws://localhost:19831             │
        │═════════════════════════════════▶│
        │                                  │
        │    { type: "CREATE_FRAME", ... } │
@@ -187,7 +242,7 @@ Extension이 추출한 데이터를 서버로 전송. 서버는 명령을 보내
   "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
   "host_permissions": [
     "<all_urls>",
-    "http://localhost:9801/*"
+    "http://localhost:19832/*"
   ]
 }
 ```
@@ -195,7 +250,7 @@ Extension이 추출한 데이터를 서버로 전송. 서버는 명령을 보내
 #### Extension 통신 로직
 ```typescript
 // popup.ts (또는 content.ts)
-const SERVER_URL = 'http://localhost:9801';
+const SERVER_URL = 'http://localhost:19832';
 
 let extractedData: ExtractedNode | null = null;
 let serverConnected = false;
@@ -278,14 +333,14 @@ setInterval(checkServerStatus, 5000);
 | 컴포넌트 | 역할 | 포트/프로토콜 |
 |----------|------|---------------|
 | MCP Server | AI Agent와 통신 | stdio |
-| HTTP Server | REST API + Dashboard | http://localhost:9801 |
-| WebSocket Server | Figma Plugin 통신 | ws://localhost:9800 |
+| HTTP Server | REST API + Dashboard | http://localhost:19832 |
+| WebSocket Server | Figma Plugin 통신 | ws://localhost:19831 |
 | File Storage | 추출 데이터 저장/관리 | ~/.sigma/extracted/ |
 
 #### HTTP API 엔드포인트
 
 ```
-HTTP Server (localhost:9801)
+HTTP Server (localhost:19832)
 │
 ├── 상태 확인
 │   └── GET  /api/health                 # 서버 상태
@@ -403,8 +458,8 @@ const mcpTools = [
 #### Plugin UI 통신 코드
 ```typescript
 // figma-plugin/src/ui.ts
-const HTTP_URL = 'http://localhost:9801';
-const WS_URL = 'ws://localhost:9800';
+const HTTP_URL = 'http://localhost:19832';
+const WS_URL = 'ws://localhost:19831';
 
 let ws: WebSocket | null = null;
 let pollingInterval: number | null = null;
@@ -530,7 +585,7 @@ await page.keyboard.press('Alt+Shift+E');
 1. sigma 서버 실행: sigma start
 2. Extension이 서버 연결 상태 표시
 3. Extension으로 컴포넌트 추출 → 서버에 자동 저장됨
-4. http://localhost:9801 대시보드에서 저장된 컴포넌트 확인
+4. http://localhost:19832 대시보드에서 저장된 컴포넌트 확인
 5. "Figma로 보내기" 클릭
 6. Figma Plugin이 자동으로 프레임 생성
 ```
@@ -661,8 +716,8 @@ sigma/
 
 | 서비스 | 포트 | 프로토콜 | 용도 |
 |--------|------|----------|------|
-| HTTP Server | 9801 | HTTP | REST API, Dashboard |
-| WebSocket Server | 9800 | WebSocket | Figma Plugin 통신 |
+| HTTP Server | 19832 | HTTP | REST API, Dashboard |
+| WebSocket Server | 19831 | WebSocket | Figma Plugin 통신 |
 | MCP Server | - | stdio | AI Agent 통신 |
 
 ---
@@ -674,8 +729,8 @@ sigma/
 // ~/.sigma/config.json
 {
   "server": {
-    "httpPort": 9801,
-    "wsPort": 9800
+    "httpPort": 19832,
+    "wsPort": 19831
   },
   "storage": {
     "path": "~/.sigma/extracted",
@@ -690,7 +745,7 @@ sigma/
 ### Extension 설정 (storage.local)
 ```json
 {
-  "serverUrl": "http://localhost:9801",
+  "serverUrl": "http://localhost:19832",
   "defaultFormat": "json",
   "autoSendToServer": true
 }
@@ -699,8 +754,8 @@ sigma/
 ### Figma Plugin 설정
 ```json
 {
-  "serverHttpUrl": "http://localhost:9801",
-  "serverWsUrl": "ws://localhost:9800",
+  "serverHttpUrl": "http://localhost:19832",
+  "serverWsUrl": "ws://localhost:19831",
   "pollingInterval": 5000
 }
 ```
@@ -734,6 +789,107 @@ bun run --filter @sigma/server start
 # Figma → Plugins → Development → Import plugin from manifest
 # → packages/figma-plugin/manifest.json 선택
 ```
+
+---
+
+## Docker 배포
+
+### 개요
+
+Sigma 서버를 Docker 컨테이너로 실행하여 시스템 부팅 시 자동 시작되도록 구성할 수 있습니다.
+
+| 환경 | 실행 방식 | 용도 |
+|------|-----------|------|
+| **개발** | `bun run dev` | 코드 변경 시 자동 재시작 (watch) |
+| **프로덕션** | `docker compose up -d` | 항상 실행, 자동 재시작 |
+
+### Docker Compose 실행
+
+```bash
+# 서버 시작 (백그라운드)
+docker compose up -d
+
+# 로그 확인
+docker compose logs -f sigma
+
+# 서버 중지
+docker compose down
+
+# 이미지 재빌드 (코드 변경 후)
+docker compose up -d --build
+```
+
+### 프로젝트 구조 (Docker 관련)
+
+```
+sigma/
+├── Dockerfile              # 서버 이미지 빌드
+├── docker-compose.yml      # 컨테이너 오케스트레이션
+├── .dockerignore           # 빌드 제외 파일
+└── packages/
+    └── server/             # 컨테이너에서 실행되는 서버
+```
+
+### Dockerfile 명세
+
+```dockerfile
+FROM oven/bun:1 AS base
+WORKDIR /app
+
+# 의존성 설치
+FROM base AS deps
+COPY package.json bun.lock* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/server/package.json ./packages/server/
+RUN bun install --frozen-lockfile
+
+# 프로덕션 실행
+FROM base AS runner
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/server/node_modules ./packages/server/node_modules
+COPY packages/shared ./packages/shared
+COPY packages/server ./packages/server
+COPY package.json ./
+
+EXPOSE 19831 19832
+
+CMD ["bun", "run", "--filter", "@sigma/server", "start"]
+```
+
+### docker-compose.yml 명세
+
+```yaml
+services:
+  sigma:
+    build: .
+    container_name: sigma-server
+    ports:
+      - "19831:19831"  # WebSocket (Figma Plugin)
+      - "19832:19832"  # HTTP API + MCP
+    volumes:
+      - sigma-data:/root/.sigma  # 추출된 컴포넌트 데이터 영속성
+    restart: always  # Docker Desktop 시작 시 자동 실행
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19832/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  sigma-data:
+```
+
+### Docker Desktop 자동 시작 설정
+
+1. Docker Desktop 설정 → General → "Start Docker Desktop when you sign in" 활성화
+2. `docker compose up -d` 실행 후 `restart: always` 정책으로 자동 재시작
+
+### 주의사항
+
+- **개발 중 코드 변경 시**: `docker compose up -d --build`로 이미지 재빌드 필요
+- **볼륨 마운트**: `~/.sigma` 데이터는 Docker volume으로 영속화됨
+- **네트워크**: `host.docker.internal`로 호스트 접근 가능 (필요 시)
 
 ---
 
@@ -777,14 +933,14 @@ bun run --filter @sigma/server start
    app.use(cors({
      origin: [
        /^chrome-extension:\/\//,
-       'http://localhost:9801'
+       'http://localhost:19832'
      ]
    }));
    ```
 
 3. **Extension host_permissions**
    ```json
-   "host_permissions": ["http://localhost:9801/*"]
+   "host_permissions": ["http://localhost:19832/*"]
    ```
 
 4. **입력 검증**

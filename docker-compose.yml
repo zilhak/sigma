@@ -1,0 +1,16 @@
+services:
+  sigma:
+    build: .
+    container_name: sigma-server
+    ports:
+      - "19831:19831"  # WebSocket (Figma Plugin)
+      - "19832:19832"  # HTTP API + MCP
+    volumes:
+      - sigma-data:/root/.sigma  # Persist extracted components
+    restart: always  # Auto-restart on boot (with Docker Desktop)
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  sigma-data:
+    name: sigma-data

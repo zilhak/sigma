@@ -2,8 +2,8 @@
  * 서버 포트 설정
  */
 export const PORTS = {
-  HTTP: 9801,
-  WEBSOCKET: 9800,
+  HTTP: 19832,
+  WEBSOCKET: 19831,
 } as const;
 
 // Shorthand exports
