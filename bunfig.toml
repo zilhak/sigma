@@ -1,0 +1,7 @@
+[install]
+# Bun workspace 설정
+auto = "fallback"
+
+[run]
+# 빠른 실행을 위한 설정
+bun = true

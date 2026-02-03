@@ -1,0 +1,21 @@
+{
+  "name": "sigma",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --parallel dev:extension dev:server dev:figma",
+    "dev:extension": "bun run --filter @sigma/chrome-extension dev",
+    "dev:server": "bun run --filter @sigma/server dev",
+    "dev:figma": "bun run --filter @sigma/figma-plugin dev",
+    "build": "bun run --filter '*' build",
+    "clean": "rm -rf packages/*/dist packages/*/.turbo node_modules/.cache"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "esbuild": "^0.20.0"
+  }
+}

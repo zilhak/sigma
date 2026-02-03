@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sigma</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>Sigma</h1>
+      <div class="server-status" id="serverStatus">
+        <span class="status-dot"></span>
+        <span class="status-text">확인 중...</span>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- 선택 모드 버튼 -->
+      <button class="btn btn-primary" id="selectBtn">
+        🎯 컴포넌트 선택
+      </button>
+
+      <!-- 추출된 데이터 미리보기 -->
+      <div class="preview" id="preview" style="display: none;">
+        <div class="preview-header">
+          <span id="previewTag">-</span>
+          <span id="previewClass">-</span>
+        </div>
+        <div class="preview-size" id="previewSize">-</div>
+      </div>
+
+      <!-- 형식 선택 -->
+      <div class="format-select">
+        <label>
+          <input type="radio" name="format" value="json" checked>
+          JSON
+        </label>
+        <label>
+          <input type="radio" name="format" value="html">
+          HTML
+        </label>
+      </div>
+
+      <!-- 이름 입력 -->
+      <div class="name-input">
+        <input type="text" id="componentName" placeholder="컴포넌트 이름 (선택)">
+      </div>
+
+      <!-- 액션 버튼들 -->
+      <div class="actions">
+        <button class="btn btn-secondary" id="copyBtn" disabled>
+          📋 복사
+        </button>
+        <button class="btn btn-secondary" id="sendBtn" disabled>
+          📤 서버 전송
+        </button>
+      </div>
+    </main>
+
+    <!-- 토스트 메시지 -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

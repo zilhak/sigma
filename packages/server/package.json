@@ -1,0 +1,25 @@
+{
+  "name": "@sigma/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "sigma": "./bin/sigma.ts"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@sigma/shared": "workspace:*",
+    "hono": "^4.0.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.3.3"
+  }
+}
