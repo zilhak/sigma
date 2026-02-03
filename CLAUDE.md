@@ -16,83 +16,76 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              AI Agent                                    │
 │                         (Claude Code + MCP)                              │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ MCP (stdio)
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Local Server                                   │
-│                        http://localhost:9801                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  MCP Server │  │  HTTP API   │  │  WebSocket  │  │   Web UI    │    │
-│  │   (stdio)   │  │  (REST)     │  │   Server    │  │  Dashboard  │    │
-│  └─────────────┘  └──────┬──────┘  └──────┬──────┘  └─────────────┘    │
-│                          │                │                             │
-│                    ┌─────┴─────┐          │                             │
-│                    │  Command  │          │                             │
-│                    │   Queue   │          │                             │
-│                    └───────────┘          │                             │
-│                          │                │                             │
-│                    ┌─────┴─────┐          │                             │
-│                    │   File    │          │                             │
-│                    │  Storage  │          │                             │
-│                    └───────────┘          │                             │
-└────────────────────────┬──────────────────┼─────────────────────────────┘
-                         │                  │
-              HTTP (Long Polling)      WebSocket
-                         │                  │
-                         ▼                  ▼
-┌────────────────────────────────┐  ┌────────────────────────┐
-│      Chrome Extension          │  │    Figma Plugin        │
-│  ┌──────────────────────────┐  │  │  ┌──────────────────┐  │
-│  │  Long Polling            │  │  │  │  WebSocket 연결  │  │
-│  │  GET /api/ext/commands   │  │  │  │  폴링 → 감지 →   │  │
-│  └──────────────────────────┘  │  │  │  WebSocket 전환  │  │
-│  ┌──────────────────────────┐  │  │  └──────────────────┘  │
-│  │  결과 전송               │  │  └────────────────────────┘
-│  │  POST /api/ext/result    │  │
-│  └──────────────────────────┘  │
-└────────────────────────────────┘
-             │
-             ▼
-┌────────────────────────────────┐
-│     Web Page / Storybook       │
-└────────────────────────────────┘
+│                                                                          │
+│  ┌──────────────────┐              ┌──────────────────┐                 │
+│  │   Playwright MCP │              │    Sigma MCP     │                 │
+│  │  (브라우저 제어)  │              │  (데이터 + Figma) │                 │
+│  └────────┬─────────┘              └────────┬─────────┘                 │
+└───────────│────────────────────────────────│────────────────────────────┘
+            │                                │
+            │ 브라우저 직접 조종              │ stdio
+            │ (navigate, click 등)           │
+            ▼                                ▼
+┌───────────────────────────┐    ┌────────────────────────────────────────┐
+│      Chrome Browser       │    │            Local Server                 │
+│  ┌─────────────────────┐  │    │         http://localhost:9801           │
+│  │   Chrome Extension  │  │    │                                         │
+│  │  ┌───────────────┐  │  │    │  ┌─────────────┐  ┌─────────────────┐  │
+│  │  │ 컴포넌트 추출  │  │──────────▶│  HTTP API   │  │   WebSocket     │  │
+│  │  │               │  │  │POST│  │  (REST)     │  │    Server       │  │
+│  │  └───────────────┘  │  │    │  └──────┬──────┘  └────────┬────────┘  │
+│  └─────────────────────┘  │    │         │                  │           │
+│                           │    │   ┌─────┴──────┐           │           │
+│  ┌─────────────────────┐  │    │   │   File     │           │           │
+│  │     Web Page        │  │    │   │  Storage   │           │           │
+│  │   (Storybook 등)    │  │    │   └────────────┘           │           │
+│  └─────────────────────┘  │    │                            │           │
+└───────────────────────────┘    └────────────────────────────│───────────┘
+                                                              │
+                                                         WebSocket
+                                                              │
+                                                              ▼
+                                              ┌────────────────────────────┐
+                                              │       Figma Plugin         │
+                                              │   (JSON → Figma Frame)     │
+                                              └────────────────────────────┘
 ```
+
+**핵심 원칙:**
+- **Extension → Server**: Extension이 서버로 데이터를 일방적으로 Push (서버는 Listen만)
+- **Playwright → Browser**: MCP 자동화 시 Playwright가 브라우저/Extension을 직접 조종
+- **Server → Figma**: 서버가 WebSocket으로 Figma Plugin에 명령 전달
 
 ---
 
 ## 통신 방식
 
-### HTTP Long Polling (Extension ↔ Server)
+### Extension → Server (단방향 Push)
 
-Native Messaging 대신 HTTP Long Polling 사용. 설치 복잡도를 대폭 낮추면서 거의 실시간 통신 가능.
+Extension이 추출한 데이터를 서버로 전송. 서버는 명령을 보내지 않음.
 
 ```
 ┌─────────────┐                    ┌─────────────┐
 │  Extension  │                    │   Server    │
 └──────┬──────┘                    └──────┬──────┘
        │                                  │
-       │  GET /api/ext/commands?wait=30   │
-       │─────────────────────────────────▶│
-       │                                  │ (명령 없으면 최대 30초 대기)
+       │  사용자가 추출 버튼 클릭          │
+       │  (또는 Playwright가 클릭)        │
        │                                  │
-       │         { command: {...} }       │
+       │  컴포넌트 추출 실행               │
+       │                                  │
+       │  POST /api/extracted             │
+       │  { name, data, format }          │
+       │─────────────────────────────────▶│
+       │                                  │ 저장
+       │         { success: true, id }    │
        │◀─────────────────────────────────│
-       │                                  │
-       │  명령 실행 (컴포넌트 추출 등)    │
-       │                                  │
-       │  POST /api/ext/result            │
-       │─────────────────────────────────▶│
-       │                                  │
-       │         { success: true }        │
-       │◀─────────────────────────────────│
-       │                                  │
-       │  즉시 다음 Long Polling 시작     │
-       │─────────────────────────────────▶│
        │                                  │
 ```
 
-### WebSocket (Figma Plugin ↔ Server)
+### Server → Figma Plugin (WebSocket)
+
+서버가 Figma Plugin에 프레임 생성 명령 전달.
 
 ```
 ┌─────────────┐                    ┌─────────────┐
@@ -108,7 +101,11 @@ Native Messaging 대신 HTTP Long Polling 사용. 설치 복잡도를 대폭 낮
        │  ws://localhost:9800             │
        │═════════════════════════════════▶│
        │                                  │
-       │  ◀═══ 양방향 실시간 통신 ═══▶   │
+       │    { type: "CREATE_FRAME", ... } │
+       │◀═════════════════════════════════│
+       │                                  │
+       │  프레임 생성 후 결과 응답         │
+       │═════════════════════════════════▶│
        │                                  │
 ```
 
@@ -120,15 +117,38 @@ Native Messaging 대신 HTTP Long Polling 사용. 설치 복잡도를 대폭 낮
 
 **목적:** 웹페이지에서 컴포넌트를 선택하여 구조화된 데이터로 추출
 
-#### 독립 사용 (Standalone)
-- 팝업 UI로 컴포넌트 선택 모드 활성화
-- 추출된 데이터를 클립보드에 복사
-- HTML 또는 JSON 형식 선택 가능
+> **핵심 취지: "그 자체로도 쓸 수 있지만, 로컬 서버 설정하면 더 편리하다"**
 
-#### 서버 연동 시
-- Long Polling으로 서버 명령 대기
-- 서버의 명령을 받아 자동 추출
-- 추출 결과를 서버로 직접 전송
+#### 두 가지 독립적인 기능
+
+| 기능 | 설명 | 서버 필요 |
+|------|------|:---------:|
+| **클립보드 복사** | 추출된 데이터를 클립보드에 복사 | ❌ |
+| **서버 전송** | 추출된 데이터를 서버로 전송 | ✅ |
+
+- 두 기능은 **완전히 별개의 액션**
+- 서버가 떠있어도 클립보드 복사만 할 수 있음
+- 사용자가 원하는 방식 선택
+
+#### Popup UI 구성
+```
+┌─────────────────────────────┐
+│  Sigma Component Extractor  │
+├─────────────────────────────┤
+│  [📋 복사]  [📤 서버 전송]   │  ← 별개 버튼
+├─────────────────────────────┤
+│  형식: ○ JSON  ○ HTML       │
+├─────────────────────────────┤
+│  서버: 🟢 연결됨             │  ← 상태 표시
+└─────────────────────────────┘
+```
+
+#### 사용 흐름
+1. 팝업 UI로 컴포넌트 선택 모드 활성화
+2. 웹페이지에서 원하는 컴포넌트 클릭
+3. 추출 완료 후:
+   - **[복사]** 클릭 → 클립보드에 복사
+   - **[서버 전송]** 클릭 → 서버로 POST (서버 연결 시에만 활성화)
 
 #### 출력 형식
 
@@ -174,65 +194,92 @@ Native Messaging 대신 HTTP Long Polling 사용. 설치 복잡도를 대폭 낮
 
 #### Extension 통신 로직
 ```typescript
-// background.ts
+// popup.ts (또는 content.ts)
 const SERVER_URL = 'http://localhost:9801';
-let isConnected = false;
 
-async function startLongPolling() {
-  while (true) {
-    try {
-      // 30초 대기하는 Long Polling
-      const res = await fetch(`${SERVER_URL}/api/ext/commands?wait=30`);
-      const { command } = await res.json();
+let extractedData: ExtractedNode | null = null;
+let serverConnected = false;
 
-      if (command) {
-        isConnected = true;
-        const result = await executeCommand(command);
-
-        await fetch(`${SERVER_URL}/api/ext/result`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            commandId: command.id,
-            result
-          })
-        });
-      }
-    } catch (error) {
-      isConnected = false;
-      await sleep(5000); // 서버 없으면 5초 후 재시도
-    }
+// 서버 상태 확인 (주기적으로 호출)
+async function checkServerStatus(): Promise<boolean> {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/health`);
+    serverConnected = res.ok;
+    updateUI(); // 서버 상태 UI 업데이트
+    return serverConnected;
+  } catch {
+    serverConnected = false;
+    updateUI();
+    return false;
   }
 }
 
-async function executeCommand(command: Command) {
-  switch (command.type) {
-    case 'EXTRACT':
-      return await extractComponent(command.params);
-    case 'SET_FORMAT':
-      return setOutputFormat(command.params.format);
-    case 'GET_STATUS':
-      return { connected: true, format: currentFormat };
-  }
+// 추출 완료 시 데이터 저장 (아직 전송/복사 안 함)
+function onExtractComplete(data: ExtractedNode) {
+  extractedData = data;
+  updateUI(); // 버튼 활성화
 }
 
-// Extension 시작 시 Long Polling 시작
-startLongPolling();
+// [복사] 버튼 클릭 시 - 서버 상태와 무관하게 동작
+async function onCopyClick() {
+  if (!extractedData) return;
+
+  const format = getSelectedFormat(); // 'json' | 'html'
+  const text = format === 'json'
+    ? JSON.stringify(extractedData, null, 2)
+    : convertToHTML(extractedData);
+
+  await navigator.clipboard.writeText(text);
+  showToast('클립보드에 복사됨');
+}
+
+// [서버 전송] 버튼 클릭 시 - 서버 연결 시에만 활성화
+async function onSendToServerClick() {
+  if (!extractedData || !serverConnected) return;
+
+  await fetch(`${SERVER_URL}/api/extracted`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: getComponentName() || `component-${Date.now()}`,
+      data: extractedData,
+      format: getSelectedFormat(),
+      timestamp: Date.now()
+    })
+  });
+
+  showToast('서버로 전송됨');
+}
+
+// UI 업데이트
+function updateUI() {
+  // 서버 전송 버튼: 서버 연결 시에만 활성화
+  sendButton.disabled = !serverConnected || !extractedData;
+
+  // 복사 버튼: 데이터 있으면 항상 활성화
+  copyButton.disabled = !extractedData;
+
+  // 서버 상태 표시
+  statusIndicator.className = serverConnected ? 'connected' : 'disconnected';
+}
+
+// 5초마다 서버 상태 확인
+setInterval(checkServerStatus, 5000);
 ```
 
 ---
 
 ### 2. Local Server
 
-**목적:** 모든 모듈의 중앙 허브, MCP 서버 역할
+**목적:** 데이터 저장소 + MCP 브릿지 + Figma 통신 허브
 
 #### 구성 요소
 
 | 컴포넌트 | 역할 | 포트/프로토콜 |
 |----------|------|---------------|
 | MCP Server | AI Agent와 통신 | stdio |
-| HTTP Server | REST API + Long Polling + Dashboard | http://localhost:9801 |
-| WebSocket Server | Figma Plugin 실시간 통신 | ws://localhost:9800 |
+| HTTP Server | REST API + Dashboard | http://localhost:9801 |
+| WebSocket Server | Figma Plugin 통신 | ws://localhost:9800 |
 | File Storage | 추출 데이터 저장/관리 | ~/.sigma/extracted/ |
 
 #### HTTP API 엔드포인트
@@ -240,160 +287,45 @@ startLongPolling();
 ```
 HTTP Server (localhost:9801)
 │
-├── Extension 통신
-│   ├── GET  /api/ext/commands?wait=30   # Long Polling (명령 대기)
-│   └── POST /api/ext/result             # 결과 전송
+├── 상태 확인
+│   └── GET  /api/health                 # 서버 상태
 │
-├── Figma 통신
-│   ├── GET  /api/health                 # 서버 상태 (Figma 폴링용)
-│   └── POST /api/figma/import           # Figma로 데이터 전송
-│
-├── 데이터 관리
+├── 데이터 관리 (Extension → Server)
 │   ├── GET  /api/extracted              # 저장된 데이터 목록
 │   ├── GET  /api/extracted/:id          # 특정 데이터 조회
-│   ├── POST /api/extracted              # 새 데이터 저장
+│   ├── POST /api/extracted              # 새 데이터 저장 (Extension이 호출)
 │   └── DELETE /api/extracted/:id        # 데이터 삭제
+│
+├── Figma 통신
+│   └── POST /api/figma/create           # Figma로 프레임 생성 요청
 │
 └── Dashboard
     └── GET  /                           # Web UI
-```
-
-#### Command Queue 구현
-```typescript
-// server/src/command-queue.ts
-interface Command {
-  id: string;
-  type: 'EXTRACT' | 'SET_FORMAT' | 'GET_STATUS';
-  params?: any;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  result?: any;
-  error?: string;
-  createdAt: number;
-  resolvePromise?: (result: any) => void;
-  rejectPromise?: (error: any) => void;
-}
-
-class CommandQueue {
-  private commands = new Map<string, Command>();
-  private waitingRequests: Array<(cmd: Command | null) => void> = [];
-
-  // MCP에서 명령 추가
-  async addCommand(type: string, params?: any): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const command: Command = {
-        id: crypto.randomUUID(),
-        type: type as Command['type'],
-        params,
-        status: 'pending',
-        createdAt: Date.now(),
-        resolvePromise: resolve,
-        rejectPromise: reject
-      };
-
-      this.commands.set(command.id, command);
-
-      // 대기 중인 Long Polling 요청에 즉시 전달
-      if (this.waitingRequests.length > 0) {
-        const respond = this.waitingRequests.shift()!;
-        command.status = 'processing';
-        respond(command);
-      }
-    });
-  }
-
-  // Extension Long Polling
-  async getNextCommand(timeoutMs: number = 30000): Promise<Command | null> {
-    // 대기 중인 명령 있으면 즉시 반환
-    const pending = [...this.commands.values()]
-      .find(cmd => cmd.status === 'pending');
-
-    if (pending) {
-      pending.status = 'processing';
-      return pending;
-    }
-
-    // 없으면 대기
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        const idx = this.waitingRequests.indexOf(resolve);
-        if (idx > -1) this.waitingRequests.splice(idx, 1);
-        resolve(null);
-      }, timeoutMs);
-
-      this.waitingRequests.push((cmd) => {
-        clearTimeout(timeout);
-        resolve(cmd);
-      });
-    });
-  }
-
-  // Extension 결과 수신
-  completeCommand(commandId: string, result: any, error?: string) {
-    const command = this.commands.get(commandId);
-    if (!command) return;
-
-    command.status = error ? 'failed' : 'completed';
-    command.result = result;
-    command.error = error;
-
-    if (error && command.rejectPromise) {
-      command.rejectPromise(new Error(error));
-    } else if (command.resolvePromise) {
-      command.resolvePromise(result);
-    }
-
-    // 오래된 명령 정리 (5분 후)
-    setTimeout(() => this.commands.delete(commandId), 5 * 60 * 1000);
-  }
-}
 ```
 
 #### MCP Tools
 
 ```typescript
 const mcpTools = [
-  // === Extension 제어 ===
-  {
-    name: "extract_component",
-    description: "현재 페이지에서 컴포넌트 추출 (selector 미지정시 선택 모드)",
-    parameters: {
-      selector: { type: "string", optional: true },
-      format: { type: "string", enum: ["html", "json"], default: "json" }
-    }
-  },
-  {
-    name: "set_extract_format",
-    description: "추출 형식 설정",
-    parameters: {
-      format: { type: "string", enum: ["html", "json"] }
-    }
-  },
-  {
-    name: "get_extension_status",
-    description: "Extension 연결 상태 확인",
-    parameters: {}
-  },
-
   // === 데이터 관리 ===
   {
-    name: "save_extracted",
-    description: "추출 데이터를 파일로 저장",
-    parameters: {
-      name: { type: "string" },
-      data: { type: "object" }
-    }
-  },
-  {
-    name: "load_extracted",
-    description: "저장된 데이터 로드",
-    parameters: {
-      name: { type: "string" }
-    }
-  },
-  {
-    name: "list_saved",
-    description: "저장된 파일 목록",
+    name: "list_extracted",
+    description: "저장된 추출 데이터 목록 조회",
     parameters: {}
+  },
+  {
+    name: "get_extracted",
+    description: "특정 추출 데이터 조회",
+    parameters: {
+      id: { type: "string" }
+    }
+  },
+  {
+    name: "delete_extracted",
+    description: "추출 데이터 삭제",
+    parameters: {
+      id: { type: "string" }
+    }
   },
 
   // === Figma 제어 ===
@@ -404,39 +336,24 @@ const mcpTools = [
   },
   {
     name: "figma_create_frame",
-    description: "Figma에 프레임 생성",
+    description: "저장된 데이터로 Figma에 프레임 생성",
+    parameters: {
+      id: { type: "string", description: "추출 데이터 ID" },
+      name: { type: "string", optional: true, description: "Figma 프레임 이름" }
+    }
+  },
+  {
+    name: "figma_create_from_data",
+    description: "JSON 데이터로 Figma에 프레임 직접 생성",
     parameters: {
       data: { type: "object", description: "ExtractedNode JSON" },
-      name: { type: "string", optional: true }
-    }
-  },
-  {
-    name: "figma_import_file",
-    description: "저장된 파일을 Figma로 가져오기",
-    parameters: {
-      filename: { type: "string" }
-    }
-  },
-
-  // === 복합 작업 ===
-  {
-    name: "extract_and_save",
-    description: "추출 후 저장",
-    parameters: {
-      selector: { type: "string", optional: true },
-      name: { type: "string" }
-    }
-  },
-  {
-    name: "extract_and_import",
-    description: "추출 → Figma 가져오기 (원스텝)",
-    parameters: {
-      selector: { type: "string", optional: true },
       name: { type: "string", optional: true }
     }
   }
 ];
 ```
+
+**Note:** Extension 제어 Tools는 없음. Playwright MCP가 브라우저를 직접 제어.
 
 #### 디렉토리 구조
 ```
@@ -455,6 +372,10 @@ const mcpTools = [
 ### 3. Figma Plugin
 
 **목적:** JSON 데이터를 Figma 프레임으로 변환
+
+> 📄 **구현 상세:** [FIGMA_IMPLEMENTATION.md](./FIGMA_IMPLEMENTATION.md)
+>
+> ExtractedNode 타입 정의, CSS→Figma 매핑, Figma API 사용법 등은 별도 문서 참조
 
 > **Target: Figma Desktop App Only**
 >
@@ -507,7 +428,6 @@ function connectWebSocket() {
 
   ws.onopen = () => {
     updateStatus('서버 연결됨', 'connected');
-    // 연결 시 Figma Plugin 등록
     ws.send(JSON.stringify({ type: 'REGISTER', client: 'figma-plugin' }));
   };
 
@@ -519,14 +439,13 @@ function connectWebSocket() {
   ws.onclose = () => {
     updateStatus('연결 끊김', 'disconnected');
     ws = null;
-    startServerDetection(); // 폴링으로 복귀
+    startServerDetection();
   };
 }
 
 function handleServerMessage(msg: any) {
   switch (msg.type) {
     case 'CREATE_FRAME':
-      // Plugin main code로 전달
       parent.postMessage({
         pluginMessage: {
           type: 'create-from-json',
@@ -535,7 +454,6 @@ function handleServerMessage(msg: any) {
         }
       }, '*');
 
-      // 결과 응답
       ws?.send(JSON.stringify({
         type: 'RESULT',
         commandId: msg.commandId,
@@ -549,7 +467,6 @@ function handleServerMessage(msg: any) {
   }
 }
 
-// Plugin UI 로드 시 서버 감지 시작
 startServerDetection();
 ```
 
@@ -559,14 +476,36 @@ startServerDetection();
 
 **목적:** 브라우저 자동화 (별도 MCP)
 
-Playwright MCP를 Sigma MCP와 함께 사용하여 완전 자동화 가능.
+MCP 자동화 시 Playwright가 브라우저와 Extension을 직접 조종.
 
 ```
 AI Agent
     │
-    ├── Playwright MCP ──→ navigate(), click(), screenshot()
+    ├── Playwright MCP ──→ 브라우저 제어
+    │   │                  - navigate(url)
+    │   │                  - click(selector)
+    │   │                  - Extension 팝업 열기
+    │   │                  - Extension 버튼 클릭
+    │   │
+    │   └──→ Extension이 추출 → 서버로 POST
     │
-    └── Sigma MCP ──→ extract_component(), figma_create_frame()
+    └── Sigma MCP ──→ 저장된 데이터 조회 + Figma 제어
+        │              - list_extracted()
+        │              - figma_create_frame()
+        │
+        └──→ Figma Plugin이 프레임 생성
+```
+
+**Playwright로 Extension 제어하는 방법:**
+```typescript
+// Playwright에서 Extension 팝업 열기
+await page.click('[data-testid="sigma-extension-icon"]');
+
+// 추출 버튼 클릭
+await page.click('[data-testid="extract-button"]');
+
+// 또는 키보드 단축키
+await page.keyboard.press('Alt+Shift+E');
 ```
 
 ---
@@ -579,20 +518,20 @@ AI Agent
 1. Chrome Extension 아이콘 클릭
 2. "선택 모드" 버튼 클릭
 3. 웹페이지에서 원하는 컴포넌트 클릭
-4. 추출된 JSON 복사
+4. 추출된 JSON이 클립보드에 복사됨
 5. Figma Plugin 열기
 6. JSON 붙여넣기
 7. "가져오기" 버튼 클릭
 ```
 
-### 시나리오 2: Dashboard 사용 (반자동)
+### 시나리오 2: 서버 사용 (반자동)
 
 ```
 1. sigma 서버 실행: sigma start
-2. Extension이 자동으로 서버 감지
-3. Extension으로 컴포넌트 추출 → 서버에 자동 저장
-4. http://localhost:9801 대시보드 열기
-5. 저장된 컴포넌트 목록에서 "Figma로 보내기" 클릭
+2. Extension이 서버 연결 상태 표시
+3. Extension으로 컴포넌트 추출 → 서버에 자동 저장됨
+4. http://localhost:9801 대시보드에서 저장된 컴포넌트 확인
+5. "Figma로 보내기" 클릭
 6. Figma Plugin이 자동으로 프레임 생성
 ```
 
@@ -604,10 +543,13 @@ User: "Storybook에서 Badge 컴포넌트를 Figma에 가져와줘"
 AI Agent:
 1. [Playwright] navigate("http://localhost:6006/?path=/story/badge")
 2. [Playwright] waitForSelector(".badge")
-3. [Sigma] extract_component({ selector: ".badge" })
-   → { tagName: "span", styles: {...}, ... }
-4. [Sigma] figma_create_frame({ name: "Badge", data: ... })
-   → "Created frame 'Badge' in Figma"
+3. [Playwright] Extension 팝업 열기
+4. [Playwright] 추출 버튼 클릭
+   → Extension이 추출 후 서버로 POST
+5. [Sigma] list_extracted()
+   → 방금 저장된 컴포넌트 ID 확인
+6. [Sigma] figma_create_frame({ id: "badge-xxx" })
+   → Figma에 프레임 생성됨
 
 AI: "Badge 컴포넌트를 Figma에 가져왔습니다!"
 ```
@@ -622,9 +564,8 @@ AI Agent:
 2. [Playwright] 사이드바에서 Button 스토리 목록 수집
 3. for each variant in ["primary", "secondary", "outline", "ghost"]:
    - [Playwright] click(variant story)
-   - [Sigma] extract_component()
-   - [Sigma] save_extracted({ name: `button-${variant}` })
-   - [Sigma] figma_create_frame({ name: `Button/${variant}` })
+   - [Playwright] Extension 추출 버튼 클릭
+   - [Sigma] figma_create_frame({ id: 최신, name: `Button/${variant}` })
 4. 완료
 
 AI: "4개의 Button variant를 Figma에 동기화했습니다!"
@@ -639,7 +580,7 @@ sigma/
 ├── packages/
 │   ├── chrome-extension/         # Chrome Extension
 │   │   ├── src/
-│   │   │   ├── background.ts     # Service Worker + Long Polling
+│   │   │   ├── background.ts     # Service Worker
 │   │   │   ├── content.ts        # Content Script (추출 로직)
 │   │   │   ├── popup/            # Popup UI
 │   │   │   │   ├── popup.html
@@ -660,15 +601,12 @@ sigma/
 │   │   │   │   └── tools.ts
 │   │   │   ├── http/             # HTTP Server
 │   │   │   │   ├── server.ts
-│   │   │   │   ├── routes/
-│   │   │   │   │   ├── extension.ts  # Extension Long Polling
-│   │   │   │   │   ├── figma.ts
-│   │   │   │   │   └── extracted.ts
-│   │   │   │   └── middleware/
+│   │   │   │   └── routes/
+│   │   │   │       ├── health.ts
+│   │   │   │       ├── extracted.ts
+│   │   │   │       └── figma.ts
 │   │   │   ├── websocket/        # WebSocket Server
 │   │   │   │   └── server.ts
-│   │   │   ├── queue/            # Command Queue
-│   │   │   │   └── command-queue.ts
 │   │   │   ├── storage/          # File Storage
 │   │   │   │   └── index.ts
 │   │   │   └── dashboard/        # Web Dashboard
@@ -696,7 +634,8 @@ sigma/
 │       │   └── constants.ts      # 포트 번호 등 상수
 │       └── package.json
 │
-├── CLAUDE.md                     # 구현 상세 문서
+├── CLAUDE.md                     # 아키텍처 및 구현 명세
+├── FIGMA_IMPLEMENTATION.md       # Figma Plugin 구현 가이드 (JSON→Figma 변환)
 ├── README.md                     # 프로젝트 소개
 ├── package.json                  # 모노레포 설정
 └── bunfig.toml                   # Bun 설정 (workspace 포함)
@@ -723,7 +662,7 @@ sigma/
 | 서비스 | 포트 | 프로토콜 | 용도 |
 |--------|------|----------|------|
 | HTTP Server | 9801 | HTTP | REST API, Dashboard |
-| WebSocket Server | 9800 | WebSocket | Figma Plugin 실시간 통신 |
+| WebSocket Server | 9800 | WebSocket | Figma Plugin 통신 |
 | MCP Server | - | stdio | AI Agent 통신 |
 
 ---
@@ -742,9 +681,6 @@ sigma/
     "path": "~/.sigma/extracted",
     "autoSave": true
   },
-  "extension": {
-    "pollingTimeout": 30000
-  },
   "figma": {
     "pingInterval": 10000
   }
@@ -756,7 +692,7 @@ sigma/
 {
   "serverUrl": "http://localhost:9801",
   "defaultFormat": "json",
-  "autoConnect": true
+  "autoSendToServer": true
 }
 ```
 
@@ -804,26 +740,25 @@ bun run --filter @sigma/server start
 ## 개발 단계
 
 ### Phase 1: 기반 구축 (3-4일)
-- [ ] Extension HTML/JSON 형식 선택 기능
-- [ ] Extension Long Polling 통신 준비
-- [ ] Figma Plugin WebSocket 연결 준비
+- [ ] Shared 패키지: ExtractedNode 타입 정의
+- [ ] Extension: 컴포넌트 추출 + 클립보드 복사
+- [ ] Extension: 서버 연결 시 자동 POST
+- [ ] Figma Plugin: JSON 붙여넣기 → 프레임 생성
 - [ ] 독립 사용 가능하게 완성
 
 ### Phase 2: Server 구현 (4-5일)
-- [ ] HTTP Server + Long Polling 엔드포인트
-- [ ] WebSocket Server
-- [ ] Command Queue
+- [ ] HTTP Server + REST API
+- [ ] WebSocket Server (Figma 통신)
 - [ ] File Storage
 - [ ] 간단한 Dashboard
 
 ### Phase 3: MCP 구현 (2-3일)
 - [ ] MCP Server 기본 구조
-- [ ] Extension 제어 Tools
+- [ ] 데이터 관리 Tools
 - [ ] Figma 제어 Tools
-- [ ] 복합 작업 Tools
 
 ### Phase 4: 통합 및 문서화 (2일)
-- [ ] 전체 플로우 테스트
+- [ ] Playwright + Sigma MCP 연동 테스트
 - [ ] 에러 핸들링
 - [ ] README 및 사용 가이드
 
@@ -839,18 +774,22 @@ bun run --filter @sigma/server start
 
 2. **CORS 설정**
    ```typescript
-   app.register(cors, {
+   app.use(cors({
      origin: [
        /^chrome-extension:\/\//,
        'http://localhost:9801'
      ]
-   });
+   }));
    ```
 
 3. **Extension host_permissions**
    ```json
    "host_permissions": ["http://localhost:9801/*"]
    ```
+
+4. **입력 검증**
+   - POST /api/extracted 에서 데이터 스키마 검증
+   - 파일명 sanitization (path traversal 방지)
 
 ---
 
