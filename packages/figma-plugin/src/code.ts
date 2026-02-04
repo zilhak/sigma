@@ -59,10 +59,17 @@ figma.on('currentpagechange', () => {
 // 메시지 핸들러
 figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
   switch (msg.type) {
-    case 'create-from-json':
+    case 'create-from-json': {
       const position = msg.position as { x: number; y: number } | undefined;
       await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position);
       break;
+    }
+
+    case 'create-from-html': {
+      const htmlPosition = msg.position as { x: number; y: number } | undefined;
+      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition);
+      break;
+    }
 
     case 'get-frames':
       // 현재 페이지의 모든 최상위 프레임 정보 반환
@@ -194,6 +201,11 @@ async function createFrameFromJSON(node: ExtractedNode, name?: string, position?
 async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNode | null> {
   const { styles, textContent, boundingRect } = node;
   const children = node.children || [];
+
+  // SVG 요소인 경우: createNodeFromSvg 사용
+  if (node.svgString && node.tagName === 'svg') {
+    return createSvgNode(node);
+  }
 
   // 텍스트만 있는 요소 (자식 없고 텍스트만)
   if (isTextOnlyElement(node)) {
@@ -335,6 +347,45 @@ function createTextNode(text: string, styles: ComputedStyles): TextNode | null {
 }
 
 /**
+ * SVG 노드 생성
+ * createNodeFromSvg는 SVG 문자열을 직접 Figma FrameNode로 변환
+ */
+function createSvgNode(node: ExtractedNode): FrameNode | null {
+  if (!node.svgString) return null;
+
+  try {
+    // Figma API로 SVG 문자열을 노드로 변환
+    const svgFrame = figma.createNodeFromSvg(node.svgString);
+
+    // 위치 및 크기는 SVG 자체에서 결정됨
+    // 필요시 boundingRect로 크기 조정
+    if (node.boundingRect.width > 0 && node.boundingRect.height > 0) {
+      const currentWidth = svgFrame.width;
+      const currentHeight = svgFrame.height;
+      const targetWidth = node.boundingRect.width;
+      const targetHeight = node.boundingRect.height;
+
+      // SVG 크기가 추출된 크기와 다르면 스케일 조정
+      if (Math.abs(currentWidth - targetWidth) > 1 || Math.abs(currentHeight - targetHeight) > 1) {
+        svgFrame.resize(targetWidth, targetHeight);
+      }
+    }
+
+    return svgFrame;
+  } catch (error) {
+    console.error('SVG 변환 실패:', error);
+    // SVG 변환 실패 시 빈 프레임 반환
+    const fallbackFrame = figma.createFrame();
+    fallbackFrame.resize(
+      node.boundingRect.width || 24,
+      node.boundingRect.height || 24
+    );
+    fallbackFrame.name = 'SVG (변환 실패)';
+    return fallbackFrame;
+  }
+}
+
+/**
  * 레이아웃 모드 적용
  */
 function applyLayoutMode(frame: FrameNode, styles: ComputedStyles) {
@@ -342,6 +393,10 @@ function applyLayoutMode(frame: FrameNode, styles: ComputedStyles) {
 
   if (display === 'flex' || display === 'inline-flex') {
     frame.layoutMode = flexDirection === 'column' ? 'VERTICAL' : 'HORIZONTAL';
+  } else if (display === 'grid' || display === 'inline-grid') {
+    // CSS Grid는 기본적으로 행(row) 방향으로 아이템을 배치
+    // grid-auto-flow: column인 경우 VERTICAL이지만, 기본값은 HORIZONTAL
+    frame.layoutMode = 'HORIZONTAL';
   } else if (display === 'table' || display === 'table-row-group') {
     frame.layoutMode = 'VERTICAL';
   } else if (display === 'table-row') {
@@ -428,11 +483,25 @@ function applyBorder(frame: FrameNode, styles: ComputedStyles) {
   );
 
   if (borderWidth > 0) {
-    const borderColor =
-      styles.borderTopColor ||
-      styles.borderRightColor ||
-      styles.borderBottomColor ||
-      styles.borderLeftColor;
+    // 개별 border 색상들을 수집
+    const borderColors = [
+      styles.borderTopColor,
+      styles.borderRightColor,
+      styles.borderBottomColor,
+      styles.borderLeftColor
+    ].filter(Boolean) as RGBA[];
+
+    // 가장 불투명한 색상 선택 (스피너 등에서 주요 색상 표시)
+    // Figma는 면별 stroke 색상을 지원하지 않으므로 가장 의미있는 색상 선택
+    let borderColor = borderColors[0];
+    if (borderColors.length > 1) {
+      // 불투명도가 가장 높은 색상 선택
+      borderColor = borderColors.reduce((best, current) => {
+        const bestAlpha = best && best.a !== undefined ? best.a : 0;
+        const currentAlpha = current && current.a !== undefined ? current.a : 0;
+        return currentAlpha > bestAlpha ? current : best;
+      }, borderColors[0]);
+    }
 
     if (borderColor) {
       frame.strokes = [createSolidPaint(borderColor)];
@@ -586,5 +655,444 @@ function createSolidPaint(color: RGBA): SolidPaint {
     type: 'SOLID',
     color: { r: color.r, g: color.g, b: color.b },
     opacity: color.a,
+  };
+}
+
+// ============================================================
+// HTML → Figma 변환
+// ============================================================
+
+/**
+ * HTML 문자열로 Figma 프레임 생성
+ */
+async function createFrameFromHTML(html: string, name?: string, position?: { x: number; y: number }) {
+  try {
+    // 폰트 로드
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+
+    // HTML 파싱 → ExtractedNode 변환
+    const node = parseHTML(html);
+    if (!node) {
+      figma.ui.postMessage({ type: 'error', message: 'HTML 파싱 실패' });
+      return;
+    }
+
+    // 기존 JSON 변환 로직 재사용
+    const frame = await createFigmaNode(node);
+
+    if (frame) {
+      frame.name = name || 'HTML Import';
+
+      // 위치 결정
+      if (position) {
+        frame.x = position.x;
+        frame.y = position.y;
+      } else if (lastCreatedPosition) {
+        frame.x = lastCreatedPosition.x + OFFSET_X;
+        frame.y = lastCreatedPosition.y + OFFSET_Y;
+      } else {
+        const center = figma.viewport.center;
+        frame.x = center.x - frame.width / 2;
+        frame.y = center.y - frame.height / 2;
+      }
+
+      lastCreatedPosition = { x: frame.x, y: frame.y };
+
+      figma.currentPage.appendChild(frame);
+      figma.currentPage.selection = [frame];
+      figma.viewport.scrollAndZoomIntoView([frame]);
+
+      figma.ui.postMessage({ type: 'success', message: 'HTML에서 프레임이 생성되었습니다!' });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    figma.ui.postMessage({ type: 'error', message: `HTML 변환 오류: ${message}` });
+  }
+}
+
+/**
+ * HTML 문자열을 ExtractedNode로 파싱
+ * Figma Plugin 환경에서는 DOMParser가 없으므로 간단한 파서 구현
+ */
+function parseHTML(html: string): ExtractedNode | null {
+  const trimmed = html.trim();
+  if (!trimmed) return null;
+
+  return parseElement(trimmed, 0).node;
+}
+
+interface ParseResult {
+  node: ExtractedNode | null;
+  endIndex: number;
+}
+
+/**
+ * HTML 요소 파싱 (재귀)
+ */
+function parseElement(html: string, startIndex: number): ParseResult {
+  const rest = html.slice(startIndex);
+
+  // 텍스트 노드 (태그 아님)
+  if (!rest.startsWith('<') || rest.startsWith('</')) {
+    const textEnd = rest.indexOf('<');
+    const text = textEnd === -1 ? rest : rest.slice(0, textEnd);
+    const trimmedText = text.trim();
+
+    if (trimmedText) {
+      return {
+        node: {
+          tagName: 'span',
+          className: '',
+          textContent: trimmedText,
+          styles: createDefaultStyles(),
+          boundingRect: { width: 0, height: 0, top: 0, left: 0 },
+          children: [],
+        },
+        endIndex: startIndex + (textEnd === -1 ? text.length : textEnd),
+      };
+    }
+    return { node: null, endIndex: startIndex + (textEnd === -1 ? text.length : textEnd) };
+  }
+
+  // 시작 태그 파싱
+  const tagMatch = rest.match(/^<(\w+)([^>]*)>/);
+  if (!tagMatch) {
+    return { node: null, endIndex: startIndex + 1 };
+  }
+
+  const tagName = tagMatch[1].toLowerCase();
+  const attrsString = tagMatch[2];
+  const afterOpenTag = startIndex + tagMatch[0].length;
+
+  // 자기 종료 태그 체크 (br, img, input 등)
+  const selfClosingTags = ['br', 'hr', 'img', 'input', 'meta', 'link'];
+  if (selfClosingTags.includes(tagName) || attrsString.endsWith('/')) {
+    return {
+      node: {
+        tagName,
+        className: extractClass(attrsString),
+        textContent: '',
+        styles: parseInlineStyles(attrsString),
+        boundingRect: { width: 0, height: 0, top: 0, left: 0 },
+        children: [],
+      },
+      endIndex: afterOpenTag,
+    };
+  }
+
+  // 자식 노드 파싱
+  const children: ExtractedNode[] = [];
+  let textContent = '';
+  let currentIndex = afterOpenTag;
+  const closingTag = `</${tagName}>`;
+
+  while (currentIndex < html.length) {
+    const remaining = html.slice(currentIndex);
+
+    // 종료 태그 발견
+    if (remaining.toLowerCase().startsWith(closingTag)) {
+      break;
+    }
+
+    // 다음 태그 또는 텍스트
+    if (remaining.startsWith('<') && !remaining.startsWith('</')) {
+      const childResult = parseElement(html, currentIndex);
+      if (childResult.node) {
+        children.push(childResult.node);
+      }
+      currentIndex = childResult.endIndex;
+    } else if (remaining.startsWith('</')) {
+      // 다른 종료 태그 (잘못된 HTML)
+      break;
+    } else {
+      // 텍스트 노드
+      const nextTagIndex = remaining.indexOf('<');
+      const text = nextTagIndex === -1 ? remaining : remaining.slice(0, nextTagIndex);
+      const trimmedText = text.trim();
+      if (trimmedText) {
+        textContent += (textContent ? ' ' : '') + trimmedText;
+      }
+      currentIndex += text.length;
+    }
+  }
+
+  // 종료 태그 이후 인덱스
+  const closingTagIndex = html.toLowerCase().indexOf(closingTag, currentIndex);
+  const endIndex = closingTagIndex === -1 ? html.length : closingTagIndex + closingTag.length;
+
+  return {
+    node: {
+      tagName,
+      className: extractClass(attrsString),
+      textContent: children.length === 0 ? textContent : '',
+      styles: parseInlineStyles(attrsString),
+      boundingRect: extractBoundingFromStyle(attrsString),
+      children,
+    },
+    endIndex,
+  };
+}
+
+/**
+ * class 속성 추출
+ */
+function extractClass(attrsString: string): string {
+  const match = attrsString.match(/class\s*=\s*["']([^"']*)["']/i);
+  return match ? match[1] : '';
+}
+
+/**
+ * inline style 파싱
+ */
+function parseInlineStyles(attrsString: string): ComputedStyles {
+  const styles = createDefaultStyles();
+  const styleMatch = attrsString.match(/style\s*=\s*["']([^"']*)["']/i);
+
+  if (!styleMatch) return styles;
+
+  const styleStr = styleMatch[1];
+  const rules = styleStr.split(';').filter(Boolean);
+
+  for (const rule of rules) {
+    const [prop, value] = rule.split(':').map((s) => s.trim());
+    if (!prop || !value) continue;
+
+    const camelProp = prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    applyStyleProperty(styles, camelProp, value);
+  }
+
+  return styles;
+}
+
+/**
+ * 스타일 속성 적용
+ */
+function applyStyleProperty(styles: ComputedStyles, prop: string, value: string) {
+  const numValue = parseFloat(value);
+
+  switch (prop) {
+    case 'width':
+      styles.width = numValue || 0;
+      break;
+    case 'height':
+      styles.height = numValue || 0;
+      break;
+    case 'backgroundColor':
+    case 'background':
+      if (value.includes('rgb') || value.includes('#')) {
+        styles.backgroundColor = parseCSSColor(value);
+      }
+      break;
+    case 'color':
+      styles.color = parseCSSColor(value);
+      break;
+    case 'fontSize':
+      styles.fontSize = numValue || 14;
+      break;
+    case 'fontWeight':
+      styles.fontWeight = value;
+      break;
+    case 'lineHeight':
+      styles.lineHeight = numValue || 0;
+      break;
+    case 'letterSpacing':
+      styles.letterSpacing = numValue || 0;
+      break;
+    case 'textAlign':
+      styles.textAlign = value;
+      break;
+    case 'display':
+      styles.display = value;
+      break;
+    case 'flexDirection':
+      styles.flexDirection = value;
+      break;
+    case 'justifyContent':
+      styles.justifyContent = value;
+      break;
+    case 'alignItems':
+      styles.alignItems = value;
+      break;
+    case 'gap':
+      styles.gap = numValue || 0;
+      break;
+    case 'padding':
+      const paddings = parseSpacing(value);
+      styles.paddingTop = paddings[0];
+      styles.paddingRight = paddings[1];
+      styles.paddingBottom = paddings[2];
+      styles.paddingLeft = paddings[3];
+      break;
+    case 'paddingTop':
+      styles.paddingTop = numValue || 0;
+      break;
+    case 'paddingRight':
+      styles.paddingRight = numValue || 0;
+      break;
+    case 'paddingBottom':
+      styles.paddingBottom = numValue || 0;
+      break;
+    case 'paddingLeft':
+      styles.paddingLeft = numValue || 0;
+      break;
+    case 'borderRadius':
+      const radii = parseSpacing(value);
+      styles.borderTopLeftRadius = radii[0];
+      styles.borderTopRightRadius = radii[1];
+      styles.borderBottomRightRadius = radii[2];
+      styles.borderBottomLeftRadius = radii[3];
+      break;
+    case 'borderWidth':
+      const bw = numValue || 0;
+      styles.borderTopWidth = bw;
+      styles.borderRightWidth = bw;
+      styles.borderBottomWidth = bw;
+      styles.borderLeftWidth = bw;
+      break;
+    case 'borderColor':
+      const bc = parseCSSColor(value);
+      styles.borderTopColor = bc;
+      styles.borderRightColor = bc;
+      styles.borderBottomColor = bc;
+      styles.borderLeftColor = bc;
+      break;
+    case 'opacity':
+      styles.opacity = numValue || 1;
+      break;
+    case 'boxShadow':
+      styles.boxShadow = value;
+      break;
+  }
+}
+
+/**
+ * CSS 색상 파싱 (hex, rgb, rgba)
+ */
+function parseCSSColor(colorStr: string): RGBA {
+  // rgba
+  const rgbaMatch = colorStr.match(/rgba?\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+))?\s*\)/);
+  if (rgbaMatch) {
+    return {
+      r: parseFloat(rgbaMatch[1]) / 255,
+      g: parseFloat(rgbaMatch[2]) / 255,
+      b: parseFloat(rgbaMatch[3]) / 255,
+      a: rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1,
+    };
+  }
+
+  // hex
+  const hexMatch = colorStr.match(/#([0-9a-fA-F]{3,8})/);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    if (hex.length === 3) {
+      return {
+        r: parseInt(hex[0] + hex[0], 16) / 255,
+        g: parseInt(hex[1] + hex[1], 16) / 255,
+        b: parseInt(hex[2] + hex[2], 16) / 255,
+        a: 1,
+      };
+    } else if (hex.length >= 6) {
+      return {
+        r: parseInt(hex.slice(0, 2), 16) / 255,
+        g: parseInt(hex.slice(2, 4), 16) / 255,
+        b: parseInt(hex.slice(4, 6), 16) / 255,
+        a: hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
+      };
+    }
+  }
+
+  // 기본값 (투명)
+  return { r: 0, g: 0, b: 0, a: 0 };
+}
+
+/**
+ * CSS spacing 값 파싱 (padding, margin, border-radius)
+ */
+function parseSpacing(value: string): [number, number, number, number] {
+  const parts = value.split(/\s+/).map((v) => parseFloat(v) || 0);
+
+  switch (parts.length) {
+    case 1:
+      return [parts[0], parts[0], parts[0], parts[0]];
+    case 2:
+      return [parts[0], parts[1], parts[0], parts[1]];
+    case 3:
+      return [parts[0], parts[1], parts[2], parts[1]];
+    case 4:
+      return [parts[0], parts[1], parts[2], parts[3]];
+    default:
+      return [0, 0, 0, 0];
+  }
+}
+
+/**
+ * style 속성에서 width/height 추출
+ */
+function extractBoundingFromStyle(attrsString: string): { width: number; height: number; top: number; left: number } {
+  const result = { width: 0, height: 0, top: 0, left: 0 };
+  const styleMatch = attrsString.match(/style\s*=\s*["']([^"']*)["']/i);
+
+  if (styleMatch) {
+    const widthMatch = styleMatch[1].match(/width\s*:\s*([\d.]+)/);
+    const heightMatch = styleMatch[1].match(/height\s*:\s*([\d.]+)/);
+    if (widthMatch) result.width = parseFloat(widthMatch[1]);
+    if (heightMatch) result.height = parseFloat(heightMatch[1]);
+  }
+
+  return result;
+}
+
+/**
+ * 기본 스타일 생성
+ */
+function createDefaultStyles(): ComputedStyles {
+  return {
+    display: 'block',
+    width: 'auto',
+    height: 'auto',
+    backgroundColor: { r: 0, g: 0, b: 0, a: 0 },
+    color: { r: 0, g: 0, b: 0, a: 1 },
+    fontSize: 14,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    lineHeight: 0,
+    letterSpacing: 0,
+    textAlign: 'left',
+    paddingTop: 0,
+    paddingRight: 0,
+    paddingBottom: 0,
+    paddingLeft: 0,
+    marginTop: 0,
+    marginRight: 0,
+    marginBottom: 0,
+    marginLeft: 0,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderTopColor: { r: 0, g: 0, b: 0, a: 0 },
+    borderRightColor: { r: 0, g: 0, b: 0, a: 0 },
+    borderBottomColor: { r: 0, g: 0, b: 0, a: 0 },
+    borderLeftColor: { r: 0, g: 0, b: 0, a: 0 },
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomLeftRadius: 0,
+    opacity: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    gap: 0,
+    boxShadow: 'none',
+    overflow: 'visible',
+    position: 'static',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 0,
   };
 }

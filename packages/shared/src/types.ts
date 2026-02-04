@@ -103,6 +103,8 @@ export interface ExtractedNode {
   styles: ComputedStyles;
   boundingRect: BoundingRect;
   children: ExtractedNode[];
+  /** SVG 요소인 경우 전체 SVG 마크업 (outerHTML) */
+  svgString?: string;
 }
 
 /**

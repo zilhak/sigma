@@ -78,13 +78,27 @@ export const toolDefinitions = [
   },
   {
     name: 'figma_create_frame',
-    description: 'Figma에 프레임을 생성합니다',
+    description: `Figma에 프레임을 생성합니다.
+
+**중요: format은 반드시 'json'을 사용하세요.**
+- json (기본값, 권장): ExtractedNode 구조로 정확한 스타일 보존. MCP 내부 동작 시 필수.
+- html: 사람이 읽거나 타 프로그램 호환용. 스타일 손실 가능성 있음.`,
     inputSchema: {
       type: 'object',
       properties: {
         data: {
           type: 'object',
-          description: 'ExtractedNode JSON 데이터',
+          description: 'ExtractedNode JSON 데이터 (format이 json일 때)',
+        },
+        html: {
+          type: 'string',
+          description: 'HTML 문자열 (format이 html일 때)',
+        },
+        format: {
+          type: 'string',
+          enum: ['json', 'html'],
+          default: 'json',
+          description: "데이터 형식. 'json' 권장 (기본값). MCP 사용 시 json 필수.",
         },
         name: {
           type: 'string',
@@ -99,7 +113,7 @@ export const toolDefinitions = [
           },
         },
       },
-      required: ['data'],
+      required: [],
     },
   },
   {
@@ -154,7 +168,11 @@ export const toolDefinitions = [
   // === Combined Tools ===
   {
     name: 'save_and_import',
-    description: '컴포넌트를 저장하고 바로 Figma로 가져옵니다',
+    description: `컴포넌트를 저장하고 바로 Figma로 가져옵니다.
+
+**중요: format은 반드시 'json'을 사용하세요.**
+- json (기본값, 권장): ExtractedNode 구조로 정확한 스타일 보존. MCP 내부 동작 시 필수.
+- html: 사람이 읽거나 타 프로그램 호환용. 스타일 손실 가능성 있음.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -164,10 +182,20 @@ export const toolDefinitions = [
         },
         data: {
           type: 'object',
-          description: 'ExtractedNode JSON 데이터',
+          description: 'ExtractedNode JSON 데이터 (format이 json일 때)',
+        },
+        html: {
+          type: 'string',
+          description: 'HTML 문자열 (format이 html일 때)',
+        },
+        format: {
+          type: 'string',
+          enum: ['json', 'html'],
+          default: 'json',
+          description: "데이터 형식. 'json' 권장 (기본값). MCP 사용 시 json 필수.",
         },
       },
-      required: ['name', 'data'],
+      required: ['name'],
     },
   },
 
@@ -300,8 +328,25 @@ export async function handleTool(
           };
         }
 
+        const format = (args.format as 'json' | 'html') || 'json';
         const position = args.position as { x: number; y: number } | undefined;
-        await wsServer.createFrame(args.data as ExtractedNode, args.name as string | undefined, position);
+
+        if (format === 'html') {
+          if (!args.html) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'html 필드가 필요합니다' }) }],
+            };
+          }
+          await wsServer.createFrame(null, args.name as string | undefined, position, 'html', args.html as string);
+        } else {
+          if (!args.data) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'data 필드가 필요합니다' }) }],
+            };
+          }
+          await wsServer.createFrame(args.data as ExtractedNode, args.name as string | undefined, position, 'json');
+        }
+
         return {
           content: [
             {
@@ -309,6 +354,7 @@ export async function handleTool(
               text: JSON.stringify({
                 success: true,
                 message: 'Figma에 프레임이 생성되었습니다',
+                format,
                 position: position || 'auto',
               }),
             },
@@ -333,7 +379,8 @@ export async function handleTool(
         }
 
         const importPosition = args.position as { x: number; y: number } | undefined;
-        await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition);
+        // 저장된 컴포넌트는 항상 JSON 형식
+        await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition, 'json');
         return {
           content: [
             {
@@ -341,6 +388,7 @@ export async function handleTool(
               text: JSON.stringify({
                 success: true,
                 message: `'${component.name}'이 Figma로 가져와졌습니다`,
+                format: 'json',
                 position: importPosition || 'auto',
               }),
             },
@@ -401,6 +449,46 @@ export async function handleTool(
 
       // === Combined Tools ===
       case 'save_and_import': {
+        const saveFormat = (args.format as 'json' | 'html') || 'json';
+
+        // HTML인 경우 저장은 하지 않고 바로 Figma로 전송 (HTML은 스토리지에 저장하지 않음)
+        if (saveFormat === 'html') {
+          if (!args.html) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'html 필드가 필요합니다' }) }],
+            };
+          }
+
+          if (wsServer.isFigmaConnected()) {
+            await wsServer.createFrame(null, args.name as string, undefined, 'html', args.html as string);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: true,
+                    message: `'${args.name}'이 Figma로 가져와졌습니다 (HTML, 저장 안 함)`,
+                    format: 'html',
+                  }),
+                },
+              ],
+            };
+          } else {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+              ],
+            };
+          }
+        }
+
+        // JSON인 경우 기존 로직
+        if (!args.data) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: 'data 필드가 필요합니다' }) }],
+          };
+        }
+
         // Save first
         const component = await storage.saveComponent(
           args.name as string,
@@ -409,7 +497,7 @@ export async function handleTool(
 
         // Then import to Figma if connected
         if (wsServer.isFigmaConnected()) {
-          await wsServer.createFrame(component.data, component.name);
+          await wsServer.createFrame(component.data, component.name, undefined, 'json');
           return {
             content: [
               {
@@ -418,6 +506,7 @@ export async function handleTool(
                   success: true,
                   message: `'${component.name}'이 저장되고 Figma로 가져와졌습니다`,
                   id: component.id,
+                  format: 'json',
                 }),
               },
             ],
@@ -431,6 +520,7 @@ export async function handleTool(
                   success: true,
                   message: `'${component.name}'이 저장되었습니다 (Figma 연결 없음)`,
                   id: component.id,
+                  format: 'json',
                 }),
               },
             ],

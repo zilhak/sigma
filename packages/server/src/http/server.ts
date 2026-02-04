@@ -121,12 +121,16 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
     try {
       const body = await c.req.json<{
         data?: ExtractedNode;
+        html?: string;
+        format?: 'json' | 'html';
         id?: string;
         name?: string;
         position?: { x: number; y: number };
       }>();
 
-      let data: ExtractedNode;
+      const format = body.format || 'json';
+      let data: ExtractedNode | null = null;
+      let html: string | undefined;
       let name: string | undefined = body.name;
       const position = body.position;
 
@@ -138,10 +142,12 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         }
         data = component.data;
         name = name || component.name;
-      } else if (body.data) {
+      } else if (format === 'html' && body.html) {
+        html = body.html;
+      } else if (format === 'json' && body.data) {
         data = body.data;
       } else {
-        return c.json({ error: 'Either data or id is required' }, 400);
+        return c.json({ error: format === 'html' ? 'html field is required' : 'Either data or id is required' }, 400);
       }
 
       // Check Figma connection
@@ -150,9 +156,9 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
       }
 
       // Send to Figma with optional position
-      await wsServer.createFrame(data, name, position);
+      await wsServer.createFrame(data, name, position, format, html);
 
-      return c.json({ success: true, message: 'Figma에 프레임이 생성되었습니다' });
+      return c.json({ success: true, message: 'Figma에 프레임이 생성되었습니다', format });
     } catch (error) {
       console.error('[HTTP] Figma import error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';

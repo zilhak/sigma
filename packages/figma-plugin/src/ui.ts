@@ -28,6 +28,17 @@ let pollingInterval: number | null = null;
 let isConnected = false;
 let isMinimized = false;
 let pendingCommandId: string | null = null;
+
+// Chunked transfer state
+interface ChunkBuffer {
+  commandId: string;
+  totalChunks: number;
+  receivedChunks: Map<number, string>;
+  format: 'json' | 'html';
+  name?: string;
+  position?: { x: number; y: number };
+}
+let chunkBuffer: ChunkBuffer | null = null;
 let fileInfo: {
   fileKey: string | null;
   fileKeySource: 'api' | 'stored' | 'none';
@@ -360,12 +371,18 @@ function connectWebSocket() {
 }
 
 // Handle server messages
-function handleServerMessage(msg: { type: string; data?: unknown; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string }) {
+function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number }) {
   switch (msg.type) {
-    case 'CREATE_FRAME':
-      log(`프레임 생성 요청: ${msg.name || 'Unnamed'}${msg.position ? ` (${msg.position.x}, ${msg.position.y})` : ''}`, 'info');
+    case 'CREATE_FRAME': {
+      const format = msg.format || 'json';
+      log(`프레임 생성 요청: ${msg.name || 'Unnamed'} (${format})${msg.position ? ` (${msg.position.x}, ${msg.position.y})` : ''}`, 'info');
+
       // Create frame in Figma with optional position
-      sendToPlugin('create-from-json', msg.data, msg.name, msg.position);
+      if (format === 'html') {
+        sendToPlugin('create-from-html', msg.html, msg.name, msg.position);
+      } else {
+        sendToPlugin('create-from-json', msg.data, msg.name, msg.position);
+      }
 
       // Send result back to server
       ws?.send(
@@ -376,6 +393,91 @@ function handleServerMessage(msg: { type: string; data?: unknown; name?: string;
         })
       );
       log(`프레임 생성 완료: ${msg.name || 'Unnamed'}`, 'success');
+      break;
+    }
+
+    // === Chunked transfer handlers ===
+    case 'CHUNK_START':
+      log(`청크 전송 시작: ${msg.totalChunks}개 청크 예정 (${msg.format || 'json'})`, 'info');
+      chunkBuffer = {
+        commandId: msg.commandId || '',
+        totalChunks: msg.totalChunks || 0,
+        receivedChunks: new Map(),
+        format: msg.format || 'json',
+        name: msg.name,
+        position: msg.position,
+      };
+      break;
+
+    case 'CHUNK':
+      if (!chunkBuffer || chunkBuffer.commandId !== msg.commandId) {
+        log(`청크 버퍼 불일치: ${msg.commandId}`, 'warn');
+        break;
+      }
+      chunkBuffer.receivedChunks.set(msg.index || 0, msg.data as string);
+      // 진행 상황 로그 (10개마다 또는 마지막)
+      const received = chunkBuffer.receivedChunks.size;
+      const total = chunkBuffer.totalChunks;
+      if (received % 10 === 0 || received === total) {
+        log(`청크 수신 중: ${received}/${total}`, 'info');
+      }
+      break;
+
+    case 'CHUNK_END':
+      if (!chunkBuffer || chunkBuffer.commandId !== msg.commandId) {
+        log(`청크 종료 불일치: ${msg.commandId}`, 'warn');
+        break;
+      }
+
+      // 모든 청크가 도착했는지 확인
+      if (chunkBuffer.receivedChunks.size !== chunkBuffer.totalChunks) {
+        log(`청크 누락: ${chunkBuffer.receivedChunks.size}/${chunkBuffer.totalChunks}`, 'error');
+        ws?.send(JSON.stringify({
+          type: 'RESULT',
+          commandId: msg.commandId,
+          success: false,
+          error: `Missing chunks: received ${chunkBuffer.receivedChunks.size}/${chunkBuffer.totalChunks}`,
+        }));
+        chunkBuffer = null;
+        break;
+      }
+
+      // 청크 조립
+      log('청크 조립 중...', 'info');
+      let assembledData = '';
+      for (let i = 0; i < chunkBuffer.totalChunks; i++) {
+        assembledData += chunkBuffer.receivedChunks.get(i) || '';
+      }
+
+      try {
+        if (chunkBuffer.format === 'html') {
+          // HTML 형식
+          log(`프레임 생성 요청 (청크/HTML): ${chunkBuffer.name || 'Unnamed'}`, 'info');
+          sendToPlugin('create-from-html', assembledData, chunkBuffer.name, chunkBuffer.position);
+        } else {
+          // JSON 형식
+          const data = JSON.parse(assembledData);
+          log(`프레임 생성 요청 (청크/JSON): ${chunkBuffer.name || 'Unnamed'}`, 'info');
+          sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position);
+        }
+
+        ws?.send(JSON.stringify({
+          type: 'RESULT',
+          commandId: msg.commandId,
+          success: true,
+        }));
+        log(`프레임 생성 완료 (청크): ${chunkBuffer.name || 'Unnamed'}`, 'success');
+      } catch (err) {
+        log(`청크 파싱 오류: ${err}`, 'error');
+        ws?.send(JSON.stringify({
+          type: 'RESULT',
+          commandId: msg.commandId,
+          success: false,
+          error: `Parse error: ${err}`,
+        }));
+      }
+
+      chunkBuffer = null;
       break;
 
     case 'GET_FRAMES':

@@ -1,6 +1,10 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { ExtractedNode } from '@sigma/shared';
 
+// 1MB 청크 크기
+const CHUNK_SIZE = 1024 * 1024;
+const CHUNK_THRESHOLD = 1024 * 1024; // 1MB 이상이면 청킹
+
 interface FigmaFileInfo {
   fileKey: string | null;
   fileName: string;
@@ -189,12 +193,34 @@ export class FigmaWebSocketServer {
   }
 
   // Send command to create frame in Figma
-  async createFrame(data: ExtractedNode, name?: string, position?: { x: number; y: number }): Promise<void> {
+  // format: 'json' (default) | 'html'
+  async createFrame(
+    data: ExtractedNode | null,
+    name?: string,
+    position?: { x: number; y: number },
+    format: 'json' | 'html' = 'json',
+    html?: string
+  ): Promise<void> {
     const figmaClients = this.getFigmaClients();
     if (figmaClients.length === 0) {
       throw new Error('Figma Plugin이 연결되어 있지 않습니다');
     }
 
+    // 전송할 페이로드 결정
+    const payload = format === 'html' ? html : JSON.stringify(data);
+    if (!payload) {
+      throw new Error(format === 'html' ? 'HTML 데이터가 필요합니다' : 'JSON 데이터가 필요합니다');
+    }
+
+    const dataSize = Buffer.byteLength(payload, 'utf-8');
+
+    // 1MB 초과 시 청킹 사용
+    if (dataSize > CHUNK_THRESHOLD) {
+      console.log(`[WebSocket] Large data detected (${(dataSize / 1024 / 1024).toFixed(2)}MB), using chunked transfer`);
+      return this.createFrameChunked(figmaClients[0], payload, name, position, format);
+    }
+
+    // 1MB 이하: 기존 방식
     const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     return new Promise<void>((resolve, reject) => {
@@ -213,13 +239,76 @@ export class FigmaWebSocketServer {
       const message = JSON.stringify({
         type: 'CREATE_FRAME',
         commandId,
-        data,
+        format,
+        data: format === 'json' ? data : undefined,
+        html: format === 'html' ? html : undefined,
         name,
         position,
       });
 
       // Send to first connected Figma plugin
       figmaClients[0].send(message);
+    });
+  }
+
+  // Chunked transfer for large data (>1MB)
+  private async createFrameChunked(
+    client: WebSocket,
+    payload: string,
+    name?: string,
+    position?: { x: number; y: number },
+    format: 'json' | 'html' = 'json'
+  ): Promise<void> {
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const totalChunks = Math.ceil(payload.length / CHUNK_SIZE);
+
+    console.log(`[WebSocket] Sending ${totalChunks} chunks for command ${commandId} (format: ${format})`);
+
+    return new Promise<void>((resolve, reject) => {
+      // 대용량 데이터는 타임아웃을 길게 설정 (60초)
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (chunked transfer)'));
+      }, 60000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: () => resolve(),
+        reject,
+        timeout,
+      });
+
+      // 1. CHUNK_START 전송
+      client.send(JSON.stringify({
+        type: 'CHUNK_START',
+        commandId,
+        totalChunks,
+        format,
+        name,
+        position,
+      }));
+
+      // 2. CHUNK 전송
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, payload.length);
+        const chunkData = payload.slice(start, end);
+
+        client.send(JSON.stringify({
+          type: 'CHUNK',
+          commandId,
+          index: i,
+          data: chunkData,
+        }));
+      }
+
+      // 3. CHUNK_END 전송
+      client.send(JSON.stringify({
+        type: 'CHUNK_END',
+        commandId,
+      }));
+
+      console.log(`[WebSocket] All ${totalChunks} chunks sent for command ${commandId}`);
     });
   }
 

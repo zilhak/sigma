@@ -16,10 +16,72 @@ Sigma Plugin이 독립적으로 다음 기능을 수행:
 
 **목표**: HTML → JSON → Figma 변환의 정합성 확보
 
+### 작업 프로세스
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  이슈 발견   │ ──▶ │  원인 파악   │ ──▶ │  코드 수정   │ ──▶ │  수정 확인   │
+│ (테스트)    │     │  및 분석    │     │             │     │ (재테스트)  │
+└─────────────┘     └─────────────┘     └─────────────┘     └──────┬──────┘
+                                                                   │
+                                                          ┌────────▼────────┐
+                                                          │   성공 시        │
+                                                          │ 다음 Story로    │
+                                                          │   반복          │
+                                                          └─────────────────┘
+```
+
+**단계별 설명:**
+1. **이슈 발견**: Storybook에서 컴포넌트 추출 → Figma에 생성 → 스크린샷 비교
+2. **원인 파악**: Figma Plugin 코드 분석, JSON 구조 확인
+3. **코드 수정**: `packages/figma-plugin/src/` 코드 수정
+4. **수정 확인**: 동일 컴포넌트 재테스트로 이슈 해결 확인
+5. **반복**: 성공 시 다음 Story 대상으로 동일 프로세스 반복
+
 ### 현황
 - [x] 기본 변환 로직 구현
 - [x] Border 버그 수정 (TextNode stroke 미지원 이슈)
+- [x] Margin 추출 버그 수정 (하드코딩 0 → 실제값 추출)
 - [ ] 다양한 컴포넌트에서 검증 필요
+
+### 테스트 결과 (진행중)
+
+| 컴포넌트 | 결과 | 이슈 |
+|---------|------|------|
+| CCBadge | ✅ PASS | - |
+| CCInfoPanel | ✅ PASS | display: grid 지원 추가로 해결 |
+| CCStatusIndicator | ⏭️ SKIP | JSON 8MB+ (너무 큼) |
+| CCSpinner | ⚠️ 제한 | 애니메이션 + 면별 border 색상 (Figma 미지원) |
+| CCButton | ✅ PASS | - |
+| CCToggle | ✅ PASS | SVG 지원 구현 완료 (`createNodeFromSvg` 사용) |
+| CCBanner | ✅ PASS | - |
+
+### 발견된 이슈 목록
+
+#### 이슈 #1: 레이아웃 변환 문제 (CCInfoPanel)
+- **증상**: 수평으로 배치된 label-value 쌍이 수직으로 변환됨
+- **원인**: `display: grid`가 처리되지 않아 기본값 VERTICAL로 설정됨
+- **해결**: `applyLayoutMode()`에 grid/inline-grid 지원 추가
+- **상태**: ✅ 해결
+
+#### 이슈 #2: 애니메이션 컴포넌트 (CCSpinner) - 알려진 제한사항
+- **증상**: 스피너의 파란색 호(arc)가 전체 원으로 표시됨
+- **원인**:
+  1. Figma API는 면별(top/right/bottom/left) stroke 색상 미지원
+  2. CSS 애니메이션(회전) 미지원
+- **결론**: **Figma의 근본적 제한사항** - 애니메이션 컴포넌트는 정적 표현만 가능
+- **개선**: 가장 불투명한 border 색상 선택하도록 개선 (시각적 의미 보존)
+- **상태**: ⚠️ 제한사항 (수정 불가)
+
+#### 이슈 #3: SVG 기반 UI 컴포넌트 (CCToggle) - 구현 완료
+- **증상**: 토글 스위치 UI가 렌더링되지 않고 라벨만 표시됨
+- **원인**: 토글 스위치가 **inline SVG**로 구현됨 (`<svg><path/><circle/></svg>`)
+- **해결**:
+  1. `ExtractedNode` 타입에 `svgString?: string` 필드 추가
+  2. Chrome Extension에서 SVG 요소 감지 시 `outerHTML`을 `svgString`으로 캡처
+  3. Figma Plugin에서 `figma.createNodeFromSvg(svgString)` API로 직접 변환
+  4. CSS 변수(`var(--xxx, fallback)`)는 추출 시 fallback 값으로 변환
+- **상태**: ✅ 해결
 
 ### 작업 항목
 

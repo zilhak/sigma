@@ -149,16 +149,38 @@ function onKeyDown(e: KeyboardEvent) {
 /**
  * DOM 요소를 ExtractedNode로 변환
  */
-function extractElement(element: HTMLElement): ExtractedNode {
+function extractElement(element: HTMLElement | SVGElement): ExtractedNode {
   const rect = element.getBoundingClientRect();
   const computedStyle = window.getComputedStyle(element);
+  const tagName = element.tagName.toLowerCase();
+
+  // SVG 요소인 경우: outerHTML을 캡처하고 children은 비움
+  // Figma에서 createNodeFromSvg()로 직접 변환하기 위함
+  if (tagName === 'svg' || element instanceof SVGSVGElement) {
+    return {
+      id: generateId(),
+      tagName: 'svg',
+      className: getClassName(element),
+      textContent: '',
+      attributes: getAttributes(element as HTMLElement),
+      styles: extractStyles(computedStyle),
+      boundingRect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      },
+      children: [],
+      svgString: element.outerHTML,
+    };
+  }
 
   return {
     id: generateId(),
-    tagName: element.tagName.toLowerCase(),
-    className: element.className || '',
-    textContent: getDirectTextContent(element),
-    attributes: getAttributes(element),
+    tagName: tagName,
+    className: getClassName(element),
+    textContent: getDirectTextContent(element as HTMLElement),
+    attributes: getAttributes(element as HTMLElement),
     styles: extractStyles(computedStyle),
     boundingRect: {
       x: rect.x,
@@ -167,9 +189,20 @@ function extractElement(element: HTMLElement): ExtractedNode {
       height: rect.height,
     },
     children: Array.from(element.children)
-      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+      .filter((child): child is HTMLElement | SVGSVGElement =>
+        child instanceof HTMLElement || child instanceof SVGSVGElement)
       .map((child) => extractElement(child)),
   };
+}
+
+/**
+ * className 추출 (SVG와 HTML 모두 지원)
+ */
+function getClassName(element: Element): string {
+  if (element.className instanceof SVGAnimatedString) {
+    return element.className.baseVal || '';
+  }
+  return (element.className as string) || '';
 }
 
 /**
