@@ -26,9 +26,85 @@ sigma/
 - 소스코드에 포함되어야 하는 문서만 `.claude/` 폴더 바깥에 작성
 - 임시 파일은 절대 Downloads 폴더나 시스템 /tmp에 저장하지 않음
 
+### 컴포넌트 추출 시 필수 규칙
+
+> **중요:** 웹 컴포넌트 추출은 반드시 Chrome Extension을 통해 수행합니다.
+
+Chrome Extension (`packages/chrome-extension`)에는 완전한 DOM 추출 기능이 구현되어 있습니다:
+- `content.ts`의 `extractElement()` 함수
+- Computed Styles 추출 (40+ CSS 속성)
+- SVG 요소 캡처 (`svgString`)
+- 재귀적 children 추출
+
+**절대 하지 말 것:**
+```javascript
+// ❌ 잘못된 방법 - playwright_evaluate()로 직접 추출 로직 작성
+playwright_evaluate({
+  script: `
+    function extractElement(el) { ... }  // 직접 작성 금지!
+    return extractElement(document.querySelector(...));
+  `
+})
+```
+
+**올바른 방법:**
+```
+// ✅ Extension을 통한 추출
+1. Playwright로 Extension 팝업 열기
+2. 선택 모드 활성화
+3. 컴포넌트 클릭
+4. Extension이 추출 → 서버로 POST
+5. Sigma MCP로 Figma에 전송
+```
+
+이미 만들어진 Extension의 추출 기능을 사용하지 않고 직접 로직을 작성하는 것은:
+- 중복 작업
+- Extension 코드가 테스트되지 않음
+- 실제 사용 시나리오와 불일치
+
 ### Playwright MCP 사용 지침
 
-브라우저 자동화 시 Playwright MCP를 사용할 때 다음 규칙을 준수합니다:
+브라우저 자동화 시 Playwright MCP를 사용할 때 다음 규칙을 준수합니다.
+
+#### Extension 모드 설정 (권장)
+
+Sigma Chrome Extension을 사용하려면 `@playwright/mcp`의 `--extension` 모드를 사용해야 합니다.
+
+**MCP 설정 (`~/.claude.json`):**
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest", "--extension"],
+      "env": {}
+    }
+  }
+}
+```
+
+**Extension 모드 장점:**
+- 사용자의 실제 Chrome 브라우저에 연결
+- 이미 설치된 Sigma Extension 사용 가능
+- 로그인 상태, 쿠키 등 기존 세션 유지
+
+**사전 준비:**
+1. Chrome에 "Playwright MCP Bridge" Extension 설치 (Microsoft 제공)
+   - [chrome://extensions](chrome://extensions) → 개발자 모드
+   - 또는 Chrome 웹스토어에서 설치
+2. Chrome에 Sigma Extension 설치
+   - `packages/chrome-extension/dist` 폴더 로드
+
+**사용 흐름:**
+```
+1. Claude Code가 Playwright MCP로 브라우저 연결 요청
+2. 사용자가 연결할 탭 선택 (Bridge Extension UI)
+3. Playwright가 해당 탭 제어
+4. Sigma Extension 팝업 열기 → 컴포넌트 추출 → 서버 전송
+```
+
+#### 기본 사용 규칙
 
 **창 크기:**
 ```

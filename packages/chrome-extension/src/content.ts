@@ -5,6 +5,64 @@ let isSelectMode = false;
 let hoveredElement: HTMLElement | null = null;
 let overlay: HTMLDivElement | null = null;
 
+// ============================================================
+// Playwright 자동화 지원: 페이지 컨텍스트 스크립트 주입
+// ============================================================
+
+/**
+ * 페이지 컨텍스트에 Sigma API를 주입
+ * CSP 우회를 위해 외부 스크립트 파일 방식 사용
+ */
+function injectPageScript() {
+  const script = document.createElement('script');
+  script.src = chrome.runtime.getURL('injected.js');
+  script.onload = function () {
+    script.remove(); // 로드 완료 후 태그 제거
+  };
+  (document.head || document.documentElement).appendChild(script);
+}
+
+/**
+ * 페이지에서 오는 명령 이벤트 리스닝
+ */
+function setupCommandListeners() {
+  // 선택 모드 시작
+  window.addEventListener('sigma:cmd:start-select', () => {
+    startSelectMode();
+  });
+
+  // 선택 모드 종료
+  window.addEventListener('sigma:cmd:stop-select', () => {
+    stopSelectMode();
+  });
+
+  // 요소 추출
+  window.addEventListener('sigma:cmd:extract', ((e: CustomEvent) => {
+    const { selector, x, y } = e.detail || {};
+    let element: HTMLElement | null = null;
+
+    if (selector) {
+      element = document.querySelector(selector) as HTMLElement;
+    } else if (typeof x === 'number' && typeof y === 'number') {
+      element = document.elementFromPoint(x, y) as HTMLElement;
+    }
+
+    if (element) {
+      const extracted = extractElement(element);
+      window.dispatchEvent(new CustomEvent('sigma:extracted', { detail: extracted }));
+    }
+  }) as EventListener);
+
+  // 상태 확인
+  window.addEventListener('sigma:cmd:status', () => {
+    window.dispatchEvent(new CustomEvent('sigma:status', { detail: { isSelectMode } }));
+  });
+}
+
+// 초기화
+injectPageScript();
+setupCommandListeners();
+
 /**
  * 메시지 리스너
  */
@@ -41,10 +99,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 function startSelectMode() {
   isSelectMode = true;
   createOverlay();
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('click', onClick, true);
-  document.addEventListener('keydown', onKeyDown);
-  document.body.style.cursor = 'crosshair';
+  document.addEventListener('mousemove', onMouseMove as EventListener);
+  document.addEventListener('click', onClick as EventListener, true);
+  document.addEventListener('keydown', onKeyDown as EventListener);
+  if (document.body) {
+    document.body.style.cursor = 'crosshair';
+  }
 }
 
 /**
@@ -53,10 +113,12 @@ function startSelectMode() {
 function stopSelectMode() {
   isSelectMode = false;
   removeOverlay();
-  document.removeEventListener('mousemove', onMouseMove);
-  document.removeEventListener('click', onClick, true);
-  document.removeEventListener('keydown', onKeyDown);
-  document.body.style.cursor = '';
+  document.removeEventListener('mousemove', onMouseMove as EventListener);
+  document.removeEventListener('click', onClick as EventListener, true);
+  document.removeEventListener('keydown', onKeyDown as EventListener);
+  if (document.body) {
+    document.body.style.cursor = '';
+  }
   hoveredElement = null;
 }
 
@@ -127,11 +189,14 @@ function onClick(e: MouseEvent) {
 
   const extracted = extractElement(target);
 
-  // 추출 완료 메시지 전송
+  // 추출 완료 메시지 전송 (Extension 내부용)
   chrome.runtime.sendMessage({
     type: 'ELEMENT_EXTRACTED',
     data: extracted,
   });
+
+  // 커스텀 이벤트 발송 (Playwright 자동화용)
+  window.dispatchEvent(new CustomEvent('sigma:extracted', { detail: extracted }));
 
   stopSelectMode();
 }

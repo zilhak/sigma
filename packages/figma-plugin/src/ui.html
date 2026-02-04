@@ -424,15 +424,23 @@
     </div>
 
     <div class="tabs">
-    <div class="tab active" data-tab="paste">JSON 붙여넣기</div>
+    <div class="tab active" data-tab="paste-json">JSON 붙여넣기</div>
+    <div class="tab" data-tab="paste-html">HTML 붙여넣기</div>
     <div class="tab" data-tab="server">서버 연동</div>
   </div>
 
-  <div id="pasteSection" class="section active">
+  <div id="pasteJsonSection" class="section active">
     <div class="textarea-wrapper">
       <textarea id="jsonInput" placeholder="ExtractedNode JSON을 붙여넣으세요..."></textarea>
     </div>
-    <button class="btn btn-primary" id="importBtn" disabled>Figma로 가져오기</button>
+    <button class="btn btn-primary" id="importJsonBtn" disabled>Figma로 가져오기</button>
+  </div>
+
+  <div id="pasteHtmlSection" class="section">
+    <div class="textarea-wrapper">
+      <textarea id="htmlInput" placeholder="HTML 코드를 붙여넣으세요..."></textarea>
+    </div>
+    <button class="btn btn-primary" id="importHtmlBtn" disabled>Figma로 가져오기</button>
   </div>
 
   <div id="serverSection" class="section">

@@ -718,15 +718,75 @@ async function createFrameFromHTML(html: string, name?: string, position?: { x: 
  * Figma Plugin 환경에서는 DOMParser가 없으므로 간단한 파서 구현
  */
 function parseHTML(html: string): ExtractedNode | null {
-  const trimmed = html.trim();
-  if (!trimmed) return null;
+  let cleaned = html.trim();
+  if (!cleaned) return null;
 
-  return parseElement(trimmed, 0).node;
+  // DOCTYPE 제거
+  cleaned = cleaned.replace(/<!DOCTYPE[^>]*>/gi, '');
+
+  // HTML 주석 제거
+  cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, '');
+
+  // CDATA 섹션 제거
+  cleaned = cleaned.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+
+  cleaned = cleaned.trim();
+  if (!cleaned) return null;
+
+  return parseElement(cleaned, 0).node;
+}
+
+/**
+ * HTML 엔티티 디코딩
+ */
+function decodeHTMLEntities(text: string): string {
+  const entities: Record<string, string> = {
+    '&nbsp;': ' ',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&amp;': '&',
+    '&quot;': '"',
+    '&apos;': "'",
+    '&#39;': "'",
+    '&copy;': '\u00A9',      // ©
+    '&reg;': '\u00AE',       // ®
+    '&trade;': '\u2122',     // ™
+    '&mdash;': '\u2014',     // —
+    '&ndash;': '\u2013',     // –
+    '&hellip;': '\u2026',    // …
+    '&lsquo;': '\u2018',     // '
+    '&rsquo;': '\u2019',     // '
+    '&ldquo;': '\u201C',     // "
+    '&rdquo;': '\u201D',     // "
+    '&bull;': '\u2022',      // •
+    '&middot;': '\u00B7',    // ·
+  };
+
+  let result = text;
+
+  // Named entities
+  for (const [entity, char] of Object.entries(entities)) {
+    result = result.replace(new RegExp(entity, 'gi'), char);
+  }
+
+  // Numeric entities (&#123; or &#x7B;)
+  result = result.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)));
+  result = result.replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+
+  return result;
 }
 
 interface ParseResult {
   node: ExtractedNode | null;
   endIndex: number;
+}
+
+/**
+ * 고유 ID 생성
+ */
+let nodeIdCounter = 0;
+function generateNodeId(): string {
+  return `html-node-${Date.now()}-${++nodeIdCounter}`;
 }
 
 /**
@@ -739,16 +799,18 @@ function parseElement(html: string, startIndex: number): ParseResult {
   if (!rest.startsWith('<') || rest.startsWith('</')) {
     const textEnd = rest.indexOf('<');
     const text = textEnd === -1 ? rest : rest.slice(0, textEnd);
-    const trimmedText = text.trim();
+    const trimmedText = decodeHTMLEntities(text.trim());
 
     if (trimmedText) {
       return {
         node: {
+          id: generateNodeId(),
           tagName: 'span',
           className: '',
           textContent: trimmedText,
+          attributes: {},
           styles: createDefaultStyles(),
-          boundingRect: { width: 0, height: 0, top: 0, left: 0 },
+          boundingRect: { x: 0, y: 0, width: 0, height: 0 },
           children: [],
         },
         endIndex: startIndex + (textEnd === -1 ? text.length : textEnd),
@@ -772,11 +834,13 @@ function parseElement(html: string, startIndex: number): ParseResult {
   if (selfClosingTags.includes(tagName) || attrsString.endsWith('/')) {
     return {
       node: {
+        id: generateNodeId(),
         tagName,
         className: extractClass(attrsString),
         textContent: '',
+        attributes: extractAttributes(attrsString),
         styles: parseInlineStyles(attrsString),
-        boundingRect: { width: 0, height: 0, top: 0, left: 0 },
+        boundingRect: { x: 0, y: 0, width: 0, height: 0 },
         children: [],
       },
       endIndex: afterOpenTag,
@@ -811,7 +875,7 @@ function parseElement(html: string, startIndex: number): ParseResult {
       // 텍스트 노드
       const nextTagIndex = remaining.indexOf('<');
       const text = nextTagIndex === -1 ? remaining : remaining.slice(0, nextTagIndex);
-      const trimmedText = text.trim();
+      const trimmedText = decodeHTMLEntities(text.trim());
       if (trimmedText) {
         textContent += (textContent ? ' ' : '') + trimmedText;
       }
@@ -825,9 +889,11 @@ function parseElement(html: string, startIndex: number): ParseResult {
 
   return {
     node: {
+      id: generateNodeId(),
       tagName,
       className: extractClass(attrsString),
       textContent: children.length === 0 ? textContent : '',
+      attributes: extractAttributes(attrsString),
       styles: parseInlineStyles(attrsString),
       boundingRect: extractBoundingFromStyle(attrsString),
       children,
@@ -842,6 +908,31 @@ function parseElement(html: string, startIndex: number): ParseResult {
 function extractClass(attrsString: string): string {
   const match = attrsString.match(/class\s*=\s*["']([^"']*)["']/i);
   return match ? match[1] : '';
+}
+
+/**
+ * 모든 속성 추출
+ */
+function extractAttributes(attrsString: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  // 속성 매칭: name="value" 또는 name='value' 또는 name=value
+  const attrRegex = /(\w[\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+  let match;
+
+  while ((match = attrRegex.exec(attrsString)) !== null) {
+    const name = match[1].toLowerCase();
+    // ES2017 호환: ?? 대신 || 사용 (빈 문자열도 falsy이므로 마지막에 '' 처리)
+    const value = match[2] !== undefined ? match[2]
+                : match[3] !== undefined ? match[3]
+                : match[4] !== undefined ? match[4]
+                : '';
+    // style과 class는 별도 처리하므로 제외
+    if (name !== 'style' && name !== 'class') {
+      attributes[name] = decodeHTMLEntities(value);
+    }
+  }
+
+  return attributes;
 }
 
 /**
@@ -1031,8 +1122,8 @@ function parseSpacing(value: string): [number, number, number, number] {
 /**
  * style 속성에서 width/height 추출
  */
-function extractBoundingFromStyle(attrsString: string): { width: number; height: number; top: number; left: number } {
-  const result = { width: 0, height: 0, top: 0, left: 0 };
+function extractBoundingFromStyle(attrsString: string): { x: number; y: number; width: number; height: number } {
+  const result = { x: 0, y: 0, width: 0, height: 0 };
   const styleMatch = attrsString.match(/style\s*=\s*["']([^"']*)["']/i);
 
   if (styleMatch) {
@@ -1050,49 +1141,72 @@ function extractBoundingFromStyle(attrsString: string): { width: number; height:
  */
 function createDefaultStyles(): ComputedStyles {
   return {
+    // 레이아웃
     display: 'block',
+    position: 'static',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    flexWrap: 'nowrap',
+    gap: 0,
+
+    // 크기
     width: 'auto',
     height: 'auto',
-    backgroundColor: { r: 0, g: 0, b: 0, a: 0 },
-    color: { r: 0, g: 0, b: 0, a: 1 },
-    fontSize: 14,
-    fontWeight: '400',
-    fontFamily: 'Inter',
-    lineHeight: 0,
-    letterSpacing: 0,
-    textAlign: 'left',
+    minWidth: 0,
+    minHeight: 0,
+    maxWidth: 0,
+    maxHeight: 0,
+
+    // 패딩
     paddingTop: 0,
     paddingRight: 0,
     paddingBottom: 0,
     paddingLeft: 0,
+
+    // 마진
     marginTop: 0,
     marginRight: 0,
     marginBottom: 0,
     marginLeft: 0,
+
+    // 배경
+    backgroundColor: { r: 0, g: 0, b: 0, a: 0 },
+    backgroundImage: null,
+
+    // 테두리 두께
     borderTopWidth: 0,
     borderRightWidth: 0,
     borderBottomWidth: 0,
     borderLeftWidth: 0,
+
+    // 테두리 색상
     borderTopColor: { r: 0, g: 0, b: 0, a: 0 },
     borderRightColor: { r: 0, g: 0, b: 0, a: 0 },
     borderBottomColor: { r: 0, g: 0, b: 0, a: 0 },
     borderLeftColor: { r: 0, g: 0, b: 0, a: 0 },
+
+    // 테두리 라운드
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
     borderBottomLeftRadius: 0,
+
+    // 텍스트
+    color: { r: 0, g: 0, b: 0, a: 1 },
+    fontSize: 14,
+    fontFamily: 'Inter',
+    fontWeight: '400',
+    fontStyle: 'normal',
+    textAlign: 'left',
+    textDecoration: 'none',
+    lineHeight: 0,
+    letterSpacing: 0,
+
+    // 기타
     opacity: 1,
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'stretch',
-    gap: 0,
-    boxShadow: 'none',
     overflow: 'visible',
-    position: 'static',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    zIndex: 0,
+    boxShadow: 'none',
+    transform: 'none',
   };
 }

@@ -38,6 +38,16 @@ Sigma Plugin이 독립적으로 다음 기능을 수행:
 4. **수정 확인**: 동일 컴포넌트 재테스트로 이슈 해결 확인
 5. **반복**: 성공 시 다음 Story 대상으로 동일 프로세스 반복
 
+> **중요:** 컴포넌트 추출은 반드시 **Chrome Extension**을 통해 수행합니다.
+>
+> ```
+> ❌ playwright_evaluate()로 직접 DOM 추출 로직 작성
+> ✅ Playwright로 Extension 팝업 조작 → Extension이 추출 → 서버 전송
+> ```
+>
+> Extension의 `content.ts`에 구현된 `extractElement()` 함수가 모든 추출 로직을 담당합니다.
+> 이미 만들어진 추출 기능을 사용하지 않고 별도로 작성하면 Extension 코드가 테스트되지 않습니다.
+
 ### 현황
 - [x] 기본 변환 로직 구현
 - [x] Border 버그 수정 (TextNode stroke 미지원 이슈)
@@ -55,6 +65,10 @@ Sigma Plugin이 독립적으로 다음 기능을 수행:
 | CCButton | ✅ PASS | - |
 | CCToggle | ✅ PASS | SVG 지원 구현 완료 (`createNodeFromSvg` 사용) |
 | CCBanner | ✅ PASS | - |
+| CCDropdown | ✅ PASS | SVG 드롭다운 화살표 포함 |
+| CCIconButton | ✅ PASS | SVG 아이콘 포함 |
+| CCTextArea | ✅ PASS | 텍스트 높이 auto 설정 필요 |
+| CCModal | ✅ PASS | 복합 컴포넌트 (헤더/콘텐츠/푸터/닫기버튼) |
 
 ### 발견된 이슈 목록
 

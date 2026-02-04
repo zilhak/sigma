@@ -18,7 +18,7 @@ async function build() {
     entryPoints: [join(__dirname, 'src/code.ts')],
     bundle: true,
     format: 'iife',
-    target: 'es2020',
+    target: 'es2017',
     outfile: join(__dirname, 'dist/code.js'),
     sourcemap: false,
   };
@@ -28,7 +28,7 @@ async function build() {
     entryPoints: [join(__dirname, 'src/ui.ts')],
     bundle: true,
     format: 'iife',
-    target: 'es2020',
+    target: 'es2017',
     outfile: join(__dirname, 'dist/ui.js'),
     sourcemap: false,
   };

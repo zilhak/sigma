@@ -20,6 +20,43 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 | **Local Server** | 중앙 허브, MCP 서버, HTTP/WebSocket API |
 | **Figma Plugin** | JSON 데이터를 Figma 프레임으로 변환 |
 
+---
+
+## Chrome Extension - 컴포넌트 추출 기능
+
+> **중요:** 웹 컴포넌트 추출은 반드시 Chrome Extension을 통해 수행합니다.
+
+Chrome Extension은 웹페이지의 **모든 DOM 요소를 완전한 ExtractedNode JSON으로 추출**하는 핵심 기능을 제공합니다.
+
+### 추출되는 정보
+
+| 항목 | 설명 |
+|------|------|
+| **DOM 구조** | tagName, className, children (재귀적 추출) |
+| **Computed Styles** | display, flexbox, padding, margin, colors, fonts 등 40+ 속성 |
+| **Bounding Rect** | x, y, width, height |
+| **텍스트** | 직접 텍스트 콘텐츠 (자식 제외) |
+| **SVG** | inline SVG는 `svgString`으로 전체 마크업 캡처 |
+
+### 사용 방법
+
+1. Extension 아이콘 클릭 → 팝업 열기
+2. **[선택 모드]** 클릭 → 웹페이지에서 컴포넌트 hover/클릭
+3. 추출 완료 후:
+   - **[복사]**: 클립보드에 JSON 복사 (서버 없이 사용 가능)
+   - **[서버 전송]**: 서버로 POST → Figma로 자동 전송
+
+### AI Agent 자동화 시
+
+Playwright로 브라우저를 조작할 때도 **Extension의 추출 기능을 사용**해야 합니다:
+
+```
+❌ 잘못된 방법: playwright_evaluate()로 직접 DOM 추출 로직 작성
+✅ 올바른 방법: Playwright로 Extension 팝업 조작 → Extension이 추출 → 서버 전송
+```
+
+Extension의 `content.ts`에 구현된 `extractElement()` 함수가 모든 추출 로직을 담당합니다.
+
 ## 기술 스택
 
 - **Runtime:** Bun

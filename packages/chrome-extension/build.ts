@@ -40,6 +40,12 @@ async function build() {
       entryPoints: [join(__dirname, 'src/popup/popup.ts')],
       outfile: join(__dirname, 'dist/popup.js'),
     },
+    {
+      ...commonConfig,
+      format: 'iife', // 페이지 컨텍스트에서 실행되므로 IIFE
+      entryPoints: [join(__dirname, 'src/injected.ts')],
+      outfile: join(__dirname, 'dist/injected.js'),
+    },
   ];
 
   if (isWatch) {

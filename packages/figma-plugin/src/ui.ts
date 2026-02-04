@@ -5,10 +5,13 @@ const statusDot = document.getElementById('statusDot') as HTMLDivElement;
 const statusDotMini = document.getElementById('statusDotMini') as HTMLDivElement;
 const statusText = document.getElementById('statusText') as HTMLSpanElement;
 const tabs = document.querySelectorAll('.tab');
-const pasteSection = document.getElementById('pasteSection') as HTMLDivElement;
+const pasteJsonSection = document.getElementById('pasteJsonSection') as HTMLDivElement;
+const pasteHtmlSection = document.getElementById('pasteHtmlSection') as HTMLDivElement;
 const serverSection = document.getElementById('serverSection') as HTMLDivElement;
 const jsonInput = document.getElementById('jsonInput') as HTMLTextAreaElement;
-const importBtn = document.getElementById('importBtn') as HTMLButtonElement;
+const htmlInput = document.getElementById('htmlInput') as HTMLTextAreaElement;
+const importJsonBtn = document.getElementById('importJsonBtn') as HTMLButtonElement;
+const importHtmlBtn = document.getElementById('importHtmlBtn') as HTMLButtonElement;
 const message = document.getElementById('message') as HTMLDivElement;
 const serverConnected = document.getElementById('serverConnected') as HTMLDivElement;
 const serverDisconnected = document.getElementById('serverDisconnected') as HTMLDivElement;
@@ -127,7 +130,8 @@ tabs.forEach((tab) => {
     tabs.forEach((t) => t.classList.remove('active'));
     tab.classList.add('active');
 
-    pasteSection.classList.toggle('active', tabName === 'paste');
+    pasteJsonSection.classList.toggle('active', tabName === 'paste-json');
+    pasteHtmlSection.classList.toggle('active', tabName === 'paste-html');
     serverSection.classList.toggle('active', tabName === 'server');
   });
 });
@@ -135,21 +139,21 @@ tabs.forEach((tab) => {
 // JSON input validation
 jsonInput.addEventListener('input', () => {
   const value = jsonInput.value.trim();
-  importBtn.disabled = !value;
+  importJsonBtn.disabled = !value;
 
   // Try to parse and validate
   if (value) {
     try {
       const data = JSON.parse(value);
       if (data.tagName && data.styles) {
-        importBtn.disabled = false;
+        importJsonBtn.disabled = false;
         hideMessage();
       } else {
-        importBtn.disabled = true;
+        importJsonBtn.disabled = true;
         showMessage('유효한 ExtractedNode JSON이 아닙니다.', 'error');
       }
     } catch {
-      importBtn.disabled = true;
+      importJsonBtn.disabled = true;
       if (value.length > 10) {
         showMessage('JSON 파싱 오류', 'error');
       }
@@ -157,8 +161,27 @@ jsonInput.addEventListener('input', () => {
   }
 });
 
-// Import button
-importBtn.addEventListener('click', () => {
+// HTML input validation
+htmlInput.addEventListener('input', () => {
+  const value = htmlInput.value.trim();
+  importHtmlBtn.disabled = !value;
+
+  // Basic HTML validation - check for opening tag
+  if (value) {
+    if (value.startsWith('<') && value.includes('>')) {
+      importHtmlBtn.disabled = false;
+      hideMessage();
+    } else {
+      importHtmlBtn.disabled = true;
+      if (value.length > 10) {
+        showMessage('유효한 HTML이 아닙니다.', 'error');
+      }
+    }
+  }
+});
+
+// JSON Import button
+importJsonBtn.addEventListener('click', () => {
   const value = jsonInput.value.trim();
   if (!value) return;
 
@@ -168,6 +191,14 @@ importBtn.addEventListener('click', () => {
   } catch (error) {
     showMessage('JSON 파싱 오류', 'error');
   }
+});
+
+// HTML Import button
+importHtmlBtn.addEventListener('click', () => {
+  const value = htmlInput.value.trim();
+  if (!value) return;
+
+  sendToPlugin('create-from-html', value);
 });
 
 // Send message to plugin main code
@@ -343,8 +374,8 @@ function connectWebSocket() {
       client: 'figma-plugin',
       ...(fileInfo || {}),
     };
-    ws?.send(JSON.stringify(registerMsg));
-    log(`등록 완료 (file: ${fileInfo?.fileName || 'unknown'})`, 'info');
+    if (ws) ws.send(JSON.stringify(registerMsg));
+    log(`등록 완료 (file: ${fileInfo && fileInfo.fileName ? fileInfo.fileName : 'unknown'})`, 'info');
   };
 
   ws.onmessage = (event) => {
@@ -385,7 +416,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       }
 
       // Send result back to server
-      ws?.send(
+      if (ws) ws.send(
         JSON.stringify({
           type: 'RESULT',
           commandId: msg.commandId,
@@ -432,7 +463,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       // 모든 청크가 도착했는지 확인
       if (chunkBuffer.receivedChunks.size !== chunkBuffer.totalChunks) {
         log(`청크 누락: ${chunkBuffer.receivedChunks.size}/${chunkBuffer.totalChunks}`, 'error');
-        ws?.send(JSON.stringify({
+        if (ws) ws.send(JSON.stringify({
           type: 'RESULT',
           commandId: msg.commandId,
           success: false,
@@ -461,7 +492,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
           sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position);
         }
 
-        ws?.send(JSON.stringify({
+        if (ws) ws.send(JSON.stringify({
           type: 'RESULT',
           commandId: msg.commandId,
           success: true,
@@ -469,7 +500,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
         log(`프레임 생성 완료 (청크): ${chunkBuffer.name || 'Unnamed'}`, 'success');
       } catch (err) {
         log(`청크 파싱 오류: ${err}`, 'error');
-        ws?.send(JSON.stringify({
+        if (ws) ws.send(JSON.stringify({
           type: 'RESULT',
           commandId: msg.commandId,
           success: false,
@@ -493,7 +524,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       break;
 
     case 'PING':
-      ws?.send(JSON.stringify({ type: 'PONG' }));
+      if (ws) ws.send(JSON.stringify({ type: 'PONG' }));
       break;
 
     case 'IMPORTED':
