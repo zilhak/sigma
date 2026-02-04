@@ -255,7 +255,7 @@ window.onmessage = (event) => {
           fileName: fileInfo.fileName,
           pageId: fileInfo.pageId,
           pageName: fileInfo.pageName,
-          pages: fileInfo.pages,  // 전체 페이지 목록 전송
+          pages: fileInfo.pages.map(p => ({ pageId: p.id, pageName: p.name })),  // 서버 형식으로 변환
         }));
         log('서버에 파일 정보 전송', 'success');
       }
@@ -480,7 +480,7 @@ function connectWebSocket() {
       registerMsg.fileName = fileInfo.fileName;
       registerMsg.pageId = fileInfo.pageId;
       registerMsg.pageName = fileInfo.pageName;
-      registerMsg.pages = fileInfo.pages;  // 전체 페이지 목록
+      registerMsg.pages = fileInfo.pages.map(p => ({ pageId: p.id, pageName: p.name }));  // 서버 형식으로 변환
     }
 
     if (ws) ws.send(JSON.stringify(registerMsg));
