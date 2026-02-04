@@ -49,7 +49,9 @@ function setupCommandListeners() {
 
     if (element) {
       const extracted = extractElement(element);
-      window.dispatchEvent(new CustomEvent('sigma:extracted', { detail: extracted }));
+      if (extracted) {
+        window.dispatchEvent(new CustomEvent('sigma:extracted', { detail: extracted }));
+      }
     }
   }) as EventListener);
 
@@ -77,7 +79,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const element = document.querySelector(message.selector) as HTMLElement;
     if (element) {
       const extracted = extractElement(element);
-      sendResponse({ success: true, data: extracted });
+      if (extracted) {
+        sendResponse({ success: true, data: extracted });
+      } else {
+        sendResponse({ success: false, error: 'Element is not visible' });
+      }
     } else {
       sendResponse({ success: false, error: 'Element not found' });
     }
@@ -189,14 +195,22 @@ function onClick(e: MouseEvent) {
 
   const extracted = extractElement(target);
 
-  // 추출 완료 메시지 전송 (Extension 내부용)
-  chrome.runtime.sendMessage({
-    type: 'ELEMENT_EXTRACTED',
-    data: extracted,
-  });
+  if (extracted) {
+    // 추출 완료 메시지 전송 (Extension 내부용)
+    chrome.runtime.sendMessage({
+      type: 'ELEMENT_EXTRACTED',
+      data: extracted,
+    });
 
-  // 커스텀 이벤트 발송 (Playwright 자동화용)
-  window.dispatchEvent(new CustomEvent('sigma:extracted', { detail: extracted }));
+    // 커스텀 이벤트 발송 (Playwright 자동화용)
+    window.dispatchEvent(new CustomEvent('sigma:extracted', { detail: extracted }));
+  } else {
+    // 보이지 않는 요소 클릭 시
+    chrome.runtime.sendMessage({
+      type: 'EXTRACTION_FAILED',
+      error: 'Element is not visible',
+    });
+  }
 
   stopSelectMode();
 }
@@ -212,16 +226,49 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 /**
+ * 요소가 시각적으로 보이는지 확인
+ */
+function isElementVisible(element: HTMLElement | SVGElement): boolean {
+  const style = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+
+  // display: none
+  if (style.display === 'none') return false;
+
+  // visibility: hidden
+  if (style.visibility === 'hidden') return false;
+
+  // opacity: 0
+  if (parseFloat(style.opacity) === 0) return false;
+
+  // 크기가 0인 요소 (단, body나 html은 예외)
+  const tagName = element.tagName.toLowerCase();
+  if (tagName !== 'body' && tagName !== 'html') {
+    if (rect.width === 0 || rect.height === 0) return false;
+  }
+
+  return true;
+}
+
+/**
  * DOM 요소를 ExtractedNode로 변환
  */
-function extractElement(element: HTMLElement | SVGElement): ExtractedNode {
+function extractElement(element: HTMLElement | SVGElement): ExtractedNode | null {
   const rect = element.getBoundingClientRect();
   const computedStyle = window.getComputedStyle(element);
   const tagName = element.tagName.toLowerCase();
 
-  // SVG 요소인 경우: outerHTML을 캡처하고 children은 비움
-  // Figma에서 createNodeFromSvg()로 직접 변환하기 위함
+  // 루트 요소(body)가 아닌 경우 visibility 체크
+  if (tagName !== 'body' && !isElementVisible(element)) {
+    return null;
+  }
+
+  // SVG 요소인 경우: computed styles를 적용한 outerHTML을 캡처
+  // CSS pseudo-class로 변경된 시각적 상태를 정확히 캡처하기 위함
   if (tagName === 'svg' || element instanceof SVGSVGElement) {
+    // computed styles가 적용된 SVG 문자열 생성
+    const svgWithStyles = serializeSvgWithComputedStyles(element as SVGSVGElement);
+
     return {
       id: generateId(),
       tagName: 'svg',
@@ -236,9 +283,26 @@ function extractElement(element: HTMLElement | SVGElement): ExtractedNode {
         height: rect.height,
       },
       children: [],
-      svgString: element.outerHTML,
+      svgString: svgWithStyles,
     };
   }
+
+  // DOM 자식 요소 추출 (보이는 요소만)
+  const domChildren = Array.from(element.children)
+    .filter((child): child is HTMLElement | SVGSVGElement =>
+      child instanceof HTMLElement || child instanceof SVGSVGElement)
+    .map((child) => extractElement(child))
+    .filter((child): child is ExtractedNode => child !== null);
+
+  // Pseudo-elements 추출
+  const pseudoElements = extractPseudoElements(element as HTMLElement);
+
+  // ::before는 맨 앞에, ::after는 맨 뒤에 배치
+  const beforeElements = pseudoElements.filter(p => p.tagName === '::before');
+  const afterElements = pseudoElements.filter(p => p.tagName === '::after');
+
+  // children 조합: [::before, ...domChildren, ::after]
+  const allChildren = [...beforeElements, ...domChildren, ...afterElements];
 
   return {
     id: generateId(),
@@ -253,10 +317,7 @@ function extractElement(element: HTMLElement | SVGElement): ExtractedNode {
       width: rect.width,
       height: rect.height,
     },
-    children: Array.from(element.children)
-      .filter((child): child is HTMLElement | SVGSVGElement =>
-        child instanceof HTMLElement || child instanceof SVGSVGElement)
-      .map((child) => extractElement(child)),
+    children: allChildren,
   };
 }
 
@@ -264,10 +325,11 @@ function extractElement(element: HTMLElement | SVGElement): ExtractedNode {
  * className 추출 (SVG와 HTML 모두 지원)
  */
 function getClassName(element: Element): string {
-  if (element.className instanceof SVGAnimatedString) {
-    return element.className.baseVal || '';
+  const cn = element.className;
+  if (typeof cn === 'object' && cn instanceof SVGAnimatedString) {
+    return cn.baseVal || '';
   }
-  return (element.className as string) || '';
+  return (cn as string) || '';
 }
 
 /**
@@ -395,4 +457,308 @@ function parseAutoSize(value: string): number | 'auto' {
  */
 function generateId(): string {
   return `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// ============================================================
+// SVG Computed Styles 적용 (시각적 상태 캡처)
+// ============================================================
+
+/**
+ * SVG 요소의 computed styles를 인라인 속성으로 적용하여 직렬화
+ * CSS pseudo-class (:checked, :hover 등)로 변경된 시각적 상태를 캡처
+ */
+function serializeSvgWithComputedStyles(svg: SVGSVGElement): string {
+  // SVG를 깊은 복제
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+
+  // 원본과 클론의 모든 요소를 순회
+  const originalElements = svg.querySelectorAll('*');
+  const cloneElements = clone.querySelectorAll('*');
+
+  // 루트 SVG 요소에도 스타일 적용
+  applySvgComputedStyles(svg, clone);
+
+  // 모든 자식 요소에 스타일 적용
+  cloneElements.forEach((cloneEl, index) => {
+    const originalEl = originalElements[index];
+    if (originalEl && cloneEl) {
+      applySvgComputedStyles(originalEl as SVGElement, cloneEl as SVGElement);
+    }
+  });
+
+  return clone.outerHTML;
+}
+
+/**
+ * 개별 SVG 요소에 computed styles 적용
+ */
+function applySvgComputedStyles(original: SVGElement, clone: SVGElement): void {
+  const computed = window.getComputedStyle(original);
+
+  // 색상 관련 속성
+  const fill = computed.fill;
+  if (fill && fill !== 'none' && fill !== '') {
+    // CSS 변수가 resolve된 실제 값으로 설정
+    clone.setAttribute('fill', resolveColorValue(fill));
+  }
+
+  const stroke = computed.stroke;
+  if (stroke && stroke !== 'none' && stroke !== '') {
+    clone.setAttribute('stroke', resolveColorValue(stroke));
+  }
+
+  const strokeWidth = computed.strokeWidth;
+  if (strokeWidth && strokeWidth !== '0' && strokeWidth !== '0px') {
+    clone.setAttribute('stroke-width', strokeWidth);
+  }
+
+  // 불투명도
+  const opacity = computed.opacity;
+  if (opacity && opacity !== '1') {
+    clone.setAttribute('opacity', opacity);
+  }
+
+  const fillOpacity = computed.fillOpacity;
+  if (fillOpacity && fillOpacity !== '1') {
+    clone.setAttribute('fill-opacity', fillOpacity);
+  }
+
+  const strokeOpacity = computed.strokeOpacity;
+  if (strokeOpacity && strokeOpacity !== '1') {
+    clone.setAttribute('stroke-opacity', strokeOpacity);
+  }
+
+  // 기하학적 속성 (circle, ellipse 등)
+  if (original instanceof SVGCircleElement || original.tagName.toLowerCase() === 'circle') {
+    const cx = computed.cx;
+    const cy = computed.cy;
+    const r = computed.r;
+    if (cx) clone.setAttribute('cx', parseComputedLength(cx));
+    if (cy) clone.setAttribute('cy', parseComputedLength(cy));
+    if (r) clone.setAttribute('r', parseComputedLength(r));
+  }
+
+  if (original instanceof SVGEllipseElement || original.tagName.toLowerCase() === 'ellipse') {
+    const cx = computed.cx;
+    const cy = computed.cy;
+    const rx = computed.rx;
+    const ry = computed.ry;
+    if (cx) clone.setAttribute('cx', parseComputedLength(cx));
+    if (cy) clone.setAttribute('cy', parseComputedLength(cy));
+    if (rx) clone.setAttribute('rx', parseComputedLength(rx));
+    if (ry) clone.setAttribute('ry', parseComputedLength(ry));
+  }
+
+  if (original instanceof SVGRectElement || original.tagName.toLowerCase() === 'rect') {
+    const x = computed.x;
+    const y = computed.y;
+    const width = computed.width;
+    const height = computed.height;
+    const rx = computed.rx;
+    const ry = computed.ry;
+    if (x) clone.setAttribute('x', parseComputedLength(x));
+    if (y) clone.setAttribute('y', parseComputedLength(y));
+    if (width && width !== 'auto') clone.setAttribute('width', parseComputedLength(width));
+    if (height && height !== 'auto') clone.setAttribute('height', parseComputedLength(height));
+    if (rx) clone.setAttribute('rx', parseComputedLength(rx));
+    if (ry) clone.setAttribute('ry', parseComputedLength(ry));
+  }
+
+  // transform 속성
+  const transform = computed.transform;
+  if (transform && transform !== 'none') {
+    // matrix(...) 형태로 반환되므로 그대로 적용
+    clone.setAttribute('transform', transform);
+  }
+
+  // visibility
+  const visibility = computed.visibility;
+  if (visibility === 'hidden') {
+    clone.setAttribute('visibility', 'hidden');
+  }
+
+  // display (none인 경우 제거 대신 visibility로 처리)
+  const display = computed.display;
+  if (display === 'none') {
+    clone.setAttribute('visibility', 'hidden');
+  }
+}
+
+/**
+ * 색상 값에서 CSS 변수를 resolve하고 정규화
+ */
+function resolveColorValue(color: string): string {
+  // computed style은 이미 CSS 변수가 resolve된 상태
+  // rgb(), rgba(), #hex 등의 형태로 반환됨
+  return color;
+}
+
+/**
+ * computed length 값을 SVG 속성 값으로 변환
+ * "10px" -> "10"
+ */
+function parseComputedLength(value: string): string {
+  if (!value || value === 'auto' || value === 'none') {
+    return '0';
+  }
+  const num = parseFloat(value);
+  if (isNaN(num)) {
+    return '0';
+  }
+  return String(num);
+}
+
+// ============================================================
+// Pseudo-elements (::before, ::after) 추출
+// ============================================================
+
+/**
+ * 요소의 ::before, ::after pseudo-elements를 추출하여 ExtractedNode 배열로 반환
+ */
+function extractPseudoElements(element: HTMLElement): ExtractedNode[] {
+  const pseudoNodes: ExtractedNode[] = [];
+
+  // ::before 추출
+  const beforeNode = extractPseudoElement(element, '::before');
+  if (beforeNode) {
+    pseudoNodes.push(beforeNode);
+  }
+
+  // ::after 추출
+  const afterNode = extractPseudoElement(element, '::after');
+  if (afterNode) {
+    pseudoNodes.push(afterNode);
+  }
+
+  return pseudoNodes;
+}
+
+/**
+ * 특정 pseudo-element 추출
+ */
+function extractPseudoElement(
+  element: HTMLElement,
+  pseudo: '::before' | '::after'
+): ExtractedNode | null {
+  const pseudoStyle = window.getComputedStyle(element, pseudo);
+
+  // content가 없거나 'none'이면 pseudo-element가 없음
+  const content = pseudoStyle.content;
+  if (!content || content === 'none' || content === 'normal' || content === '""' || content === "''") {
+    return null;
+  }
+
+  // display: none이면 보이지 않음
+  if (pseudoStyle.display === 'none') {
+    return null;
+  }
+
+  // visibility: hidden이면 공간은 차지하지만 보이지 않음 (캡처는 함)
+
+  // 부모 요소의 위치를 기준으로 pseudo-element 위치 추정
+  const parentRect = element.getBoundingClientRect();
+
+  // pseudo-element의 크기 계산
+  const width = parseSize(pseudoStyle.width);
+  const height = parseSize(pseudoStyle.height);
+
+  // content에서 텍스트 추출 (따옴표 제거)
+  let textContent = '';
+  if (content.startsWith('"') && content.endsWith('"')) {
+    textContent = content.slice(1, -1);
+  } else if (content.startsWith("'") && content.endsWith("'")) {
+    textContent = content.slice(1, -1);
+  }
+
+  return {
+    id: generateId(),
+    tagName: pseudo, // '::before' 또는 '::after'를 태그명으로 사용
+    className: '',
+    textContent: textContent,
+    attributes: {},
+    styles: extractPseudoStyles(pseudoStyle),
+    boundingRect: {
+      x: parentRect.x, // 정확한 위치는 알 수 없으므로 부모 기준
+      y: parentRect.y,
+      width: width || 0,
+      height: height || 0,
+    },
+    children: [],
+    isPseudo: true, // pseudo-element 표시
+  };
+}
+
+/**
+ * Pseudo-element의 스타일 추출
+ */
+function extractPseudoStyles(style: CSSStyleDeclaration): ComputedStyles {
+  return {
+    // 레이아웃
+    display: style.display,
+    position: style.position,
+    flexDirection: style.flexDirection,
+    justifyContent: style.justifyContent,
+    alignItems: style.alignItems,
+    flexWrap: style.flexWrap,
+    gap: parseSize(style.gap),
+
+    // 크기
+    width: parseAutoSize(style.width),
+    height: parseAutoSize(style.height),
+    minWidth: parseSize(style.minWidth),
+    minHeight: parseSize(style.minHeight),
+    maxWidth: parseSize(style.maxWidth),
+    maxHeight: parseSize(style.maxHeight),
+
+    // 패딩
+    paddingTop: parseSize(style.paddingTop),
+    paddingRight: parseSize(style.paddingRight),
+    paddingBottom: parseSize(style.paddingBottom),
+    paddingLeft: parseSize(style.paddingLeft),
+
+    // 마진
+    marginTop: parseSize(style.marginTop),
+    marginRight: parseSize(style.marginRight),
+    marginBottom: parseSize(style.marginBottom),
+    marginLeft: parseSize(style.marginLeft),
+
+    // 배경
+    backgroundColor: parseColor(style.backgroundColor),
+    backgroundImage: style.backgroundImage !== 'none' ? style.backgroundImage : null,
+
+    // 테두리 두께
+    borderTopWidth: parseSize(style.borderTopWidth),
+    borderRightWidth: parseSize(style.borderRightWidth),
+    borderBottomWidth: parseSize(style.borderBottomWidth),
+    borderLeftWidth: parseSize(style.borderLeftWidth),
+
+    // 테두리 색상
+    borderTopColor: parseColor(style.borderTopColor),
+    borderRightColor: parseColor(style.borderRightColor),
+    borderBottomColor: parseColor(style.borderBottomColor),
+    borderLeftColor: parseColor(style.borderLeftColor),
+
+    // 테두리 라운드
+    borderTopLeftRadius: parseSize(style.borderTopLeftRadius),
+    borderTopRightRadius: parseSize(style.borderTopRightRadius),
+    borderBottomRightRadius: parseSize(style.borderBottomRightRadius),
+    borderBottomLeftRadius: parseSize(style.borderBottomLeftRadius),
+
+    // 텍스트
+    color: parseColor(style.color),
+    fontSize: parseSize(style.fontSize),
+    fontFamily: style.fontFamily,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+    textAlign: style.textAlign,
+    textDecoration: style.textDecoration,
+    lineHeight: parseSize(style.lineHeight),
+    letterSpacing: parseSize(style.letterSpacing),
+
+    // 기타
+    opacity: parseFloat(style.opacity),
+    overflow: style.overflow,
+    boxShadow: style.boxShadow,
+    transform: style.transform,
+  };
 }

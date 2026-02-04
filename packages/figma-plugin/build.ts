@@ -2,6 +2,7 @@ import * as esbuild from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { VERSION } from '@sigma/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
@@ -58,6 +59,9 @@ function buildHTML() {
 
   // Read the HTML template
   let html = readFileSync(join(__dirname, 'src/ui.html'), 'utf-8');
+
+  // Inject version into HTML
+  html = html.replace(/>v0\.0\.1<\/span>/g, `>${VERSION}</span>`);
 
   // Inline the JS into the HTML
   html = html.replace(

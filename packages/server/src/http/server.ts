@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import type { ExtractedNode } from '@sigma/shared';
+import { VERSION, type ExtractedNode } from '@sigma/shared';
 import * as storage from '../storage/index.js';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
 
@@ -25,6 +25,14 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
       status: 'ok',
       timestamp: new Date().toISOString(),
       figma: wsServer.getStatus(),
+    });
+  });
+
+  // Version check
+  app.get('/api/version', (c) => {
+    return c.json({
+      version: VERSION,
+      name: 'Sigma Server',
     });
   });
 
@@ -126,6 +134,8 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         id?: string;
         name?: string;
         position?: { x: number; y: number };
+        pluginId?: string;
+        pageId?: string;
       }>();
 
       const format = body.format || 'json';
@@ -133,6 +143,8 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
       let html: string | undefined;
       let name: string | undefined = body.name;
       const position = body.position;
+      const pluginId = body.pluginId;
+      const pageId = body.pageId;
 
       // Load from storage if ID provided
       if (body.id) {
@@ -150,15 +162,28 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         return c.json({ error: format === 'html' ? 'html field is required' : 'Either data or id is required' }, 400);
       }
 
-      // Check Figma connection
-      if (!wsServer.isFigmaConnected()) {
+      // Check Figma connection (specific plugin if pluginId provided)
+      if (pluginId) {
+        const targetPlugin = wsServer.getPluginById(pluginId);
+        if (!targetPlugin) {
+          return c.json({ error: `지정된 플러그인(${pluginId})이 연결되어 있지 않습니다` }, 503);
+        }
+      } else if (!wsServer.isFigmaConnected()) {
         return c.json({ error: 'Figma Plugin이 연결되어 있지 않습니다' }, 503);
       }
 
-      // Send to Figma with optional position
-      await wsServer.createFrame(data, name, position, format, html);
+      // Send to Figma with optional position, pluginId, and pageId
+      await wsServer.createFrame(data, name, position, format, html, pluginId, pageId);
 
-      return c.json({ success: true, message: 'Figma에 프레임이 생성되었습니다', format });
+      return c.json({
+        success: true,
+        message: 'Figma에 프레임이 생성되었습니다',
+        format,
+        target: {
+          pluginId: pluginId || '(default)',
+          pageId: pageId || '(current)',
+        },
+      });
     } catch (error) {
       console.error('[HTTP] Figma import error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -169,15 +194,31 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
   // Get list of frames in Figma
   app.get('/api/figma/frames', async (c) => {
     try {
-      // Check Figma connection
-      if (!wsServer.isFigmaConnected()) {
+      // Get optional query parameters for targeting specific plugin/page
+      const pluginId = c.req.query('pluginId');
+      const pageId = c.req.query('pageId');
+
+      // Check Figma connection (specific plugin if pluginId provided)
+      if (pluginId) {
+        const targetPlugin = wsServer.getPluginById(pluginId);
+        if (!targetPlugin) {
+          return c.json({ error: `지정된 플러그인(${pluginId})이 연결되어 있지 않습니다` }, 503);
+        }
+      } else if (!wsServer.isFigmaConnected()) {
         return c.json({ error: 'Figma Plugin이 연결되어 있지 않습니다' }, 503);
       }
 
-      // Get frames from Figma
-      const frames = await wsServer.getFrames();
+      // Get frames from Figma with optional targeting
+      const frames = await wsServer.getFrames(pluginId, pageId);
 
-      return c.json({ success: true, frames });
+      return c.json({
+        success: true,
+        frames,
+        target: {
+          pluginId: pluginId || '(default)',
+          pageId: pageId || '(current)',
+        },
+      });
     } catch (error) {
       console.error('[HTTP] Figma frames error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';

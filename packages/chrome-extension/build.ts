@@ -1,7 +1,8 @@
 import * as esbuild from 'esbuild';
-import { cpSync, mkdirSync } from 'fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { VERSION } from '@sigma/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
@@ -19,9 +20,13 @@ async function build() {
 
   // Copy static files
   cpSync(join(__dirname, 'src/manifest.json'), join(__dirname, 'dist/manifest.json'));
-  cpSync(join(__dirname, 'src/popup/popup.html'), join(__dirname, 'dist/popup.html'));
   cpSync(join(__dirname, 'src/popup/popup.css'), join(__dirname, 'dist/popup.css'));
   cpSync(join(__dirname, 'src/icons'), join(__dirname, 'dist/icons'), { recursive: true });
+
+  // Process popup.html with version injection
+  let popupHtml = readFileSync(join(__dirname, 'src/popup/popup.html'), 'utf-8');
+  popupHtml = popupHtml.replace(/>v0\.0\.1<\/span>/g, `>${VERSION}</span>`);
+  writeFileSync(join(__dirname, 'dist/popup.html'), popupHtml);
 
   // Build configurations
   const configs: esbuild.BuildOptions[] = [

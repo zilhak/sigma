@@ -31,6 +31,7 @@ let pollingInterval: number | null = null;
 let isConnected = false;
 let isMinimized = false;
 let pendingCommandId: string | null = null;
+let assignedPluginId: string | null = null;  // 서버에서 할당받은 고유 플러그인 ID
 
 // Chunked transfer state
 interface ChunkBuffer {
@@ -40,8 +41,15 @@ interface ChunkBuffer {
   format: 'json' | 'html';
   name?: string;
   position?: { x: number; y: number };
+  pageId?: string;
 }
 let chunkBuffer: ChunkBuffer | null = null;
+// 페이지 정보 타입
+interface PageInfo {
+  id: string;
+  name: string;
+}
+
 let fileInfo: {
   fileKey: string | null;
   fileKeySource: 'api' | 'stored' | 'none';
@@ -49,6 +57,7 @@ let fileInfo: {
   fileName: string;
   pageId: string;
   pageName: string;
+  pages: PageInfo[];  // 전체 페이지 목록
 } | null = null;
 
 // Figma URL에서 fileKey 추출
@@ -202,10 +211,10 @@ importHtmlBtn.addEventListener('click', () => {
 });
 
 // Send message to plugin main code
-function sendToPlugin(type: string, data?: unknown, name?: string, position?: { x: number; y: number }, fileKey?: string, nodeId?: string) {
+function sendToPlugin(type: string, data?: unknown, name?: string, position?: { x: number; y: number }, fileKey?: string, nodeId?: string, pageId?: string) {
   parent.postMessage(
     {
-      pluginMessage: { type, data, name, position, fileKey, nodeId },
+      pluginMessage: { type, data, name, position, fileKey, nodeId, pageId },
     },
     '*'
   );
@@ -231,8 +240,9 @@ window.onmessage = (event) => {
         fileName: msg.fileName,
         pageId: msg.pageId,
         pageName: msg.pageName,
+        pages: msg.pages || [],  // 전체 페이지 목록
       };
-      log(`파일 정보 수신: ${fileInfo.fileName} / ${fileInfo.pageName}`, 'info');
+      log(`파일 정보 수신: ${fileInfo.fileName} / ${fileInfo.pageName} (${fileInfo.pages.length} pages)`, 'info');
 
       // FileKey UI 업데이트
       updateFileKeyUI(fileInfo);
@@ -245,6 +255,7 @@ window.onmessage = (event) => {
           fileName: fileInfo.fileName,
           pageId: fileInfo.pageId,
           pageName: fileInfo.pageName,
+          pages: fileInfo.pages,  // 전체 페이지 목록 전송
         }));
         log('서버에 파일 정보 전송', 'success');
       }
@@ -256,9 +267,25 @@ window.onmessage = (event) => {
         ws.send(JSON.stringify({
           type: 'FRAMES_LIST',
           frames: msg.frames,
+          pageId: msg.pageId,
+          pageName: msg.pageName,
           commandId: pendingCommandId,
         }));
-        log(`프레임 목록 전송: ${msg.frames.length}개`, 'info');
+        log(`프레임 목록 전송: ${msg.frames.length}개 (페이지: ${msg.pageName || 'unknown'})`, 'info');
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'pages-list':
+      // 페이지 목록을 서버에 전달
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'PAGES_LIST',
+          pages: msg.pages,
+          currentPageId: msg.currentPageId,
+          commandId: pendingCommandId,
+        }));
+        log(`페이지 목록 전송: ${msg.pages.length}개`, 'info');
         pendingCommandId = null;
       }
       break;
@@ -285,6 +312,59 @@ window.onmessage = (event) => {
     case 'info':
       log(msg.message, 'info');
       break;
+
+    case 'extract-result':
+      // 추출 결과 처리 (서버 연동 전용)
+      if (msg.success) {
+        log(`추출 완료 (${msg.format})`, 'success');
+      } else {
+        log(`추출 실패: ${msg.error}`, 'error');
+      }
+
+      // 서버로 결과 전송
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'EXTRACT_RESULT',
+          commandId: pendingCommandId,
+          format: msg.format,
+          success: msg.success,
+          data: msg.data,
+          error: msg.error,
+        }));
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'roundtrip-result':
+      // 라운드트립 테스트 결과 처리 (서버 연동 전용)
+      if (msg.success) {
+        if (msg.identical) {
+          log(`라운드트립 테스트 성공 (${msg.format}): 완전 동일`, 'success');
+        } else {
+          const diffCount = msg.differences ? msg.differences.length : 0;
+          log(`라운드트립 테스트 완료 (${msg.format}): ${diffCount}개 차이점`, 'warn');
+        }
+      } else {
+        log(`라운드트립 테스트 실패: ${msg.error}`, 'error');
+      }
+
+      // 서버로 결과 전송
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'ROUNDTRIP_RESULT',
+          commandId: pendingCommandId,
+          format: msg.format,
+          success: msg.success,
+          identical: msg.identical,
+          differences: msg.differences,
+          original: msg.original,
+          extracted: msg.extracted,
+          createdFrameId: msg.createdFrameId,
+          error: msg.error,
+        }));
+        pendingCommandId = null;
+      }
+      break;
   }
 };
 
@@ -308,6 +388,26 @@ function updateStatus(connected: boolean, text: string) {
   statusText.textContent = text;
   serverConnected.style.display = connected ? 'block' : 'none';
   serverDisconnected.style.display = connected ? 'none' : 'block';
+
+  // 연결 해제 시 플러그인 ID 초기화
+  if (!connected) {
+    assignedPluginId = null;
+    updatePluginIdDisplay();
+  }
+}
+
+// Update plugin ID display in UI
+function updatePluginIdDisplay() {
+  const pluginIdElement = document.getElementById('clientId');  // DOM ID는 유지 (HTML 수정 최소화)
+  if (pluginIdElement) {
+    if (assignedPluginId) {
+      pluginIdElement.textContent = assignedPluginId;
+      pluginIdElement.title = `플러그인 ID: ${assignedPluginId}\n클릭하여 복사`;
+    } else {
+      pluginIdElement.textContent = '-';
+      pluginIdElement.title = '';
+    }
+  }
 }
 
 // Start server detection with polling
@@ -368,14 +468,23 @@ function connectWebSocket() {
     updateStatus(true, '서버 연결됨');
     log('서버에 연결되었습니다', 'success');
 
-    // Register as Figma plugin with file info
-    const registerMsg = {
+    // Register as Figma plugin with file info and pages
+    const registerMsg: Record<string, unknown> = {
       type: 'REGISTER',
       client: 'figma-plugin',
-      ...(fileInfo || {}),
     };
+
+    // 파일 정보가 있으면 추가
+    if (fileInfo) {
+      registerMsg.fileKey = fileInfo.fileKey;
+      registerMsg.fileName = fileInfo.fileName;
+      registerMsg.pageId = fileInfo.pageId;
+      registerMsg.pageName = fileInfo.pageName;
+      registerMsg.pages = fileInfo.pages;  // 전체 페이지 목록
+    }
+
     if (ws) ws.send(JSON.stringify(registerMsg));
-    log(`등록 완료 (file: ${fileInfo && fileInfo.fileName ? fileInfo.fileName : 'unknown'})`, 'info');
+    log(`등록 완료 (file: ${fileInfo ? fileInfo.fileName : 'unknown'}, ${fileInfo ? fileInfo.pages.length : 0} pages)`, 'info');
   };
 
   ws.onmessage = (event) => {
@@ -402,17 +511,25 @@ function connectWebSocket() {
 }
 
 // Handle server messages
-function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number }) {
+function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string }) {
   switch (msg.type) {
+    case 'REGISTERED':
+      // 서버에서 할당받은 고유 플러그인 ID 저장
+      assignedPluginId = (msg.pluginId || msg.clientId || null) as string | null;  // pluginId 우선, 하위호환 clientId
+      log(`플러그인 ID 할당됨: ${assignedPluginId}`, 'success');
+      updatePluginIdDisplay();
+      break;
+
     case 'CREATE_FRAME': {
       const format = msg.format || 'json';
-      log(`프레임 생성 요청: ${msg.name || 'Unnamed'} (${format})${msg.position ? ` (${msg.position.x}, ${msg.position.y})` : ''}`, 'info');
+      const pageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
+      log(`프레임 생성 요청: ${msg.name || 'Unnamed'} (${format})${msg.position ? ` (${msg.position.x}, ${msg.position.y})` : ''}${pageInfo}`, 'info');
 
-      // Create frame in Figma with optional position
+      // Create frame in Figma with optional position and pageId
       if (format === 'html') {
-        sendToPlugin('create-from-html', msg.html, msg.name, msg.position);
+        sendToPlugin('create-from-html', msg.html, msg.name, msg.position, undefined, undefined, msg.pageId);
       } else {
-        sendToPlugin('create-from-json', msg.data, msg.name, msg.position);
+        sendToPlugin('create-from-json', msg.data, msg.name, msg.position, undefined, undefined, msg.pageId);
       }
 
       // Send result back to server
@@ -429,7 +546,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
 
     // === Chunked transfer handlers ===
     case 'CHUNK_START':
-      log(`청크 전송 시작: ${msg.totalChunks}개 청크 예정 (${msg.format || 'json'})`, 'info');
+      log(`청크 전송 시작: ${msg.totalChunks}개 청크 예정 (${msg.format || 'json'})${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
       chunkBuffer = {
         commandId: msg.commandId || '',
         totalChunks: msg.totalChunks || 0,
@@ -437,6 +554,7 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
         format: msg.format || 'json',
         name: msg.name,
         position: msg.position,
+        pageId: msg.pageId,
       };
       break;
 
@@ -483,13 +601,13 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       try {
         if (chunkBuffer.format === 'html') {
           // HTML 형식
-          log(`프레임 생성 요청 (청크/HTML): ${chunkBuffer.name || 'Unnamed'}`, 'info');
-          sendToPlugin('create-from-html', assembledData, chunkBuffer.name, chunkBuffer.position);
+          log(`프레임 생성 요청 (청크/HTML): ${chunkBuffer.name || 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`, 'info');
+          sendToPlugin('create-from-html', assembledData, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
         } else {
           // JSON 형식
           const data = JSON.parse(assembledData);
-          log(`프레임 생성 요청 (청크/JSON): ${chunkBuffer.name || 'Unnamed'}`, 'info');
-          sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position);
+          log(`프레임 생성 요청 (청크/JSON): ${chunkBuffer.name || 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`, 'info');
+          sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
         }
 
         if (ws) ws.send(JSON.stringify({
@@ -512,15 +630,21 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       break;
 
     case 'GET_FRAMES':
-      log('프레임 목록 요청', 'info');
+      log(`프레임 목록 요청${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
       pendingCommandId = msg.commandId || null;
-      sendToPlugin('get-frames');
+      sendToPlugin('get-frames', undefined, undefined, undefined, undefined, undefined, msg.pageId);
+      break;
+
+    case 'GET_PAGES':
+      log('페이지 목록 요청', 'info');
+      pendingCommandId = msg.commandId || null;
+      sendToPlugin('get-pages');
       break;
 
     case 'DELETE_FRAME':
-      log(`프레임 삭제 요청: ${msg.nodeId}`, 'info');
+      log(`프레임 삭제 요청: ${msg.nodeId}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
       pendingCommandId = msg.commandId || null;
-      sendToPlugin('delete-frame', undefined, undefined, undefined, undefined, msg.nodeId);
+      sendToPlugin('delete-frame', undefined, undefined, undefined, undefined, msg.nodeId, msg.pageId);
       break;
 
     case 'PING':
@@ -530,6 +654,30 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
     case 'IMPORTED':
       // Data was imported successfully
       showMessage('프레임이 생성되었습니다!', 'success');
+      break;
+
+    case 'EXTRACT_JSON':
+      log('JSON 추출 요청', 'info');
+      pendingCommandId = msg.commandId || null;
+      sendToPlugin('extract-to-json');
+      break;
+
+    case 'EXTRACT_HTML':
+      log('HTML 추출 요청', 'info');
+      pendingCommandId = msg.commandId || null;
+      sendToPlugin('extract-to-html');
+      break;
+
+    case 'TEST_ROUNDTRIP_JSON':
+      log(`JSON 라운드트립 테스트 요청: ${msg.name || 'Unnamed'}`, 'info');
+      pendingCommandId = msg.commandId || null;
+      sendToPlugin('test-roundtrip-json', msg.data, msg.name as string | undefined);
+      break;
+
+    case 'TEST_ROUNDTRIP_HTML':
+      log(`HTML 라운드트립 테스트 요청: ${msg.name || 'Unnamed'}`, 'info');
+      pendingCommandId = msg.commandId || null;
+      sendToPlugin('test-roundtrip-html', msg.data, msg.name as string | undefined);
       break;
   }
 }

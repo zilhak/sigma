@@ -5,18 +5,56 @@ import type { ExtractedNode } from '@sigma/shared';
 const CHUNK_SIZE = 1024 * 1024;
 const CHUNK_THRESHOLD = 1024 * 1024; // 1MB 이상이면 청킹
 
-interface FigmaFileInfo {
-  fileKey: string | null;
-  fileName: string;
+/**
+ * 페이지 정보
+ */
+export interface PageInfo {
   pageId: string;
   pageName: string;
 }
 
-interface Client {
+/**
+ * Figma 파일 정보 (내부용)
+ */
+interface FigmaFileInfo {
+  fileKey: string | null;
+  fileName: string;
+  pages: PageInfo[];          // 전체 페이지 목록
+  currentPageId: string;      // 현재 열린 페이지
+  currentPageName: string;
+}
+
+/**
+ * 플러그인 (내부용)
+ */
+interface Plugin {
+  id: string;  // 고유 플러그인 ID (pluginId)
   ws: WebSocket;
   type: 'figma-plugin' | 'unknown';
   connectedAt: Date;
   fileInfo?: FigmaFileInfo;
+}
+
+/**
+ * 플러그인 정보 (외부 노출용)
+ */
+export interface FigmaPluginInfo {
+  pluginId: string;
+  fileKey: string | null;
+  fileName: string;
+  pages: PageInfo[];
+  currentPageId: string;
+  currentPageName: string;
+  connectedAt: Date;
+}
+
+/**
+ * 플러그인 ID 생성기
+ */
+function generatePluginId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 6);
+  return `figma-${timestamp}-${random}`;
 }
 
 interface PendingCommand {
@@ -28,7 +66,8 @@ interface PendingCommand {
 
 export class FigmaWebSocketServer {
   private wss: WebSocketServer;
-  private clients: Map<WebSocket, Client> = new Map();
+  private plugins: Map<WebSocket, Plugin> = new Map();
+  private pluginsById: Map<string, Plugin> = new Map();  // ID로 플러그인 조회
   private pendingCommands: Map<string, PendingCommand> = new Map();
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -45,21 +84,23 @@ export class FigmaWebSocketServer {
 
     // Start ping interval
     this.pingInterval = setInterval(() => {
-      this.pingClients();
+      this.pingPlugins();
     }, 30000);
 
     console.log(`[WebSocket] Server listening on port ${port}`);
   }
 
   private handleConnection(ws: WebSocket) {
-    const client: Client = {
+    const pluginId = generatePluginId();
+    const plugin: Plugin = {
+      id: pluginId,
       ws,
       type: 'unknown',
       connectedAt: new Date(),
     };
 
-    this.clients.set(ws, client);
-    console.log('[WebSocket] Client connected');
+    this.plugins.set(ws, plugin);
+    console.log(`[WebSocket] Plugin connected (id: ${pluginId})`);
 
     ws.on('message', (data) => {
       try {
@@ -71,52 +112,69 @@ export class FigmaWebSocketServer {
     });
 
     ws.on('close', () => {
-      this.clients.delete(ws);
-      console.log('[WebSocket] Client disconnected');
+      const closingPlugin = this.plugins.get(ws);
+      if (closingPlugin) {
+        this.pluginsById.delete(closingPlugin.id);
+        console.log(`[WebSocket] Plugin disconnected (id: ${closingPlugin.id})`);
+      }
+      this.plugins.delete(ws);
     });
 
     ws.on('error', (error) => {
-      console.error('[WebSocket] Client error:', error);
-      this.clients.delete(ws);
+      const errorPlugin = this.plugins.get(ws);
+      console.error(`[WebSocket] Plugin error (id: ${errorPlugin ? errorPlugin.id : 'unknown'}):`, error);
+      if (errorPlugin) {
+        this.pluginsById.delete(errorPlugin.id);
+      }
+      this.plugins.delete(ws);
     });
   }
 
   private handleMessage(ws: WebSocket, message: { type: string; [key: string]: unknown }) {
-    const client = this.clients.get(ws);
-    if (!client) return;
+    const plugin = this.plugins.get(ws);
+    if (!plugin) return;
 
     switch (message.type) {
       case 'REGISTER':
         if (message.client === 'figma-plugin') {
-          client.type = 'figma-plugin';
+          plugin.type = 'figma-plugin';
+          // pluginsById 맵에 추가
+          this.pluginsById.set(plugin.id, plugin);
           // 파일 정보가 함께 왔으면 저장
           if (message.fileKey !== undefined) {
-            client.fileInfo = {
+            plugin.fileInfo = {
               fileKey: message.fileKey as string | null,
               fileName: message.fileName as string,
-              pageId: message.pageId as string,
-              pageName: message.pageName as string,
+              pages: (message.pages as PageInfo[]) || [],
+              currentPageId: message.pageId as string || message.currentPageId as string,
+              currentPageName: message.pageName as string || message.currentPageName as string,
             };
-            console.log(`[WebSocket] Figma Plugin registered (file: ${client.fileInfo.fileName}, page: ${client.fileInfo.pageName})`);
+            console.log(`[WebSocket] Figma Plugin registered (id: ${plugin.id}, file: ${plugin.fileInfo.fileName}, page: ${plugin.fileInfo.currentPageName})`);
           } else {
-            console.log('[WebSocket] Figma Plugin registered');
+            console.log(`[WebSocket] Figma Plugin registered (id: ${plugin.id})`);
           }
+          // 플러그인에게 할당된 ID 알림
+          ws.send(JSON.stringify({
+            type: 'REGISTERED',
+            pluginId: plugin.id,
+          }));
         }
         break;
 
       case 'FILE_INFO':
-        // 파일 정보 업데이트
-        client.fileInfo = {
+        // 파일 정보 업데이트 (페이지 목록 포함)
+        plugin.fileInfo = {
           fileKey: message.fileKey as string | null,
           fileName: message.fileName as string,
-          pageId: message.pageId as string,
-          pageName: message.pageName as string,
+          pages: (message.pages as PageInfo[]) || [],
+          currentPageId: message.pageId as string || message.currentPageId as string,
+          currentPageName: message.pageName as string || message.currentPageName as string,
         };
-        console.log(`[WebSocket] File info updated (file: ${client.fileInfo.fileName}, page: ${client.fileInfo.pageName})`);
+        console.log(`[WebSocket] File info updated (id: ${plugin.id}, file: ${plugin.fileInfo.fileName}, pages: ${plugin.fileInfo.pages.length})`);
         break;
 
       case 'PONG':
-        // Client is alive
+        // Plugin is alive
         break;
 
       case 'RESULT':
@@ -163,8 +221,8 @@ export class FigmaWebSocketServer {
     }
   }
 
-  private pingClients() {
-    for (const [ws, client] of this.clients) {
+  private pingPlugins() {
+    for (const [ws] of this.plugins) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'PING' }));
       }
@@ -173,36 +231,111 @@ export class FigmaWebSocketServer {
 
   // Check if Figma plugin is connected
   isFigmaConnected(): boolean {
-    for (const client of this.clients.values()) {
-      if (client.type === 'figma-plugin' && client.ws.readyState === WebSocket.OPEN) {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN) {
         return true;
       }
     }
     return false;
   }
 
-  // Get connected Figma plugins
-  getFigmaClients(): WebSocket[] {
-    const figmaClients: WebSocket[] = [];
-    for (const [ws, client] of this.clients) {
-      if (client.type === 'figma-plugin' && ws.readyState === WebSocket.OPEN) {
-        figmaClients.push(ws);
+  // Get connected Figma plugins (WebSocket array - 내부용)
+  getFigmaPluginSockets(): WebSocket[] {
+    const sockets: WebSocket[] = [];
+    for (const [ws, plugin] of this.plugins) {
+      if (plugin.type === 'figma-plugin' && ws.readyState === WebSocket.OPEN) {
+        sockets.push(ws);
       }
     }
-    return figmaClients;
+    return sockets;
+  }
+
+  // Get plugin by ID
+  getPluginById(pluginId: string): Plugin | undefined {
+    return this.pluginsById.get(pluginId);
+  }
+
+  // Get connected Figma plugins info (외부 노출용)
+  getPluginsInfo(): FigmaPluginInfo[] {
+    const plugins: FigmaPluginInfo[] = [];
+    for (const plugin of this.pluginsById.values()) {
+      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN) {
+        plugins.push({
+          pluginId: plugin.id,
+          fileKey: plugin.fileInfo?.fileKey ?? null,
+          fileName: plugin.fileInfo?.fileName ?? 'Unknown',
+          pages: plugin.fileInfo?.pages ?? [],
+          currentPageId: plugin.fileInfo?.currentPageId ?? '',
+          currentPageName: plugin.fileInfo?.currentPageName ?? 'Unknown',
+          connectedAt: plugin.connectedAt,
+        });
+      }
+    }
+    return plugins;
+  }
+
+  // Get first connected Figma plugin ID (기본 타겟용)
+  getDefaultPluginId(): string | null {
+    for (const plugin of this.pluginsById.values()) {
+      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN) {
+        return plugin.id;
+      }
+    }
+    return null;
+  }
+
+  // Resolve target plugin - ID가 주어지면 해당 플러그인, 아니면 첫 번째 플러그인
+  private resolveTargetPlugin(pluginId?: string): Plugin | null {
+    if (pluginId) {
+      const plugin = this.pluginsById.get(pluginId);
+      if (plugin && plugin.ws.readyState === WebSocket.OPEN) {
+        return plugin;
+      }
+      return null;  // 지정된 ID가 없거나 연결 끊김
+    }
+    // pluginId 미지정 시 첫 번째 연결된 플러그인
+    for (const plugin of this.pluginsById.values()) {
+      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN) {
+        return plugin;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 특정 플러그인의 페이지 정보 조회
+   */
+  getPluginPageInfo(pluginId: string, pageId: string): { fileName: string; pageName: string } | null {
+    const plugin = this.pluginsById.get(pluginId);
+    if (!plugin || !plugin.fileInfo) return null;
+
+    const page = plugin.fileInfo.pages.find(p => p.pageId === pageId);
+    if (!page) return null;
+
+    return {
+      fileName: plugin.fileInfo.fileName,
+      pageName: page.pageName,
+    };
   }
 
   // Send command to create frame in Figma
   // format: 'json' (default) | 'html'
+  // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
+  // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
   async createFrame(
     data: ExtractedNode | null,
     name?: string,
     position?: { x: number; y: number },
     format: 'json' | 'html' = 'json',
-    html?: string
+    html?: string,
+    pluginId?: string,
+    pageId?: string
   ): Promise<void> {
-    const figmaClients = this.getFigmaClients();
-    if (figmaClients.length === 0) {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
       throw new Error('Figma Plugin이 연결되어 있지 않습니다');
     }
 
@@ -216,8 +349,8 @@ export class FigmaWebSocketServer {
 
     // 1MB 초과 시 청킹 사용
     if (dataSize > CHUNK_THRESHOLD) {
-      console.log(`[WebSocket] Large data detected (${(dataSize / 1024 / 1024).toFixed(2)}MB), using chunked transfer`);
-      return this.createFrameChunked(figmaClients[0], payload, name, position, format);
+      console.log(`[WebSocket] Large data detected (${(dataSize / 1024 / 1024).toFixed(2)}MB), using chunked transfer to ${targetPlugin.id}`);
+      return this.createFrameChunked(targetPlugin.ws, payload, name, position, format, pageId);
     }
 
     // 1MB 이하: 기존 방식
@@ -244,20 +377,22 @@ export class FigmaWebSocketServer {
         html: format === 'html' ? html : undefined,
         name,
         position,
+        pageId,  // 대상 페이지 (undefined면 현재 페이지)
       });
 
-      // Send to first connected Figma plugin
-      figmaClients[0].send(message);
+      console.log(`[WebSocket] Sending CREATE_FRAME to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
+      targetPlugin.ws.send(message);
     });
   }
 
   // Chunked transfer for large data (>1MB)
   private async createFrameChunked(
-    client: WebSocket,
+    ws: WebSocket,
     payload: string,
     name?: string,
     position?: { x: number; y: number },
-    format: 'json' | 'html' = 'json'
+    format: 'json' | 'html' = 'json',
+    pageId?: string
   ): Promise<void> {
     const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const totalChunks = Math.ceil(payload.length / CHUNK_SIZE);
@@ -279,13 +414,14 @@ export class FigmaWebSocketServer {
       });
 
       // 1. CHUNK_START 전송
-      client.send(JSON.stringify({
+      ws.send(JSON.stringify({
         type: 'CHUNK_START',
         commandId,
         totalChunks,
         format,
         name,
         position,
+        pageId,
       }));
 
       // 2. CHUNK 전송
@@ -294,7 +430,7 @@ export class FigmaWebSocketServer {
         const end = Math.min(start + CHUNK_SIZE, payload.length);
         const chunkData = payload.slice(start, end);
 
-        client.send(JSON.stringify({
+        ws.send(JSON.stringify({
           type: 'CHUNK',
           commandId,
           index: i,
@@ -303,7 +439,7 @@ export class FigmaWebSocketServer {
       }
 
       // 3. CHUNK_END 전송
-      client.send(JSON.stringify({
+      ws.send(JSON.stringify({
         type: 'CHUNK_END',
         commandId,
       }));
@@ -313,9 +449,14 @@ export class FigmaWebSocketServer {
   }
 
   // Get all frames from Figma
-  async getFrames(): Promise<Array<{ id: string; name: string; x: number; y: number; width: number; height: number }>> {
-    const figmaClients = this.getFigmaClients();
-    if (figmaClients.length === 0) {
+  // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
+  // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
+  async getFrames(pluginId?: string, pageId?: string): Promise<Array<{ id: string; name: string; x: number; y: number; width: number; height: number }>> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
       throw new Error('Figma Plugin이 연결되어 있지 않습니다');
     }
 
@@ -337,16 +478,23 @@ export class FigmaWebSocketServer {
       const message = JSON.stringify({
         type: 'GET_FRAMES',
         commandId,
+        pageId,  // 대상 페이지 (undefined면 현재 페이지)
       });
 
-      figmaClients[0].send(message);
+      console.log(`[WebSocket] Sending GET_FRAMES to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
+      targetPlugin.ws.send(message);
     });
   }
 
   // Delete a frame in Figma
-  async deleteFrame(nodeId: string): Promise<{ deleted: boolean; name?: string }> {
-    const figmaClients = this.getFigmaClients();
-    if (figmaClients.length === 0) {
+  // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
+  // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
+  async deleteFrame(nodeId: string, pluginId?: string, pageId?: string): Promise<{ deleted: boolean; name?: string }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
       throw new Error('Figma Plugin이 연결되어 있지 않습니다');
     }
 
@@ -369,16 +517,18 @@ export class FigmaWebSocketServer {
         type: 'DELETE_FRAME',
         commandId,
         nodeId,
+        pageId,  // 대상 페이지 (undefined면 현재 페이지)
       });
 
-      figmaClients[0].send(message);
+      console.log(`[WebSocket] Sending DELETE_FRAME to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
+      targetPlugin.ws.send(message);
     });
   }
 
-  // Broadcast to all Figma clients
+  // Broadcast to all Figma plugins
   broadcastToFigma(message: object) {
     const jsonMessage = JSON.stringify(message);
-    for (const ws of this.getFigmaClients()) {
+    for (const ws of this.getFigmaPluginSockets()) {
       ws.send(jsonMessage);
     }
   }
@@ -389,18 +539,18 @@ export class FigmaWebSocketServer {
       clearInterval(this.pingInterval);
     }
 
-    for (const ws of this.clients.keys()) {
+    for (const ws of this.plugins.keys()) {
       ws.close();
     }
 
     this.wss.close();
   }
 
-  // Get connected Figma file info
+  // Get connected Figma file info (첫 번째 플러그인)
   getFigmaFileInfo(): FigmaFileInfo | null {
-    for (const client of this.clients.values()) {
-      if (client.type === 'figma-plugin' && client.ws.readyState === WebSocket.OPEN && client.fileInfo) {
-        return client.fileInfo;
+    for (const plugin of this.plugins.values()) {
+      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN && plugin.fileInfo) {
+        return plugin.fileInfo;
       }
     }
     return null;
@@ -408,12 +558,12 @@ export class FigmaWebSocketServer {
 
   // Get status
   getStatus() {
-    const fileInfo = this.getFigmaFileInfo();
+    const plugins = this.getPluginsInfo();
     return {
-      totalClients: this.clients.size,
+      totalPlugins: this.plugins.size,
       figmaConnected: this.isFigmaConnected(),
-      figmaClients: this.getFigmaClients().length,
-      figmaFileInfo: fileInfo,
+      figmaPluginsCount: plugins.length,
+      figmaPlugins: plugins,  // 전체 플러그인 목록 (ID, fileKey, fileName, pages 등)
     };
   }
 }

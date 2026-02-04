@@ -30,6 +30,15 @@
     .title {
       font-size: 14px;
       font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .version {
+      font-size: 10px;
+      font-weight: 400;
+      color: #999;
     }
 
     .status {
@@ -413,7 +422,7 @@
   <!-- Full View -->
   <div class="full-view" id="fullView">
     <div class="header">
-      <div class="title">Sigma</div>
+      <div class="title">Sigma <span class="version" id="versionText">v0.0.1</span></div>
       <div class="header-actions">
         <div class="status">
           <div class="status-dot" id="statusDot"></div>
@@ -424,9 +433,9 @@
     </div>
 
     <div class="tabs">
-    <div class="tab active" data-tab="paste-json">JSON 붙여넣기</div>
-    <div class="tab" data-tab="paste-html">HTML 붙여넣기</div>
-    <div class="tab" data-tab="server">서버 연동</div>
+    <div class="tab active" data-tab="paste-json">JSON</div>
+    <div class="tab" data-tab="paste-html">HTML</div>
+    <div class="tab" data-tab="server">서버</div>
   </div>
 
   <div id="pasteJsonSection" class="section active">
@@ -446,6 +455,10 @@
   <div id="serverSection" class="section">
     <div class="server-info">
       서버 URL: <strong>http://localhost:19832</strong>
+    </div>
+
+    <div class="server-info" style="margin-top: 8px;">
+      클라이언트 ID: <strong id="clientId" style="cursor: pointer; user-select: all;">-</strong>
     </div>
 
     <div class="filekey-section">

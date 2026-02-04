@@ -6,32 +6,37 @@
 
 ### 1. ES 버전 호환성 (CRITICAL)
 
-**Figma 플러그인 런타임은 ES2020+ 문법을 지원하지 않습니다.**
+**Figma 플러그인 런타임은 `??` (Nullish Coalescing) 연산자를 인식하지 못합니다.**
 
-esbuild `target: 'es2017'`로 설정해도 일부 연산자는 자동 변환되지 않을 수 있습니다.
+esbuild `target: 'es2017'`로 설정해도 `??` 연산자는 자동 변환되지 않습니다.
 
 #### 절대 사용 금지
 
 | 문법 | ES 버전 | 대안 |
 |------|---------|------|
 | `??` (Nullish Coalescing) | ES2020 | `!== undefined ? a : b` 또는 삼항 연산자 |
-| `?.` (Optional Chaining) | ES2020 | `a && a.b` 또는 명시적 null 체크 |
-| `??=`, `||=`, `&&=` | ES2021 | 일반 할당문 |
-| `#privateField` | ES2022 | `_privateField` 컨벤션 |
-| Top-level await | ES2022 | async 함수 내부에서 사용 |
+| `??=` | ES2021 | 일반 할당문 |
+
+#### 사용 가능
+
+| 문법 | 비고 |
+|------|------|
+| `?.` (Optional Chaining) | 사용 가능 |
+| `||=`, `&&=` | 사용 가능 |
 
 #### 예시
 
 ```typescript
-// ❌ 금지
+// ❌ 금지 (Figma에서 인식 불가)
 const value = match[2] ?? match[3] ?? '';
-const name = obj?.nested?.property;
 
 // ✅ 올바른 방법
 const value = match[2] !== undefined ? match[2]
             : match[3] !== undefined ? match[3]
             : '';
-const name = obj && obj.nested && obj.nested.property;
+
+// ✅ Optional Chaining은 사용 가능
+const name = obj?.nested?.property;
 ```
 
 ### 2. Figma API 환경
@@ -64,8 +69,8 @@ figma.ui.postMessage({ type: 'response', data: ... });
 # 빌드
 bun run build
 
-# 빌드된 파일에서 금지된 문법 확인
-grep -E ' \?\? | \?\. ' dist/code.js && echo "ERROR: 금지된 문법 발견!"
+# 빌드된 파일에서 금지된 문법 확인 (?? 연산자)
+grep -E ' \?\? ' dist/code.js && echo "ERROR: 금지된 문법 발견!"
 ```
 
 ## 파일 구조
@@ -86,8 +91,8 @@ packages/figma-plugin/
 
 코드 수정 시 확인:
 
-- [ ] `??`, `?.` 연산자 사용하지 않음
-- [ ] Private fields (#) 사용하지 않음
+- [ ] `??` 연산자 사용하지 않음 (`?.`는 사용 가능)
+- [ ] `??=` 연산자 사용하지 않음
 - [ ] `code.ts`에서 브라우저 API 사용하지 않음
 - [ ] `ui.ts`에서 `figma.*` API 사용하지 않음
 - [ ] 빌드 후 에러 없음

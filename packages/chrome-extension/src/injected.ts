@@ -3,6 +3,9 @@
  * CSP 우회를 위해 별도 파일로 분리
  */
 
+// 모듈로 인식되도록 export 추가
+export {};
+
 declare global {
   interface Window {
     __sigma__: typeof sigmaAPI;

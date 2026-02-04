@@ -1,4 +1,10 @@
 /**
+ * Sigma 버전
+ * 모노레포 전체에서 공유되는 버전 정보
+ */
+export const VERSION = 'v0.0.1';
+
+/**
  * 서버 포트 설정
  */
 export const PORTS = {

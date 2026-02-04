@@ -105,6 +105,8 @@ export interface ExtractedNode {
   children: ExtractedNode[];
   /** SVG 요소인 경우 전체 SVG 마크업 (outerHTML) */
   svgString?: string;
+  /** CSS pseudo-element (::before, ::after) 여부 */
+  isPseudo?: boolean;
 }
 
 /**

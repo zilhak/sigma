@@ -34,9 +34,47 @@ function getEffectiveFileKey(): { fileKey: string | null; source: 'api' | 'store
   return { fileKey: null, source: 'none' };
 }
 
-// 파일 정보 전달
+// 모든 페이지 목록 가져오기
+function getAllPages(): Array<{ id: string; name: string }> {
+  return figma.root.children.map((page) => ({
+    id: page.id,
+    name: page.name,
+  }));
+}
+
+// 페이지 ID로 페이지 찾기
+function getPageById(pageId: string): PageNode | null {
+  // 현재 페이지 먼저 체크 (빠른 경로)
+  if (figma.currentPage.id === pageId) {
+    return figma.currentPage;
+  }
+  // 전체 페이지에서 검색
+  for (const page of figma.root.children) {
+    if (page.id === pageId) {
+      return page;
+    }
+  }
+  return null;
+}
+
+// 대상 페이지 결정 (pageId가 없으면 현재 페이지)
+function getTargetPage(pageId?: string): PageNode {
+  if (pageId) {
+    const page = getPageById(pageId);
+    if (page) {
+      return page;
+    }
+    // pageId가 있지만 찾을 수 없으면 현재 페이지 사용
+    console.warn(`Page not found: ${pageId}, using current page`);
+  }
+  return figma.currentPage;
+}
+
+// 파일 정보 전달 (전체 페이지 목록 포함)
 function sendFileInfo() {
   const { fileKey, source } = getEffectiveFileKey();
+  const pages = getAllPages();
+
   figma.ui.postMessage({
     type: 'file-info',
     fileKey,
@@ -45,6 +83,7 @@ function sendFileInfo() {
     fileName: figma.root.name,
     pageId: figma.currentPage.id,
     pageName: figma.currentPage.name,
+    pages,  // 전체 페이지 목록 추가
   });
 }
 
@@ -61,19 +100,33 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
   switch (msg.type) {
     case 'create-from-json': {
       const position = msg.position as { x: number; y: number } | undefined;
-      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position);
+      const pageId = msg.pageId as string | undefined;
+      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId);
       break;
     }
 
     case 'create-from-html': {
       const htmlPosition = msg.position as { x: number; y: number } | undefined;
-      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition);
+      const htmlPageId = msg.pageId as string | undefined;
+      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId);
       break;
     }
 
-    case 'get-frames':
-      // 현재 페이지의 모든 최상위 프레임 정보 반환
-      const frames = figma.currentPage.children
+    case 'get-pages':
+      // 파일 내 모든 페이지 목록 반환
+      const pages = getAllPages();
+      figma.ui.postMessage({
+        type: 'pages-list',
+        pages,
+        currentPageId: figma.currentPage.id,
+      });
+      break;
+
+    case 'get-frames': {
+      // 지정된 페이지 또는 현재 페이지의 모든 최상위 프레임 정보 반환
+      const framesPageId = msg.pageId as string | undefined;
+      const targetPage = getTargetPage(framesPageId);
+      const frames = targetPage.children
         .filter((node): node is FrameNode => node.type === 'FRAME')
         .map((frame) => ({
           id: frame.id,
@@ -83,8 +136,14 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           width: frame.width,
           height: frame.height,
         }));
-      figma.ui.postMessage({ type: 'frames-list', frames });
+      figma.ui.postMessage({
+        type: 'frames-list',
+        frames,
+        pageId: targetPage.id,
+        pageName: targetPage.name,
+      });
       break;
+    }
 
     case 'delete-frame':
       const nodeId = msg.nodeId as string;
@@ -142,6 +201,136 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       figma.ui.postMessage({ type: 'info', message: '위치가 리셋되었습니다.' });
       break;
 
+    case 'extract-to-json': {
+      // 선택된 노드를 JSON으로 추출
+      const selection = figma.currentPage.selection;
+      if (selection.length === 0) {
+        figma.ui.postMessage({
+          type: 'extract-result',
+          format: 'json',
+          success: false,
+          error: '노드를 선택해주세요.',
+        });
+        break;
+      }
+
+      const extractedNodes: ExtractedNode[] = [];
+      for (const node of selection) {
+        const extracted = extractNodeToJSON(node);
+        if (extracted) {
+          extractedNodes.push(extracted);
+        }
+      }
+
+      if (extractedNodes.length === 0) {
+        figma.ui.postMessage({
+          type: 'extract-result',
+          format: 'json',
+          success: false,
+          error: '추출 가능한 노드가 없습니다.',
+        });
+        break;
+      }
+
+      // 단일 노드면 객체로, 여러 노드면 배열로
+      const resultData = extractedNodes.length === 1 ? extractedNodes[0] : extractedNodes;
+      figma.ui.postMessage({
+        type: 'extract-result',
+        format: 'json',
+        success: true,
+        data: resultData,
+      });
+      break;
+    }
+
+    case 'extract-to-html': {
+      // 선택된 노드를 HTML로 추출
+      const htmlSelection = figma.currentPage.selection;
+      if (htmlSelection.length === 0) {
+        figma.ui.postMessage({
+          type: 'extract-result',
+          format: 'html',
+          success: false,
+          error: '노드를 선택해주세요.',
+        });
+        break;
+      }
+
+      const htmlParts: string[] = [];
+      for (const node of htmlSelection) {
+        const extracted = extractNodeToJSON(node);
+        if (extracted) {
+          htmlParts.push(convertExtractedNodeToHTML(extracted));
+        }
+      }
+
+      if (htmlParts.length === 0) {
+        figma.ui.postMessage({
+          type: 'extract-result',
+          format: 'html',
+          success: false,
+          error: '추출 가능한 노드가 없습니다.',
+        });
+        break;
+      }
+
+      figma.ui.postMessage({
+        type: 'extract-result',
+        format: 'html',
+        success: true,
+        data: htmlParts.join('\n'),
+      });
+      break;
+    }
+
+    case 'test-roundtrip-json': {
+      // JSON 라운드트립 테스트
+      const jsonData = msg.data as ExtractedNode;
+      const jsonName = msg.name as string | undefined;
+
+      if (!jsonData) {
+        figma.ui.postMessage({
+          type: 'roundtrip-result',
+          format: 'json',
+          success: false,
+          error: 'JSON 데이터가 필요합니다.',
+        });
+        break;
+      }
+
+      const jsonResult = await testRoundtripJSON(jsonData, jsonName);
+      figma.ui.postMessage({
+        type: 'roundtrip-result',
+        format: 'json',
+        ...jsonResult,
+      });
+      break;
+    }
+
+    case 'test-roundtrip-html': {
+      // HTML 라운드트립 테스트
+      const htmlData = msg.data as string;
+      const htmlName = msg.name as string | undefined;
+
+      if (!htmlData) {
+        figma.ui.postMessage({
+          type: 'roundtrip-result',
+          format: 'html',
+          success: false,
+          error: 'HTML 데이터가 필요합니다.',
+        });
+        break;
+      }
+
+      const htmlResult = await testRoundtripHTML(htmlData, htmlName);
+      figma.ui.postMessage({
+        type: 'roundtrip-result',
+        format: 'html',
+        ...htmlResult,
+      });
+      break;
+    }
+
     case 'cancel':
       figma.closePlugin();
       break;
@@ -151,8 +340,12 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 /**
  * JSON 데이터로 Figma 프레임 생성
  */
-async function createFrameFromJSON(node: ExtractedNode, name?: string, position?: { x: number; y: number }) {
+async function createFrameFromJSON(node: ExtractedNode, name?: string, position?: { x: number; y: number }, pageId?: string) {
   try {
+    // 대상 페이지 결정
+    const targetPage = getTargetPage(pageId);
+    const isCurrentPage = targetPage.id === figma.currentPage.id;
+
     // 폰트 로드 (영문 + 한글)
     await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
     await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
@@ -182,12 +375,17 @@ async function createFrameFromJSON(node: ExtractedNode, name?: string, position?
       // 마지막 위치 저장
       lastCreatedPosition = { x: frame.x, y: frame.y };
 
-      // 페이지에 추가
-      figma.currentPage.appendChild(frame);
-      figma.currentPage.selection = [frame];
-      figma.viewport.scrollAndZoomIntoView([frame]);
+      // 대상 페이지에 추가
+      targetPage.appendChild(frame);
 
-      figma.ui.postMessage({ type: 'success', message: '프레임이 생성되었습니다!' });
+      // 현재 페이지인 경우에만 선택 및 뷰포트 이동
+      if (isCurrentPage) {
+        figma.currentPage.selection = [frame];
+        figma.viewport.scrollAndZoomIntoView([frame]);
+      }
+
+      const pageInfo = isCurrentPage ? '' : ` (페이지: ${targetPage.name})`;
+      figma.ui.postMessage({ type: 'success', message: `프레임이 생성되었습니다!${pageInfo}` });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -197,14 +395,26 @@ async function createFrameFromJSON(node: ExtractedNode, name?: string, position?
 
 /**
  * ExtractedNode를 Figma 노드로 변환
+ * @param node - 추출된 노드 데이터
+ * @param isRoot - 루트(최상위) 노드 여부 (기본값: true)
  */
-async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNode | null> {
+async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Promise<FrameNode | TextNode | null> {
   const { styles, textContent, boundingRect } = node;
   const children = node.children || [];
 
   // SVG 요소인 경우: createNodeFromSvg 사용
   if (node.svgString && node.tagName === 'svg') {
     return createSvgNode(node);
+  }
+
+  // 이미지 요소 처리
+  if (node.tagName === 'img') {
+    return createImagePlaceholder(node);
+  }
+
+  // Pseudo-element 처리 (::before, ::after)
+  if (node.isPseudo || node.tagName === '::before' || node.tagName === '::after') {
+    return createPseudoElementNode(node);
   }
 
   // 텍스트만 있는 요소 (자식 없고 텍스트만)
@@ -223,10 +433,9 @@ async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNod
   // 레이아웃 모드 설정
   applyLayoutMode(frame, styles);
 
-  // Auto Layout에서 크기 고정 (HUG 방지)
+  // Auto Layout 크기 모드 설정 (FIXED가 아닌 적절한 모드 사용)
   if (frame.layoutMode !== 'NONE') {
-    frame.primaryAxisSizingMode = 'FIXED';
-    frame.counterAxisSizingMode = 'FIXED';
+    applySizingMode(frame, styles, isRoot);
   }
 
   // 정렬 설정
@@ -235,8 +444,8 @@ async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNod
   // 패딩 설정
   applyPadding(frame, styles);
 
-  // 배경색 설정
-  applyBackground(frame, styles);
+  // 배경색 설정 (루트 프레임은 투명 배경을 흰색으로 대체)
+  applyBackground(frame, styles, isRoot);
 
   // 테두리 설정
   applyBorder(frame, styles);
@@ -260,11 +469,40 @@ async function createFigmaNode(node: ExtractedNode): Promise<FrameNode | TextNod
     }
   }
 
-  // 자식 노드 추가
+  // 자식 노드 추가 (isRoot: false로 호출하여 투명 배경 유지)
   for (const child of children) {
-    const childNode = await createFigmaNode(child);
+    const childNode = await createFigmaNode(child, false);
     if (childNode) {
       frame.appendChild(childNode);
+
+      // 부모의 정렬 설정에 따라 자식의 layoutAlign 설정
+      // Figma에서 자식 요소가 부모의 정렬을 따르도록 명시적 설정
+      if (frame.layoutMode !== 'NONE' && 'layoutAlign' in childNode) {
+        const childFrame = childNode as FrameNode;
+
+        // 부모가 center 정렬인 경우 자식도 center로 설정
+        if (frame.counterAxisAlignItems === 'CENTER') {
+          childFrame.layoutAlign = 'INHERIT';
+        }
+
+        // 자식 요소가 부모보다 작고 중앙에 위치해야 하는 경우 감지
+        // (CSS margin: auto와 유사한 효과)
+        if (child.boundingRect && frame.width > 0) {
+          const childWidth = child.boundingRect.width;
+          const childX = child.boundingRect.x;
+          const parentWidth = frame.width;
+
+          // 자식이 부모의 절반 이하이고, 중앙에 가까운 위치에 있으면 CENTER 적용
+          if (childWidth < parentWidth * 0.8) {
+            const expectedCenterX = (parentWidth - childWidth) / 2;
+            const tolerance = parentWidth * 0.1; // 10% 허용 오차
+
+            if (Math.abs(childX - expectedCenterX) < tolerance) {
+              childFrame.layoutAlign = 'CENTER';
+            }
+          }
+        }
+      }
     }
   }
 
@@ -343,7 +581,117 @@ function createTextNode(text: string, styles: ComputedStyles): TextNode | null {
       textNode.textAlignHorizontal = 'LEFT';
   }
 
+  // 텍스트 자동 리사이즈 모드 설정 (텍스트 잘림 방지)
+  // WIDTH_AND_HEIGHT: 텍스트 내용에 맞게 너비와 높이 자동 조정
+  textNode.textAutoResize = 'WIDTH_AND_HEIGHT';
+
   return textNode;
+}
+
+/**
+ * Pseudo-element (::before, ::after) 노드 생성
+ * CSS pseudo-elements는 주로 장식 요소나 아이콘으로 사용됨
+ */
+function createPseudoElementNode(node: ExtractedNode): FrameNode | TextNode | null {
+  const { styles, textContent, boundingRect } = node;
+
+  // 텍스트 콘텐츠만 있는 경우 (예: content: "•" 같은 장식 문자)
+  if (textContent && !hasVisualStyles(styles)) {
+    return createTextNode(textContent, styles);
+  }
+
+  // 시각적 스타일이 있는 경우 프레임으로 생성
+  const frame = figma.createFrame();
+  frame.name = node.tagName; // '::before' 또는 '::after'
+
+  // 크기 설정 (pseudo-element는 주로 고정 크기)
+  const width = typeof styles.width === 'number' && styles.width > 0
+    ? styles.width
+    : boundingRect.width > 0 ? boundingRect.width : 16;
+  const height = typeof styles.height === 'number' && styles.height > 0
+    ? styles.height
+    : boundingRect.height > 0 ? boundingRect.height : 16;
+
+  frame.resize(Math.max(width, 1), Math.max(height, 1));
+
+  // 배경색 적용
+  if (styles.backgroundColor && styles.backgroundColor.a > 0) {
+    frame.fills = [createSolidPaint(styles.backgroundColor)];
+  } else {
+    frame.fills = [];
+  }
+
+  // 테두리 적용
+  applyBorder(frame, styles);
+
+  // 모서리 라운드 적용
+  applyCornerRadius(frame, styles);
+
+  // 불투명도
+  if (styles.opacity < 1) {
+    frame.opacity = styles.opacity;
+  }
+
+  // 텍스트 콘텐츠가 있으면 내부에 추가
+  if (textContent) {
+    const textNode = createTextNode(textContent, styles);
+    if (textNode) {
+      frame.layoutMode = 'HORIZONTAL';
+      frame.primaryAxisAlignItems = 'CENTER';
+      frame.counterAxisAlignItems = 'CENTER';
+      frame.appendChild(textNode);
+    }
+  }
+
+  return frame;
+}
+
+/**
+ * 시각적 스타일이 있는지 확인 (배경, 테두리 등)
+ */
+function hasVisualStyles(styles: ComputedStyles): boolean {
+  // 배경색이 있는 경우
+  if (styles.backgroundColor && styles.backgroundColor.a > 0) {
+    return true;
+  }
+
+  // 테두리가 있는 경우
+  if (styles.borderTopWidth > 0 || styles.borderRightWidth > 0 ||
+      styles.borderBottomWidth > 0 || styles.borderLeftWidth > 0) {
+    return true;
+  }
+
+  // 고정 크기가 있는 경우 (장식 박스일 수 있음)
+  if (typeof styles.width === 'number' && styles.width > 0 &&
+      typeof styles.height === 'number' && styles.height > 0) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * SVG 문자열에서 CSS 변수를 fallback 값으로 치환
+ * Figma의 createNodeFromSvg()는 CSS 변수를 처리하지 못하므로
+ * var(--name, fallback) → fallback 으로 변환
+ */
+function resolveCssVariablesInSvg(svgString: string): string {
+  // var(--variable-name, fallback-value) 패턴 매칭
+  // fallback 값에 괄호가 포함될 수 있으므로 (예: rgb()), 재귀적으로 처리
+  let result = svgString;
+  let prevResult = '';
+
+  // 변경이 없을 때까지 반복 (중첩 var() 처리)
+  while (result !== prevResult) {
+    prevResult = result;
+    // var( 뒤에 변수명, 그리고 fallback 값 추출
+    result = result.replace(/var\(\s*--[^,)]+\s*,\s*([^)]+)\)/g, (match, fallback) => {
+      // fallback 값이 또 다른 var()일 경우 재귀 처리됨
+      return fallback.trim();
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -354,8 +702,11 @@ function createSvgNode(node: ExtractedNode): FrameNode | null {
   if (!node.svgString) return null;
 
   try {
+    // CSS 변수를 fallback 값으로 치환
+    const processedSvg = resolveCssVariablesInSvg(node.svgString);
+
     // Figma API로 SVG 문자열을 노드로 변환
-    const svgFrame = figma.createNodeFromSvg(node.svgString);
+    const svgFrame = figma.createNodeFromSvg(processedSvg);
 
     // 위치 및 크기는 SVG 자체에서 결정됨
     // 필요시 boundingRect로 크기 조정
@@ -382,6 +733,98 @@ function createSvgNode(node: ExtractedNode): FrameNode | null {
     );
     fallbackFrame.name = 'SVG (변환 실패)';
     return fallbackFrame;
+  }
+}
+
+/**
+ * 이미지 요소(<img>) 처리
+ * Figma에서는 실제 이미지를 로드할 수 없으므로 플레이스홀더 생성
+ */
+function createImagePlaceholder(node: ExtractedNode): FrameNode {
+  const { styles, boundingRect, attributes } = node;
+
+  const frame = figma.createFrame();
+
+  // 크기 설정 (styles > boundingRect > 기본값)
+  const width = typeof styles.width === 'number' && styles.width > 0
+    ? styles.width
+    : boundingRect.width > 0 ? boundingRect.width : 100;
+  const height = typeof styles.height === 'number' && styles.height > 0
+    ? styles.height
+    : boundingRect.height > 0 ? boundingRect.height : 100;
+
+  frame.resize(Math.max(width, 1), Math.max(height, 1));
+
+  // 이미지 플레이스홀더 스타일 (연한 회색 배경)
+  frame.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 }, opacity: 1 }];
+
+  // 테두리 (이미지 영역 표시)
+  frame.strokes = [{ type: 'SOLID', color: { r: 0.7, g: 0.7, b: 0.7 }, opacity: 1 }];
+  frame.strokeWeight = 1;
+
+  // 이름 설정 (alt 또는 src에서 추출)
+  const alt = attributes && attributes.alt ? attributes.alt : '';
+  const src = attributes && attributes.src ? attributes.src : '';
+  const imageName = alt || (src ? src.split('/').pop() || 'image' : 'image');
+  frame.name = `[IMG] ${imageName}`;
+
+  // 모서리 라운드 적용 (이미지에도 border-radius가 있을 수 있음)
+  applyCornerRadius(frame, styles);
+
+  // 불투명도
+  if (styles.opacity < 1) {
+    frame.opacity = styles.opacity;
+  }
+
+  return frame;
+}
+
+/**
+ * Auto Layout 크기 모드 설정
+ * CSS의 width/height 값에 따라 FIXED, HUG, 또는 FILL 모드 적용
+ */
+function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot: boolean) {
+  const { width, height } = styles;
+
+  // 루트 프레임은 항상 FIXED (전체 크기 유지)
+  if (isRoot) {
+    frame.primaryAxisSizingMode = 'FIXED';
+    frame.counterAxisSizingMode = 'FIXED';
+    return;
+  }
+
+  // 가로(primary/counter) 설정
+  // width: auto 또는 fit-content → HUG (콘텐츠에 맞춤)
+  // width: 100% → FILL (부모에 맞춤) - Figma에서는 layoutGrow로 처리
+  // width: number → FIXED
+  if (width === 'auto' || width === 'fit-content') {
+    // HORIZONTAL 레이아웃이면 primaryAxis가 width
+    if (frame.layoutMode === 'HORIZONTAL') {
+      frame.primaryAxisSizingMode = 'AUTO'; // HUG
+    } else {
+      frame.counterAxisSizingMode = 'AUTO'; // HUG
+    }
+  } else {
+    if (frame.layoutMode === 'HORIZONTAL') {
+      frame.primaryAxisSizingMode = 'FIXED';
+    } else {
+      frame.counterAxisSizingMode = 'FIXED';
+    }
+  }
+
+  // height 설정
+  if (height === 'auto' || height === 'fit-content') {
+    if (frame.layoutMode === 'VERTICAL') {
+      frame.primaryAxisSizingMode = 'AUTO'; // HUG
+    } else {
+      frame.counterAxisSizingMode = 'AUTO'; // HUG
+    }
+  } else {
+    if (frame.layoutMode === 'VERTICAL') {
+      frame.primaryAxisSizingMode = 'FIXED';
+    } else {
+      frame.counterAxisSizingMode = 'FIXED';
+    }
   }
 }
 
@@ -462,11 +905,20 @@ function applyPadding(frame: FrameNode, styles: ComputedStyles) {
 
 /**
  * 배경색 적용
+ * @param frame - Figma 프레임 노드
+ * @param styles - 계산된 스타일
+ * @param isRoot - 루트(최상위) 프레임 여부
  */
-function applyBackground(frame: FrameNode, styles: ComputedStyles) {
+function applyBackground(frame: FrameNode, styles: ComputedStyles, isRoot: boolean = false) {
   if (styles.backgroundColor && styles.backgroundColor.a > 0) {
+    // 불투명한 배경색이 있으면 그대로 적용
     frame.fills = [createSolidPaint(styles.backgroundColor)];
+  } else if (isRoot) {
+    // 루트 프레임의 투명 배경 → 흰색 배경으로 대체
+    // (Figma에서 빈 fills는 캔버스 배경(검은색/회색)이 노출됨)
+    frame.fills = [createSolidPaint({ r: 1, g: 1, b: 1, a: 1 })];
   } else {
+    // 자식 프레임의 투명 배경 → 빈 fills (부모 배경 비침)
     frame.fills = [];
   }
 }
@@ -665,8 +1117,12 @@ function createSolidPaint(color: RGBA): SolidPaint {
 /**
  * HTML 문자열로 Figma 프레임 생성
  */
-async function createFrameFromHTML(html: string, name?: string, position?: { x: number; y: number }) {
+async function createFrameFromHTML(html: string, name?: string, position?: { x: number; y: number }, pageId?: string) {
   try {
+    // 대상 페이지 결정
+    const targetPage = getTargetPage(pageId);
+    const isCurrentPage = targetPage.id === figma.currentPage.id;
+
     // 폰트 로드
     await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
     await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
@@ -701,11 +1157,17 @@ async function createFrameFromHTML(html: string, name?: string, position?: { x: 
 
       lastCreatedPosition = { x: frame.x, y: frame.y };
 
-      figma.currentPage.appendChild(frame);
-      figma.currentPage.selection = [frame];
-      figma.viewport.scrollAndZoomIntoView([frame]);
+      // 대상 페이지에 추가
+      targetPage.appendChild(frame);
 
-      figma.ui.postMessage({ type: 'success', message: 'HTML에서 프레임이 생성되었습니다!' });
+      // 현재 페이지인 경우에만 선택 및 뷰포트 이동
+      if (isCurrentPage) {
+        figma.currentPage.selection = [frame];
+        figma.viewport.scrollAndZoomIntoView([frame]);
+      }
+
+      const pageInfo = isCurrentPage ? '' : ` (페이지: ${targetPage.name})`;
+      figma.ui.postMessage({ type: 'success', message: `HTML에서 프레임이 생성되었습니다!${pageInfo}` });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1209,4 +1671,829 @@ function createDefaultStyles(): ComputedStyles {
     boxShadow: 'none',
     transform: 'none',
   };
+}
+
+// ============================================================
+// Figma 객체 → JSON/HTML 추출
+// ============================================================
+
+/**
+ * Figma 노드를 ExtractedNode JSON으로 추출
+ */
+function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
+  if (!('visible' in node) || !node.visible) {
+    return null;
+  }
+
+  // 기본 구조
+  const extracted: ExtractedNode = {
+    id: node.id,
+    tagName: getTagNameFromNode(node),
+    className: node.name,
+    textContent: '',
+    attributes: {},
+    styles: createDefaultStyles(),
+    boundingRect: {
+      x: 'x' in node ? node.x : 0,
+      y: 'y' in node ? node.y : 0,
+      width: 'width' in node ? node.width : 0,
+      height: 'height' in node ? node.height : 0,
+    },
+    children: [],
+  };
+
+  // 텍스트 노드
+  if (node.type === 'TEXT') {
+    extracted.tagName = 'span';
+    extracted.textContent = node.characters;
+    extractTextStyles(node, extracted.styles);
+    return extracted;
+  }
+
+  // 프레임/그룹/컴포넌트
+  if (node.type === 'FRAME' || node.type === 'GROUP' || node.type === 'COMPONENT' || node.type === 'INSTANCE') {
+    extracted.tagName = 'div';
+
+    // 레이아웃 스타일 추출
+    if ('layoutMode' in node) {
+      extractLayoutStyles(node as FrameNode, extracted.styles);
+    }
+
+    // 배경/테두리/효과 추출
+    if ('fills' in node) {
+      extractFillStyles(node as FrameNode, extracted.styles);
+    }
+    if ('strokes' in node) {
+      extractStrokeStyles(node as FrameNode, extracted.styles);
+    }
+    if ('cornerRadius' in node) {
+      extractCornerStyles(node as FrameNode, extracted.styles);
+    }
+    if ('effects' in node) {
+      extractEffectStyles(node as FrameNode, extracted.styles);
+    }
+    if ('opacity' in node) {
+      extracted.styles.opacity = node.opacity;
+    }
+
+    // 크기 설정
+    extracted.styles.width = node.width;
+    extracted.styles.height = node.height;
+
+    // 자식 노드 추출
+    if ('children' in node) {
+      for (const child of node.children) {
+        const childExtracted = extractNodeToJSON(child);
+        if (childExtracted) {
+          extracted.children = extracted.children || [];
+          extracted.children.push(childExtracted);
+        }
+      }
+    }
+
+    return extracted;
+  }
+
+  // 벡터/도형
+  if (node.type === 'RECTANGLE' || node.type === 'ELLIPSE' || node.type === 'POLYGON' || node.type === 'STAR' || node.type === 'LINE') {
+    extracted.tagName = 'div';
+
+    if ('fills' in node) {
+      extractFillStyles(node as GeometryMixin & MinimalFillsMixin, extracted.styles);
+    }
+    if ('strokes' in node) {
+      extractStrokeStyles(node as GeometryMixin & MinimalStrokesMixin, extracted.styles);
+    }
+    if ('cornerRadius' in node && node.type === 'RECTANGLE') {
+      extractCornerStyles(node as RectangleNode, extracted.styles);
+    }
+    if ('opacity' in node) {
+      extracted.styles.opacity = node.opacity;
+    }
+
+    extracted.styles.width = node.width;
+    extracted.styles.height = node.height;
+
+    return extracted;
+  }
+
+  // 벡터 노드 (SVG로 내보낼 수 있는 경우)
+  if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
+    extracted.tagName = 'svg';
+    // SVG 문자열은 exportAsync로 추출해야 하지만, 동기 버전에서는 생략
+    extracted.styles.width = node.width;
+    extracted.styles.height = node.height;
+    return extracted;
+  }
+
+  return extracted;
+}
+
+/**
+ * 노드 타입에서 HTML 태그명 추론
+ */
+function getTagNameFromNode(node: SceneNode): string {
+  switch (node.type) {
+    case 'TEXT':
+      return 'span';
+    case 'FRAME':
+    case 'GROUP':
+    case 'COMPONENT':
+    case 'INSTANCE':
+    case 'RECTANGLE':
+      return 'div';
+    case 'VECTOR':
+    case 'BOOLEAN_OPERATION':
+      return 'svg';
+    default:
+      return 'div';
+  }
+}
+
+/**
+ * 텍스트 스타일 추출
+ */
+function extractTextStyles(node: TextNode, styles: ComputedStyles) {
+  // 폰트 크기
+  if (typeof node.fontSize === 'number') {
+    styles.fontSize = node.fontSize;
+  }
+
+  // 폰트 두께
+  if (typeof node.fontName === 'object' && 'family' in node.fontName) {
+    const fontStyle = node.fontName.style.toLowerCase();
+    if (fontStyle.includes('bold')) {
+      styles.fontWeight = '700';
+    } else if (fontStyle.includes('semi')) {
+      styles.fontWeight = '600';
+    } else if (fontStyle.includes('medium')) {
+      styles.fontWeight = '500';
+    } else {
+      styles.fontWeight = '400';
+    }
+    styles.fontFamily = node.fontName.family;
+  }
+
+  // 텍스트 색상
+  const fills = node.fills;
+  if (Array.isArray(fills) && fills.length > 0) {
+    const fill = fills[0];
+    if (fill.type === 'SOLID') {
+      styles.color = {
+        r: fill.color.r,
+        g: fill.color.g,
+        b: fill.color.b,
+        a: fill.opacity !== undefined ? fill.opacity : 1,
+      };
+    }
+  }
+
+  // 줄 높이
+  if (node.lineHeight !== figma.mixed && typeof node.lineHeight === 'object') {
+    if (node.lineHeight.unit === 'PIXELS') {
+      styles.lineHeight = node.lineHeight.value;
+    }
+  }
+
+  // 자간
+  if (node.letterSpacing !== figma.mixed && typeof node.letterSpacing === 'object') {
+    if (node.letterSpacing.unit === 'PIXELS') {
+      styles.letterSpacing = node.letterSpacing.value;
+    }
+  }
+
+  // 텍스트 정렬
+  if (node.textAlignHorizontal !== undefined) {
+    switch (node.textAlignHorizontal) {
+      case 'CENTER':
+        styles.textAlign = 'center';
+        break;
+      case 'RIGHT':
+        styles.textAlign = 'right';
+        break;
+      case 'JUSTIFIED':
+        styles.textAlign = 'justify';
+        break;
+      default:
+        styles.textAlign = 'left';
+    }
+  }
+}
+
+/**
+ * 레이아웃 스타일 추출
+ */
+function extractLayoutStyles(node: FrameNode, styles: ComputedStyles) {
+  // 레이아웃 모드
+  if (node.layoutMode === 'HORIZONTAL') {
+    styles.display = 'flex';
+    styles.flexDirection = 'row';
+  } else if (node.layoutMode === 'VERTICAL') {
+    styles.display = 'flex';
+    styles.flexDirection = 'column';
+  } else {
+    styles.display = 'block';
+  }
+
+  // 갭
+  if (node.itemSpacing !== undefined) {
+    styles.gap = node.itemSpacing;
+  }
+
+  // 패딩
+  styles.paddingTop = node.paddingTop || 0;
+  styles.paddingRight = node.paddingRight || 0;
+  styles.paddingBottom = node.paddingBottom || 0;
+  styles.paddingLeft = node.paddingLeft || 0;
+
+  // 주축 정렬
+  if (node.primaryAxisAlignItems !== undefined) {
+    switch (node.primaryAxisAlignItems) {
+      case 'CENTER':
+        styles.justifyContent = 'center';
+        break;
+      case 'MAX':
+        styles.justifyContent = 'flex-end';
+        break;
+      case 'SPACE_BETWEEN':
+        styles.justifyContent = 'space-between';
+        break;
+      default:
+        styles.justifyContent = 'flex-start';
+    }
+  }
+
+  // 교차축 정렬
+  if (node.counterAxisAlignItems !== undefined) {
+    switch (node.counterAxisAlignItems) {
+      case 'CENTER':
+        styles.alignItems = 'center';
+        break;
+      case 'MAX':
+        styles.alignItems = 'flex-end';
+        break;
+      default:
+        styles.alignItems = 'flex-start';
+    }
+  }
+}
+
+/**
+ * 배경색 추출
+ */
+function extractFillStyles(node: MinimalFillsMixin, styles: ComputedStyles) {
+  const fills = node.fills;
+  if (!Array.isArray(fills) || fills.length === 0) {
+    styles.backgroundColor = { r: 0, g: 0, b: 0, a: 0 };
+    return;
+  }
+
+  const fill = fills[0];
+  if (fill.type === 'SOLID') {
+    styles.backgroundColor = {
+      r: fill.color.r,
+      g: fill.color.g,
+      b: fill.color.b,
+      a: fill.opacity !== undefined ? fill.opacity : 1,
+    };
+  }
+}
+
+/**
+ * 테두리 스타일 추출
+ */
+function extractStrokeStyles(node: MinimalStrokesMixin, styles: ComputedStyles) {
+  const strokes = node.strokes;
+  if (!Array.isArray(strokes) || strokes.length === 0) {
+    return;
+  }
+
+  const stroke = strokes[0];
+  if (stroke.type === 'SOLID') {
+    const strokeColor: RGBA = {
+      r: stroke.color.r,
+      g: stroke.color.g,
+      b: stroke.color.b,
+      a: stroke.opacity !== undefined ? stroke.opacity : 1,
+    };
+
+    styles.borderTopColor = strokeColor;
+    styles.borderRightColor = strokeColor;
+    styles.borderBottomColor = strokeColor;
+    styles.borderLeftColor = strokeColor;
+  }
+
+  // 스트로크 두께
+  if ('strokeWeight' in node && typeof node.strokeWeight === 'number') {
+    styles.borderTopWidth = node.strokeWeight;
+    styles.borderRightWidth = node.strokeWeight;
+    styles.borderBottomWidth = node.strokeWeight;
+    styles.borderLeftWidth = node.strokeWeight;
+  }
+}
+
+/**
+ * 모서리 라운드 추출
+ */
+function extractCornerStyles(node: CornerMixin & RectangleCornerMixin, styles: ComputedStyles) {
+  if (typeof node.cornerRadius === 'number') {
+    styles.borderTopLeftRadius = node.cornerRadius;
+    styles.borderTopRightRadius = node.cornerRadius;
+    styles.borderBottomRightRadius = node.cornerRadius;
+    styles.borderBottomLeftRadius = node.cornerRadius;
+  } else {
+    // 개별 모서리
+    styles.borderTopLeftRadius = node.topLeftRadius || 0;
+    styles.borderTopRightRadius = node.topRightRadius || 0;
+    styles.borderBottomRightRadius = node.bottomRightRadius || 0;
+    styles.borderBottomLeftRadius = node.bottomLeftRadius || 0;
+  }
+}
+
+/**
+ * 효과(그림자 등) 추출
+ */
+function extractEffectStyles(node: BlendMixin, styles: ComputedStyles) {
+  const effects = node.effects;
+  if (!Array.isArray(effects) || effects.length === 0) {
+    styles.boxShadow = 'none';
+    return;
+  }
+
+  const shadowParts: string[] = [];
+
+  for (const effect of effects) {
+    if (effect.type === 'DROP_SHADOW' && effect.visible) {
+      const { offset, radius, spread, color } = effect;
+      const r = Math.round(color.r * 255);
+      const g = Math.round(color.g * 255);
+      const b = Math.round(color.b * 255);
+      const a = color.a;
+      shadowParts.push(`rgba(${r}, ${g}, ${b}, ${a}) ${offset.x}px ${offset.y}px ${radius}px ${spread || 0}px`);
+    }
+  }
+
+  styles.boxShadow = shadowParts.length > 0 ? shadowParts.join(', ') : 'none';
+}
+
+/**
+ * ExtractedNode를 HTML 문자열로 변환
+ */
+function convertExtractedNodeToHTML(node: ExtractedNode): string {
+  const { tagName, className, textContent, styles, children } = node;
+
+  // 스타일 문자열 생성
+  const styleStr = buildStyleString(styles);
+
+  // 클래스 속성
+  const classAttr = className ? ` class="${escapeHTMLAttrForExport(className)}"` : '';
+
+  // 스타일 속성
+  const styleAttr = styleStr ? ` style="${escapeHTMLAttrForExport(styleStr)}"` : '';
+
+  // 자식이 없고 텍스트만 있는 경우
+  if ((!children || children.length === 0) && textContent) {
+    return `<${tagName}${classAttr}${styleAttr}>${escapeHTMLContentForExport(textContent)}</${tagName}>`;
+  }
+
+  // 자식 노드 재귀 처리
+  let childrenHTML = '';
+  if (children && children.length > 0) {
+    childrenHTML = children.map(child => convertExtractedNodeToHTML(child)).join('\n');
+  }
+
+  // 텍스트 + 자식 모두 있는 경우
+  const content = textContent ? escapeHTMLContentForExport(textContent) + '\n' + childrenHTML : childrenHTML;
+
+  return `<${tagName}${classAttr}${styleAttr}>${content ? '\n' + content + '\n' : ''}</${tagName}>`;
+}
+
+/**
+ * ComputedStyles를 CSS 인라인 스타일 문자열로 변환
+ */
+function buildStyleString(styles: ComputedStyles): string {
+  const parts: string[] = [];
+
+  // 크기
+  if (typeof styles.width === 'number' && styles.width > 0) {
+    parts.push(`width: ${styles.width}px`);
+  }
+  if (typeof styles.height === 'number' && styles.height > 0) {
+    parts.push(`height: ${styles.height}px`);
+  }
+
+  // 레이아웃
+  if (styles.display && styles.display !== 'block') {
+    parts.push(`display: ${styles.display}`);
+  }
+  if (styles.display === 'flex') {
+    if (styles.flexDirection && styles.flexDirection !== 'row') {
+      parts.push(`flex-direction: ${styles.flexDirection}`);
+    }
+    if (styles.justifyContent && styles.justifyContent !== 'flex-start') {
+      parts.push(`justify-content: ${styles.justifyContent}`);
+    }
+    if (styles.alignItems && styles.alignItems !== 'stretch') {
+      parts.push(`align-items: ${styles.alignItems}`);
+    }
+  }
+  if (styles.gap > 0) {
+    parts.push(`gap: ${styles.gap}px`);
+  }
+
+  // 패딩
+  if (styles.paddingTop > 0 || styles.paddingRight > 0 || styles.paddingBottom > 0 || styles.paddingLeft > 0) {
+    if (styles.paddingTop === styles.paddingRight &&
+        styles.paddingRight === styles.paddingBottom &&
+        styles.paddingBottom === styles.paddingLeft) {
+      parts.push(`padding: ${styles.paddingTop}px`);
+    } else {
+      parts.push(`padding: ${styles.paddingTop}px ${styles.paddingRight}px ${styles.paddingBottom}px ${styles.paddingLeft}px`);
+    }
+  }
+
+  // 배경색
+  if (styles.backgroundColor && styles.backgroundColor.a > 0) {
+    parts.push(`background-color: ${rgbaToCSS(styles.backgroundColor)}`);
+  }
+
+  // 테두리
+  const borderWidth = styles.borderTopWidth || 0;
+  if (borderWidth > 0) {
+    parts.push(`border-width: ${borderWidth}px`);
+    parts.push(`border-style: solid`);
+    if (styles.borderTopColor) {
+      parts.push(`border-color: ${rgbaToCSS(styles.borderTopColor)}`);
+    }
+  }
+
+  // 모서리 라운드
+  if (styles.borderTopLeftRadius > 0 || styles.borderTopRightRadius > 0 ||
+      styles.borderBottomRightRadius > 0 || styles.borderBottomLeftRadius > 0) {
+    if (styles.borderTopLeftRadius === styles.borderTopRightRadius &&
+        styles.borderTopRightRadius === styles.borderBottomRightRadius &&
+        styles.borderBottomRightRadius === styles.borderBottomLeftRadius) {
+      parts.push(`border-radius: ${styles.borderTopLeftRadius}px`);
+    } else {
+      parts.push(`border-radius: ${styles.borderTopLeftRadius}px ${styles.borderTopRightRadius}px ${styles.borderBottomRightRadius}px ${styles.borderBottomLeftRadius}px`);
+    }
+  }
+
+  // 텍스트 스타일
+  if (styles.color && styles.color.a > 0) {
+    parts.push(`color: ${rgbaToCSS(styles.color)}`);
+  }
+  if (styles.fontSize && styles.fontSize !== 14) {
+    parts.push(`font-size: ${styles.fontSize}px`);
+  }
+  if (styles.fontWeight && styles.fontWeight !== '400') {
+    parts.push(`font-weight: ${styles.fontWeight}`);
+  }
+  if (styles.lineHeight && styles.lineHeight > 0) {
+    parts.push(`line-height: ${styles.lineHeight}px`);
+  }
+  if (styles.letterSpacing && styles.letterSpacing !== 0) {
+    parts.push(`letter-spacing: ${styles.letterSpacing}px`);
+  }
+  if (styles.textAlign && styles.textAlign !== 'left') {
+    parts.push(`text-align: ${styles.textAlign}`);
+  }
+
+  // 불투명도
+  if (styles.opacity < 1) {
+    parts.push(`opacity: ${styles.opacity}`);
+  }
+
+  // 그림자
+  if (styles.boxShadow && styles.boxShadow !== 'none') {
+    parts.push(`box-shadow: ${styles.boxShadow}`);
+  }
+
+  return parts.join('; ');
+}
+
+/**
+ * RGBA를 CSS 문자열로 변환
+ */
+function rgbaToCSS(color: RGBA): string {
+  const r = Math.round(color.r * 255);
+  const g = Math.round(color.g * 255);
+  const b = Math.round(color.b * 255);
+  if (color.a === 1) {
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${color.a})`;
+}
+
+/**
+ * HTML 속성값 이스케이프 (export용)
+ */
+function escapeHTMLAttrForExport(str: string): string {
+  return str.replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+}
+
+/**
+ * HTML 콘텐츠 이스케이프 (export용)
+ */
+function escapeHTMLContentForExport(str: string): string {
+  return str.replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+}
+
+// ============================================================
+// 라운드트립 테스트 (동일성 비교)
+// ============================================================
+
+interface RoundtripTestResult {
+  success: boolean;
+  identical: boolean;
+  differences: string[];
+  original: unknown;
+  extracted: unknown;
+  createdFrameId?: string;
+}
+
+/**
+ * JSON 라운드트립 테스트
+ * 1. JSON → Figma Frame 생성
+ * 2. 생성된 Frame → JSON 재추출
+ * 3. 원본과 비교
+ */
+async function testRoundtripJSON(originalNode: ExtractedNode, name?: string): Promise<RoundtripTestResult> {
+  const differences: string[] = [];
+
+  try {
+    // 1. 프레임 생성
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+
+    const frame = await createFigmaNode(originalNode);
+    if (!frame) {
+      return {
+        success: false,
+        identical: false,
+        differences: ['프레임 생성 실패'],
+        original: originalNode,
+        extracted: null,
+      };
+    }
+
+    frame.name = name || 'RoundtripTest-JSON';
+
+    // 뷰포트 중앙에 배치
+    const center = figma.viewport.center;
+    frame.x = center.x - frame.width / 2;
+    frame.y = center.y - frame.height / 2;
+    figma.currentPage.appendChild(frame);
+
+    // 2. 재추출
+    const extractedNode = extractNodeToJSON(frame);
+    if (!extractedNode) {
+      return {
+        success: false,
+        identical: false,
+        differences: ['추출 실패'],
+        original: originalNode,
+        extracted: null,
+        createdFrameId: frame.id,
+      };
+    }
+
+    // 3. 비교
+    compareNodes(originalNode, extractedNode, '', differences);
+
+    return {
+      success: true,
+      identical: differences.length === 0,
+      differences,
+      original: originalNode,
+      extracted: extractedNode,
+      createdFrameId: frame.id,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      identical: false,
+      differences: [`오류: ${error instanceof Error ? error.message : 'Unknown error'}`],
+      original: originalNode,
+      extracted: null,
+    };
+  }
+}
+
+/**
+ * HTML 라운드트립 테스트
+ * 1. HTML → Figma Frame 생성
+ * 2. 생성된 Frame → HTML 재추출
+ * 3. 원본과 비교
+ */
+async function testRoundtripHTML(originalHTML: string, name?: string): Promise<RoundtripTestResult> {
+  const differences: string[] = [];
+
+  try {
+    // 1. HTML 파싱 및 프레임 생성
+    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+
+    const parsedNode = parseHTML(originalHTML);
+    if (!parsedNode) {
+      return {
+        success: false,
+        identical: false,
+        differences: ['HTML 파싱 실패'],
+        original: originalHTML,
+        extracted: '',
+      };
+    }
+
+    const frame = await createFigmaNode(parsedNode);
+    if (!frame) {
+      return {
+        success: false,
+        identical: false,
+        differences: ['프레임 생성 실패'],
+        original: originalHTML,
+        extracted: '',
+      };
+    }
+
+    frame.name = name || 'RoundtripTest-HTML';
+
+    const center = figma.viewport.center;
+    frame.x = center.x - frame.width / 2;
+    frame.y = center.y - frame.height / 2;
+    figma.currentPage.appendChild(frame);
+
+    // 2. 재추출 (JSON으로 추출 후 HTML로 변환)
+    const extractedNode = extractNodeToJSON(frame);
+    if (!extractedNode) {
+      return {
+        success: false,
+        identical: false,
+        differences: ['추출 실패'],
+        original: originalHTML,
+        extracted: '',
+        createdFrameId: frame.id,
+      };
+    }
+
+    const extractedHTML = convertExtractedNodeToHTML(extractedNode);
+
+    // 3. 비교 (정규화 후 비교)
+    const normalizedOriginal = normalizeHTMLForCompare(originalHTML);
+    const normalizedExtracted = normalizeHTMLForCompare(extractedHTML);
+
+    if (normalizedOriginal !== normalizedExtracted) {
+      differences.push('HTML 구조가 다름');
+      differences.push(`원본 길이: ${normalizedOriginal.length}, 추출 길이: ${normalizedExtracted.length}`);
+    }
+
+    // 세부 비교를 위해 JSON으로도 비교
+    compareNodes(parsedNode, extractedNode, '', differences);
+
+    return {
+      success: true,
+      identical: differences.length === 0,
+      differences,
+      original: originalHTML,
+      extracted: extractedHTML,
+      createdFrameId: frame.id,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      identical: false,
+      differences: [`오류: ${error instanceof Error ? error.message : 'Unknown error'}`],
+      original: originalHTML,
+      extracted: '',
+    };
+  }
+}
+
+/**
+ * HTML 정규화 (비교용)
+ */
+function normalizeHTMLForCompare(html: string): string {
+  return html
+    .replace(/\s+/g, ' ')
+    .replace(/>\s+</g, '><')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * 두 ExtractedNode 비교
+ */
+function compareNodes(original: ExtractedNode, extracted: ExtractedNode, path: string, differences: string[]) {
+  const prefix = path ? `${path}.` : '';
+
+  // 태그명 비교
+  if (original.tagName !== extracted.tagName) {
+    differences.push(`${prefix}tagName: "${original.tagName}" -> "${extracted.tagName}"`);
+  }
+
+  // 텍스트 비교
+  if ((original.textContent || '').trim() !== (extracted.textContent || '').trim()) {
+    differences.push(`${prefix}textContent: "${original.textContent}" -> "${extracted.textContent}"`);
+  }
+
+  // 주요 스타일 비교
+  compareStyleProperty(original.styles, extracted.styles, 'display', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'flexDirection', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'justifyContent', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'alignItems', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'gap', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'paddingTop', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'paddingRight', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'paddingBottom', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'paddingLeft', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'borderTopLeftRadius', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'fontSize', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'fontWeight', prefix, differences);
+  compareStyleProperty(original.styles, extracted.styles, 'opacity', prefix, differences);
+
+  // 색상 비교 (허용 오차)
+  compareColor(original.styles.backgroundColor, extracted.styles.backgroundColor, `${prefix}backgroundColor`, differences);
+  compareColor(original.styles.color, extracted.styles.color, `${prefix}color`, differences);
+
+  // 크기 비교 (허용 오차 1px)
+  const origWidth = typeof original.styles.width === 'number' ? original.styles.width : original.boundingRect.width;
+  const extWidth = typeof extracted.styles.width === 'number' ? extracted.styles.width : extracted.boundingRect.width;
+  if (Math.abs(origWidth - extWidth) > 1) {
+    differences.push(`${prefix}width: ${origWidth} -> ${extWidth}`);
+  }
+
+  const origHeight = typeof original.styles.height === 'number' ? original.styles.height : original.boundingRect.height;
+  const extHeight = typeof extracted.styles.height === 'number' ? extracted.styles.height : extracted.boundingRect.height;
+  if (Math.abs(origHeight - extHeight) > 1) {
+    differences.push(`${prefix}height: ${origHeight} -> ${extHeight}`);
+  }
+
+  // 자식 노드 비교
+  const origChildren = original.children || [];
+  const extChildren = extracted.children || [];
+
+  if (origChildren.length !== extChildren.length) {
+    differences.push(`${prefix}children.length: ${origChildren.length} -> ${extChildren.length}`);
+  }
+
+  const minLen = Math.min(origChildren.length, extChildren.length);
+  for (let i = 0; i < minLen; i++) {
+    compareNodes(origChildren[i], extChildren[i], `${prefix}children[${i}]`, differences);
+  }
+}
+
+/**
+ * 스타일 속성 비교
+ */
+function compareStyleProperty(
+  original: ComputedStyles,
+  extracted: ComputedStyles,
+  prop: keyof ComputedStyles,
+  prefix: string,
+  differences: string[]
+) {
+  const origVal = original[prop];
+  const extVal = extracted[prop];
+
+  // 숫자 비교 (허용 오차)
+  if (typeof origVal === 'number' && typeof extVal === 'number') {
+    if (Math.abs(origVal - extVal) > 0.1) {
+      differences.push(`${prefix}styles.${prop}: ${origVal} -> ${extVal}`);
+    }
+    return;
+  }
+
+  // 문자열 비교
+  if (origVal !== extVal) {
+    differences.push(`${prefix}styles.${prop}: "${origVal}" -> "${extVal}"`);
+  }
+}
+
+/**
+ * 색상 비교 (허용 오차 0.02)
+ */
+function compareColor(original: RGBA | null | undefined, extracted: RGBA | null | undefined, path: string, differences: string[]) {
+  if (!original && !extracted) return;
+  if (!original || !extracted) {
+    differences.push(`${path}: 색상 불일치`);
+    return;
+  }
+
+  const tolerance = 0.02; // 색상 오차 허용
+  if (Math.abs(original.r - extracted.r) > tolerance ||
+      Math.abs(original.g - extracted.g) > tolerance ||
+      Math.abs(original.b - extracted.b) > tolerance ||
+      Math.abs(original.a - extracted.a) > tolerance) {
+    differences.push(`${path}: rgba(${original.r.toFixed(2)},${original.g.toFixed(2)},${original.b.toFixed(2)},${original.a.toFixed(2)}) -> rgba(${extracted.r.toFixed(2)},${extracted.g.toFixed(2)},${extracted.b.toFixed(2)},${extracted.a.toFixed(2)})`);
+  }
 }

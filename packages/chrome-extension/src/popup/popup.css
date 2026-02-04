@@ -30,6 +30,15 @@ body {
   font-size: 18px;
   font-weight: 600;
   color: #0066ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.version {
+  font-size: 10px;
+  font-weight: 400;
+  color: #999;
 }
 
 .server-status {

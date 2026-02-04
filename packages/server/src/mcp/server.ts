@@ -44,6 +44,33 @@ export function createMcpRequestHandler(context: ToolContext) {
   return async (req: IncomingMessage, res: ServerResponse, body?: any) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
+    // 세션 만료 오류 응답 헬퍼
+    const sendSessionExpiredError = (requestId?: number | string | null) => {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: [
+              'MCP 세션이 만료되었습니다.',
+              '',
+              '해결 방법:',
+              '1. Claude Code를 재시작하거나',
+              '2. /mcp 명령어로 MCP 연결 상태를 확인하세요.',
+              '',
+              '서버가 재시작되면 기존 세션이 무효화됩니다.',
+            ].join('\n'),
+            data: {
+              shouldReinitialize: true,
+              hint: 'Restart Claude Code or check MCP connection with /mcp command',
+            },
+          },
+          id: requestId !== undefined ? requestId : null,
+        })
+      );
+    };
+
     // Handle DELETE request for session cleanup
     if (req.method === 'DELETE') {
       if (sessionId && transports.has(sessionId)) {
@@ -51,8 +78,8 @@ export function createMcpRequestHandler(context: ToolContext) {
         await transport.handleRequest(req, res);
         transports.delete(sessionId);
       } else {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid session' }));
+        console.log('[MCP] DELETE - Session expired:', sessionId);
+        sendSessionExpiredError(body?.id);
       }
       return;
     }
@@ -63,8 +90,8 @@ export function createMcpRequestHandler(context: ToolContext) {
         const transport = transports.get(sessionId)!;
         await transport.handleRequest(req, res);
       } else {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid session' }));
+        console.log('[MCP] GET - Session expired:', sessionId);
+        sendSessionExpiredError(body?.id);
       }
       return;
     }
@@ -76,8 +103,8 @@ export function createMcpRequestHandler(context: ToolContext) {
       if (sessionId && transports.has(sessionId)) {
         // Reuse existing session
         transport = transports.get(sessionId)!;
-      } else if (!sessionId && isInitializeRequest(body)) {
-        // New session initialization
+      } else if (isInitializeRequest(body)) {
+        // New session initialization (sessionId 유무와 관계없이)
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => crypto.randomUUID(),
           onsessioninitialized: (id) => {
@@ -95,15 +122,15 @@ export function createMcpRequestHandler(context: ToolContext) {
 
         const server = createMcpServer(context);
         await server.connect(transport);
+      } else if (sessionId && !transports.has(sessionId)) {
+        // 세션 ID가 있지만 서버에 세션이 없는 경우 (서버 재시작 등)
+        console.log('[MCP] POST - Session expired:', sessionId);
+        sendSessionExpiredError(body?.id);
+        return;
       } else {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Invalid session' },
-            id: null,
-          })
-        );
+        // sessionId도 없고 초기화 요청도 아닌 경우
+        console.log('[MCP] POST - No session and not an initialize request');
+        sendSessionExpiredError(body?.id);
         return;
       }
 
