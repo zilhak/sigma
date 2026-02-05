@@ -2,6 +2,7 @@ import type { ExtractedNode } from '@sigma/shared';
 import * as storage from '../storage/index.js';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
 import { tokenStore, type SigmaTokenBinding } from '../auth/token.js';
+import { getPlaywrightScripts } from '../scripts/registry.js';
 
 export interface ToolContext {
   wsServer: FigmaWebSocketServer;
@@ -325,6 +326,20 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
         },
       },
       required: ['token', 'name'],
+    },
+  },
+
+  // === Playwright Scripts (토큰 불필요) ===
+  {
+    name: 'get_playwright_scripts',
+    description: `Playwright에서 사용할 수 있는 스크립트 목록과 경로를 반환합니다.
+
+AI Agent가 Playwright로 웹 컴포넌트를 추출할 때 사용합니다.
+반환된 path를 page.addScriptTag({ path })로 inject한 후,
+API 정보에 따라 window.__sigma__ 함수를 호출합니다.`,
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
 
@@ -1026,6 +1041,28 @@ export async function handleTool(
             ],
           };
         }
+      }
+
+      // === Playwright Scripts ===
+      case 'get_playwright_scripts': {
+        const scripts = getPlaywrightScripts();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                scripts: scripts.map((s) => ({
+                  name: s.name,
+                  description: s.description,
+                  path: s.path,
+                  exists: s.exists,
+                  api: s.api,
+                  usage: s.usage,
+                })),
+              }),
+            },
+          ],
+        };
       }
 
       // === Server Status ===

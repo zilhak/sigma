@@ -38,49 +38,79 @@ sigma/
 - 소스코드에 포함되어야 하는 문서만 `.claude/` 폴더 바깥에 작성
 - 임시 파일은 절대 Downloads 폴더나 시스템 /tmp에 저장하지 않음
 
-### 컴포넌트 추출 시 필수 규칙
+### 컴포넌트 추출 방식
 
-> **중요:** 웹 컴포넌트 추출은 반드시 Chrome Extension을 통해 수행합니다.
+컴포넌트 추출은 두 가지 방식으로 수행합니다:
 
-Chrome Extension (`packages/chrome-extension`)에는 완전한 DOM 추출 기능이 구현되어 있습니다:
-- `content.ts`의 `extractElement()` 함수
-- Computed Styles 추출 (40+ CSS 속성)
-- SVG 요소 캡처 (`svgString`)
-- 재귀적 children 추출
+| 방식 | 사용 주체 | 용도 |
+|------|-----------|------|
+| **Chrome Extension** | 사용자 (수동) | UI로 직접 컴포넌트 선택하여 추출 |
+| **Standalone Extractor** | AI Agent / Playwright | 자동화된 컴포넌트 추출 |
+
+#### Standalone Extractor (Playwright 자동화용)
+
+Playwright에서 컴포넌트를 추출할 때는 **Standalone Extractor**를 사용합니다.
+
+**소스:** `packages/shared/src/extractor/core.ts` (Single Source of Truth)
+**빌드 결과:** `packages/shared/dist/extractor.standalone.js` (esbuild IIFE 번들)
+
+**스크립트 경로 확인:** Sigma MCP의 `get_playwright_scripts` 도구를 호출하면 스크립트의 절대 경로와 API 정보를 반환합니다.
+
+**사용법:**
+```javascript
+// 0. (권장) MCP로 스크립트 경로 확인
+// sigma: get_playwright_scripts → { path: "/.../extractor.standalone.js", api: [...] }
+
+// 1. 스크립트 inject
+await page.addScriptTag({
+  path: '/path/to/sigma/packages/shared/dist/extractor.standalone.js'
+});
+
+// 2. 컴포넌트 추출
+const data = await page.evaluate(() => {
+  return window.__sigma__.extract('button.primary');
+});
+
+// 3. Sigma MCP로 Figma에 생성 (선택)
+// sigma_create_frame({ token, data, name: 'Button/Primary' })
+```
+
+**API:**
+- `window.__sigma__.extract(selector)` - CSS 선택자로 요소 추출 (동기, ExtractedNode 반환)
+- `window.__sigma__.extractAt(x, y)` - 좌표로 요소 추출 (동기, ExtractedNode 반환)
+- `window.__sigma__.version` - 스크립트 버전 문자열
+
+**장점:**
+- Extension 설치/로드 불필요
+- 완전 자동화 가능 (CI/CD 친화적)
+- `packages/shared/src/extractor/core.ts`에서 빌드된 동일한 추출 로직 사용
 
 **절대 하지 말 것:**
 ```javascript
-// ❌ 잘못된 방법 - playwright_evaluate()로 직접 추출 로직 작성
-playwright_evaluate({
-  script: `
-    function extractElement(el) { ... }  // 직접 작성 금지!
-    return extractElement(document.querySelector(...));
-  `
-})
+// ❌ 잘못된 방법 - 추출 로직 직접 작성
+await page.evaluate(() => {
+  function extractElement(el) { ... }  // 직접 작성 금지!
+  return extractElement(document.querySelector(...));
+});
+
+// ✅ 올바른 방법 - Standalone Extractor 사용
+await page.addScriptTag({ path: '.../dist/extractor.standalone.js' });
+const data = await page.evaluate(() => window.__sigma__.extract('...'));
 ```
 
-**올바른 방법:**
-```
-// ✅ Extension을 통한 추출
-1. Playwright로 Extension 팝업 열기
-2. 선택 모드 활성화
-3. 컴포넌트 클릭
-4. Extension이 추출 → 서버로 POST
-5. Sigma MCP로 Figma에 전송
-```
+#### Chrome Extension (사용자 수동용)
 
-이미 만들어진 Extension의 추출 기능을 사용하지 않고 직접 로직을 작성하는 것은:
-- 중복 작업
-- Extension 코드가 테스트되지 않음
-- 실제 사용 시나리오와 불일치
+사용자가 직접 컴포넌트를 선택할 때 사용합니다.
+
+- 팝업 UI로 선택 모드 활성화
+- 마우스로 컴포넌트 클릭
+- 클립보드 복사 또는 서버 전송
 
 ### Playwright MCP 사용 지침
 
 브라우저 자동화 시 Playwright MCP를 사용할 때 다음 규칙을 준수합니다.
 
-#### Extension 모드 설정 (권장)
-
-Sigma Chrome Extension을 사용하려면 `@playwright/mcp`의 `--extension` 모드를 사용해야 합니다.
+#### 기본 설정
 
 **MCP 설정 (`~/.claude.json`):**
 ```json
@@ -89,31 +119,43 @@ Sigma Chrome Extension을 사용하려면 `@playwright/mcp`의 `--extension` 모
     "playwright": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--extension"],
+      "args": ["-y", "@playwright/mcp@latest"],
       "env": {}
     }
   }
 }
 ```
 
-**Extension 모드 장점:**
-- 사용자의 실제 Chrome 브라우저에 연결
-- 이미 설치된 Sigma Extension 사용 가능
-- 로그인 상태, 쿠키 등 기존 세션 유지
+#### 컴포넌트 추출 워크플로우
 
-**사전 준비:**
-1. Chrome에 "Playwright MCP Bridge" Extension 설치 (Microsoft 제공)
-   - [chrome://extensions](chrome://extensions) → 개발자 모드
-   - 또는 Chrome 웹스토어에서 설치
-2. Chrome에 Sigma Extension 설치
-   - `packages/chrome-extension/dist` 폴더 로드
-
-**사용 흐름:**
 ```
-1. Claude Code가 Playwright MCP로 브라우저 연결 요청
-2. 사용자가 연결할 탭 선택 (Bridge Extension UI)
-3. Playwright가 해당 탭 제어
-4. Sigma Extension 팝업 열기 → 컴포넌트 추출 → 서버 전송
+1. Sigma MCP: get_playwright_scripts → 스크립트 경로 + API 정보 확인
+2. Playwright로 페이지 이동
+3. extractor.standalone.js inject (addScriptTag)
+4. window.__sigma__.extract() 호출
+5. 결과를 Sigma MCP로 전달 → Figma에 프레임 생성
+```
+
+**전체 예시:**
+```javascript
+// 0. (사전) get_playwright_scripts MCP 도구로 스크립트 경로 확인
+// → { path: "/.../packages/shared/dist/extractor.standalone.js", ... }
+
+// 1. 페이지 이동
+await page.goto('http://localhost:6006/?path=/story/button--primary');
+
+// 2. Extractor inject (빌드된 standalone JS 사용)
+await page.addScriptTag({
+  path: scriptPath  // get_playwright_scripts에서 받은 경로
+});
+
+// 3. 컴포넌트 추출
+const extracted = await page.evaluate(() => {
+  return window.__sigma__.extract('.storybook-button');
+});
+
+// 4. Sigma MCP로 Figma에 생성
+// sigma_create_frame({ token, data: extracted, name: 'Button/Primary' })
 ```
 
 #### 기본 사용 규칙
@@ -573,11 +615,19 @@ const mcpTools = [
       data: { type: "object", description: "ExtractedNode JSON" },
       name: { type: "string", optional: true }
     }
+  },
+
+  // === Playwright 지원 ===
+  {
+    name: "get_playwright_scripts",
+    description: "Playwright에서 사용할 수 있는 스크립트 목록 반환 (경로 + API 정보)",
+    parameters: {}
+    // 반환값: [{ name, path, exists, api: [...], usage }]
   }
 ];
 ```
 
-**Note:** Extension 제어 Tools는 없음. Playwright MCP가 브라우저를 직접 제어.
+**Note:** Extension 제어 Tools는 없음. Playwright 자동화 시 `get_playwright_scripts`로 스크립트 경로를 확인한 후 `page.addScriptTag()`로 inject.
 
 #### 디렉토리 구조
 ```
@@ -700,36 +750,42 @@ startServerDetection();
 
 **목적:** 브라우저 자동화 (별도 MCP)
 
-MCP 자동화 시 Playwright가 브라우저와 Extension을 직접 조종.
+MCP 자동화 시 Playwright로 브라우저를 제어하고, Standalone Extractor로 컴포넌트를 추출합니다.
 
 ```
 AI Agent
     │
-    ├── Playwright MCP ──→ 브라우저 제어
-    │   │                  - navigate(url)
-    │   │                  - click(selector)
-    │   │                  - Extension 팝업 열기
-    │   │                  - Extension 버튼 클릭
+    ├── Sigma MCP ──→ get_playwright_scripts()
+    │   │              → 스크립트 경로 + API 정보 반환
     │   │
-    │   └──→ Extension이 추출 → 서버로 POST
+    │   └──→ figma_create_frame() → Figma에 프레임 생성
     │
-    └── Sigma MCP ──→ 저장된 데이터 조회 + Figma 제어
-        │              - list_extracted()
-        │              - figma_create_frame()
+    └── Playwright MCP ──→ 브라우저 제어
+        │                  - navigate(url)
+        │                  - addScriptTag(extractor.standalone.js)
+        │                  - evaluate(window.__sigma__.extract(...))
         │
-        └──→ Figma Plugin이 프레임 생성
+        └──→ ExtractedNode JSON 반환
 ```
 
-**Playwright로 Extension 제어하는 방법:**
+**Playwright로 컴포넌트 추출하는 방법:**
 ```typescript
-// Playwright에서 Extension 팝업 열기
-await page.click('[data-testid="sigma-extension-icon"]');
+// 1. Sigma MCP로 스크립트 경로 확인
+// get_playwright_scripts → { path: "/.../dist/extractor.standalone.js", api: [...] }
 
-// 추출 버튼 클릭
-await page.click('[data-testid="extract-button"]');
+// 2. 페이지 이동
+await page.goto('http://localhost:6006/?path=/story/button--primary');
 
-// 또는 키보드 단축키
-await page.keyboard.press('Alt+Shift+E');
+// 3. Standalone Extractor inject
+await page.addScriptTag({ path: scriptPath });
+
+// 4. 컴포넌트 추출 (Extension 불필요)
+const data = await page.evaluate(() => {
+  return window.__sigma__.extract('.my-component');
+});
+
+// 5. Sigma MCP로 Figma에 전송
+// sigma_create_frame({ token, data, name: 'Button/Primary' })
 ```
 
 ---
@@ -765,14 +821,13 @@ await page.keyboard.press('Alt+Shift+E');
 User: "Storybook에서 Badge 컴포넌트를 Figma에 가져와줘"
 
 AI Agent:
-1. [Playwright] navigate("http://localhost:6006/?path=/story/badge")
-2. [Playwright] waitForSelector(".badge")
-3. [Playwright] Extension 팝업 열기
-4. [Playwright] 추출 버튼 클릭
-   → Extension이 추출 후 서버로 POST
-5. [Sigma] list_extracted()
-   → 방금 저장된 컴포넌트 ID 확인
-6. [Sigma] figma_create_frame({ id: "badge-xxx" })
+1. [Sigma] get_playwright_scripts()
+   → 스크립트 경로 확인
+2. [Playwright] navigate("http://localhost:6006/?path=/story/badge")
+3. [Playwright] addScriptTag(extractor.standalone.js)
+4. [Playwright] evaluate(() => window.__sigma__.extract('.badge'))
+   → ExtractedNode JSON 반환
+5. [Sigma] sigma_create_frame({ token, data: extracted, name: 'Badge' })
    → Figma에 프레임 생성됨
 
 AI: "Badge 컴포넌트를 Figma에 가져왔습니다!"
@@ -784,13 +839,15 @@ AI: "Badge 컴포넌트를 Figma에 가져왔습니다!"
 User: "Storybook의 모든 Button variant를 Figma로 동기화해줘"
 
 AI Agent:
-1. [Playwright] navigate("http://localhost:6006")
-2. [Playwright] 사이드바에서 Button 스토리 목록 수집
-3. for each variant in ["primary", "secondary", "outline", "ghost"]:
+1. [Sigma] get_playwright_scripts() → 스크립트 경로 확인
+2. [Playwright] navigate("http://localhost:6006")
+3. [Playwright] 사이드바에서 Button 스토리 목록 수집
+4. for each variant in ["primary", "secondary", "outline", "ghost"]:
    - [Playwright] click(variant story)
-   - [Playwright] Extension 추출 버튼 클릭
-   - [Sigma] figma_create_frame({ id: 최신, name: `Button/${variant}` })
-4. 완료
+   - [Playwright] addScriptTag(extractor.standalone.js) (페이지 변경 시 재inject)
+   - [Playwright] evaluate(() => window.__sigma__.extract('.storybook-button'))
+   - [Sigma] sigma_create_frame({ token, data, name: `Button/${variant}` })
+5. 완료
 
 AI: "4개의 Button variant를 Figma에 동기화했습니다!"
 ```
@@ -805,14 +862,13 @@ sigma/
 │   ├── chrome-extension/         # Chrome Extension
 │   │   ├── src/
 │   │   │   ├── background.ts     # Service Worker
-│   │   │   ├── content.ts        # Content Script (추출 로직)
+│   │   │   ├── content.ts        # Content Script (shared/extractor 사용)
 │   │   │   ├── popup/            # Popup UI
 │   │   │   │   ├── popup.html
 │   │   │   │   ├── popup.ts
 │   │   │   │   └── popup.css
-│   │   │   └── extractor/        # 컴포넌트 추출 로직
+│   │   │   └── extractor/        # Extension 전용 래퍼
 │   │   │       ├── index.ts
-│   │   │       ├── styles.ts     # getComputedStyle 처리
 │   │   │       └── formats.ts    # HTML/JSON 변환
 │   │   ├── manifest.json
 │   │   └── package.json
@@ -822,7 +878,9 @@ sigma/
 │   │   │   ├── index.ts          # 메인 엔트리
 │   │   │   ├── mcp/              # MCP Server
 │   │   │   │   ├── server.ts
-│   │   │   │   └── tools.ts
+│   │   │   │   └── tools.ts      # get_playwright_scripts 포함
+│   │   │   ├── scripts/          # Playwright 스크립트 관리
+│   │   │   │   └── registry.ts   # 스크립트 메타데이터 레지스트리
 │   │   │   ├── http/             # HTTP Server
 │   │   │   │   ├── server.ts
 │   │   │   │   └── routes/
@@ -851,11 +909,19 @@ sigma/
 │   │   ├── manifest.json
 │   │   └── package.json
 │   │
-│   └── shared/                   # 공유 타입/유틸
+│   └── shared/                   # 공유 타입/유틸/추출 로직
 │       ├── src/
 │       │   ├── types.ts          # ExtractedNode 등 공통 타입
+│       │   ├── colors.ts         # 색상 파싱 유틸
+│       │   ├── extractor/        # 추출 로직 (Single Source of Truth)
+│       │   │   ├── core.ts       # extractElement 등 16개 함수
+│       │   │   └── index.ts      # Barrel export
+│       │   ├── extractor-standalone-entry.ts  # IIFE 진입점 (window.__sigma__)
 │       │   ├── utils.ts          # 공통 유틸리티
 │       │   └── constants.ts      # 포트 번호 등 상수
+│       ├── build.ts              # esbuild (TS → standalone JS)
+│       ├── dist/                 # 빌드 결과
+│       │   └── extractor.standalone.js  # Playwright inject용 IIFE 번들
 │       └── package.json
 │
 ├── CLAUDE.md                     # 아키텍처 및 구현 명세

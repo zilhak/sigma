@@ -22,11 +22,16 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 ---
 
-## Chrome Extension - 컴포넌트 추출 기능
+## 컴포넌트 추출 기능
 
-> **중요:** 웹 컴포넌트 추출은 반드시 Chrome Extension을 통해 수행합니다.
+웹 컴포넌트 추출은 두 가지 방식으로 수행합니다:
 
-Chrome Extension은 웹페이지의 **모든 DOM 요소를 완전한 ExtractedNode JSON으로 추출**하는 핵심 기능을 제공합니다.
+| 방식 | 사용 주체 | 용도 |
+|------|-----------|------|
+| **Chrome Extension** | 사용자 (수동) | UI로 직접 컴포넌트 선택하여 추출 |
+| **Standalone Extractor** | AI Agent / Playwright | 자동화된 컴포넌트 추출 |
+
+두 방식 모두 `packages/shared/src/extractor/core.ts`의 동일한 추출 로직을 사용합니다.
 
 ### 추출되는 정보
 
@@ -38,7 +43,7 @@ Chrome Extension은 웹페이지의 **모든 DOM 요소를 완전한 ExtractedNo
 | **텍스트** | 직접 텍스트 콘텐츠 (자식 제외) |
 | **SVG** | inline SVG는 `svgString`으로 전체 마크업 캡처 |
 
-### 사용 방법
+### Chrome Extension (수동)
 
 1. Extension 아이콘 클릭 → 팝업 열기
 2. **[선택 모드]** 클릭 → 웹페이지에서 컴포넌트 hover/클릭
@@ -46,16 +51,18 @@ Chrome Extension은 웹페이지의 **모든 DOM 요소를 완전한 ExtractedNo
    - **[복사]**: 클립보드에 JSON 복사 (서버 없이 사용 가능)
    - **[서버 전송]**: 서버로 POST → Figma로 자동 전송
 
-### AI Agent 자동화 시
+### AI Agent 자동화 시 (Standalone Extractor)
 
-Playwright로 브라우저를 조작할 때도 **Extension의 추출 기능을 사용**해야 합니다:
+Playwright로 브라우저를 조작할 때는 **Standalone Extractor**를 사용합니다:
 
 ```
-❌ 잘못된 방법: playwright_evaluate()로 직접 DOM 추출 로직 작성
-✅ 올바른 방법: Playwright로 Extension 팝업 조작 → Extension이 추출 → 서버 전송
+❌ 잘못된 방법: page.evaluate()로 직접 DOM 추출 로직 작성
+✅ 올바른 방법: Sigma MCP의 get_playwright_scripts로 경로 확인
+               → page.addScriptTag()로 inject
+               → window.__sigma__.extract() 호출
 ```
 
-Extension의 `content.ts`에 구현된 `extractElement()` 함수가 모든 추출 로직을 담당합니다.
+`packages/shared/dist/extractor.standalone.js`가 빌드된 추출 스크립트입니다. Extension 설치 없이 자동화 가능합니다.
 
 ## 기술 스택
 
@@ -126,6 +133,7 @@ AI Agent:
 | `figma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
 | `list_saved` | 저장된 컴포넌트 목록 |
 | `save_extracted` | 컴포넌트 저장 |
+| `get_playwright_scripts` | Playwright용 스크립트 경로 + API 정보 반환 |
 
 ## 문서
 

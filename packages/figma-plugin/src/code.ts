@@ -430,8 +430,8 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
   const height = typeof styles.height === 'number' ? styles.height : boundingRect.height;
   frame.resize(Math.max(width, 1), Math.max(height, 1));
 
-  // 레이아웃 모드 설정
-  applyLayoutMode(frame, styles);
+  // 레이아웃 모드 설정 (children 전달하여 inline-block 자식 감지)
+  applyLayoutMode(frame, styles, children);
 
   // Auto Layout 크기 모드 설정 (FIXED가 아닌 적절한 모드 사용)
   if (frame.layoutMode !== 'NONE') {
@@ -794,10 +794,10 @@ function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot: boole
   }
 
   // 가로(primary/counter) 설정
-  // width: auto 또는 fit-content → HUG (콘텐츠에 맞춤)
+  // width: auto → HUG (콘텐츠에 맞춤)
   // width: 100% → FILL (부모에 맞춤) - Figma에서는 layoutGrow로 처리
   // width: number → FIXED
-  if (width === 'auto' || width === 'fit-content') {
+  if (width === 'auto') {
     // HORIZONTAL 레이아웃이면 primaryAxis가 width
     if (frame.layoutMode === 'HORIZONTAL') {
       frame.primaryAxisSizingMode = 'AUTO'; // HUG
@@ -813,7 +813,7 @@ function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot: boole
   }
 
   // height 설정
-  if (height === 'auto' || height === 'fit-content') {
+  if (height === 'auto') {
     if (frame.layoutMode === 'VERTICAL') {
       frame.primaryAxisSizingMode = 'AUTO'; // HUG
     } else {
@@ -830,8 +830,11 @@ function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot: boole
 
 /**
  * 레이아웃 모드 적용
+ * @param frame - Figma 프레임
+ * @param styles - 부모 스타일
+ * @param children - 자식 노드 배열 (선택, inline-block 자식 감지용)
  */
-function applyLayoutMode(frame: FrameNode, styles: ComputedStyles) {
+function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, children?: ExtractedNode[]) {
   const { display, flexDirection } = styles;
 
   if (display === 'flex' || display === 'inline-flex') {
@@ -847,8 +850,17 @@ function applyLayoutMode(frame: FrameNode, styles: ComputedStyles) {
   } else if (display === 'inline' || display === 'inline-block') {
     frame.layoutMode = 'HORIZONTAL';
   } else {
-    // block 등 기본값
-    frame.layoutMode = 'VERTICAL';
+    // block 등 기본값 → VERTICAL
+    // 단, 자식이 inline-block인 경우 HORIZONTAL로 변경 (CSS 인라인 흐름 모방)
+    const hasInlineBlockChildren = children && children.length > 0 && children.some(
+      child => child.styles && (child.styles.display === 'inline-block' || child.styles.display === 'inline')
+    );
+
+    if (hasInlineBlockChildren) {
+      frame.layoutMode = 'HORIZONTAL';
+    } else {
+      frame.layoutMode = 'VERTICAL';
+    }
   }
 
   // 갭 설정

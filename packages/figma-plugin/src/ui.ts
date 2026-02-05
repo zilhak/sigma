@@ -511,7 +511,7 @@ function connectWebSocket() {
 }
 
 // Handle server messages
-function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string }) {
+function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string; pluginId?: string }) {
   switch (msg.type) {
     case 'REGISTERED':
       // 서버에서 할당받은 고유 플러그인 ID 저장
