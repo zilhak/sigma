@@ -42,6 +42,8 @@ interface ChunkBuffer {
   name?: string;
   position?: { x: number; y: number };
   pageId?: string;
+  operation?: 'create' | 'update';
+  nodeId?: string;
 }
 let chunkBuffer: ChunkBuffer | null = null;
 // 페이지 정보 타입
@@ -309,6 +311,42 @@ window.onmessage = (event) => {
       }
       break;
 
+    case 'update-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'UPDATE_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log(`프레임 업데이트 완료: ${(msg.result as any)?.name !== undefined ? (msg.result as any).name : (msg.result as any)?.nodeId}`, 'success');
+        } else {
+          log(`프레임 업데이트 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'modify-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'MODIFY_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log('노드 조작 완료', 'success');
+        } else {
+          log(`노드 조작 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
+
     case 'info':
       log(msg.message, 'info');
       break;
@@ -511,7 +549,7 @@ function connectWebSocket() {
 }
 
 // Handle server messages
-function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string; pluginId?: string }) {
+function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string; pluginId?: string; method?: string; args?: Record<string, unknown>; operation?: string }) {
   switch (msg.type) {
     case 'REGISTERED':
       // 서버에서 할당받은 고유 플러그인 ID 저장
@@ -546,15 +584,17 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
 
     // === Chunked transfer handlers ===
     case 'CHUNK_START':
-      log(`청크 전송 시작: ${msg.totalChunks}개 청크 예정 (${msg.format || 'json'})${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
+      log(`청크 전송 시작: ${msg.totalChunks}개 청크 예정 (${msg.format !== undefined ? msg.format : 'json'})${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
       chunkBuffer = {
-        commandId: msg.commandId || '',
-        totalChunks: msg.totalChunks || 0,
+        commandId: msg.commandId !== undefined ? msg.commandId : '',
+        totalChunks: msg.totalChunks !== undefined ? msg.totalChunks : 0,
         receivedChunks: new Map(),
-        format: msg.format || 'json',
+        format: msg.format !== undefined ? msg.format : 'json',
         name: msg.name,
         position: msg.position,
         pageId: msg.pageId,
+        operation: (msg as any).operation !== undefined ? (msg as any).operation : 'create',
+        nodeId: msg.nodeId,
       };
       break;
 
@@ -595,27 +635,51 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       log('청크 조립 중...', 'info');
       let assembledData = '';
       for (let i = 0; i < chunkBuffer.totalChunks; i++) {
-        assembledData += chunkBuffer.receivedChunks.get(i) || '';
+        assembledData += chunkBuffer.receivedChunks.get(i) !== undefined ? chunkBuffer.receivedChunks.get(i) : '';
       }
 
       try {
-        if (chunkBuffer.format === 'html') {
-          // HTML 형식
-          log(`프레임 생성 요청 (청크/HTML): ${chunkBuffer.name || 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`, 'info');
-          sendToPlugin('create-from-html', assembledData, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
-        } else {
-          // JSON 형식
-          const data = JSON.parse(assembledData);
-          log(`프레임 생성 요청 (청크/JSON): ${chunkBuffer.name || 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`, 'info');
-          sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
-        }
+        if (chunkBuffer.operation === 'update') {
+          // UPDATE_FRAME via chunks
+          const updateData = chunkBuffer.format === 'html'
+            ? assembledData
+            : JSON.parse(assembledData);
 
-        if (ws) ws.send(JSON.stringify({
-          type: 'RESULT',
-          commandId: msg.commandId,
-          success: true,
-        }));
-        log(`프레임 생성 완료 (청크): ${chunkBuffer.name || 'Unnamed'}`, 'success');
+          log(`프레임 업데이트 요청 (청크/${chunkBuffer.format}): ${chunkBuffer.nodeId}`, 'info');
+
+          parent.postMessage({
+            pluginMessage: {
+              type: 'update-frame',
+              nodeId: chunkBuffer.nodeId,
+              format: chunkBuffer.format,
+              data: updateData,
+              name: chunkBuffer.name,
+              pageId: chunkBuffer.pageId,
+            },
+          }, '*');
+
+          pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+          // Don't send RESULT here - wait for update-result from code.ts
+        } else {
+          // CREATE_FRAME via chunks (existing logic)
+          if (chunkBuffer.format === 'html') {
+            // HTML 형식
+            log(`프레임 생성 요청 (청크/HTML): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`, 'info');
+            sendToPlugin('create-from-html', assembledData, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
+          } else {
+            // JSON 형식
+            const data = JSON.parse(assembledData);
+            log(`프레임 생성 요청 (청크/JSON): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`, 'info');
+            sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
+          }
+
+          if (ws) ws.send(JSON.stringify({
+            type: 'RESULT',
+            commandId: msg.commandId,
+            success: true,
+          }));
+          log(`프레임 생성 완료 (청크): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}`, 'success');
+        }
       } catch (err) {
         log(`청크 파싱 오류: ${err}`, 'error');
         if (ws) ws.send(JSON.stringify({
@@ -646,6 +710,49 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       pendingCommandId = msg.commandId || null;
       sendToPlugin('delete-frame', undefined, undefined, undefined, undefined, msg.nodeId, msg.pageId);
       break;
+
+    case 'UPDATE_FRAME': {
+      const updateFormat = msg.format !== undefined ? msg.format : 'json';
+      const pageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
+      log(`프레임 업데이트 요청: ${msg.nodeId} (${updateFormat})${pageInfo}`, 'info');
+
+      // Use direct postMessage (sendToPlugin doesn't support format field)
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'update-frame',
+            nodeId: msg.nodeId,
+            format: updateFormat,
+            data: updateFormat === 'html' ? msg.html : msg.data,
+            name: msg.name,
+            pageId: msg.pageId,
+          },
+        },
+        '*'
+      );
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+      break;
+    }
+
+    case 'MODIFY_NODE': {
+      log(`노드 조작 요청: ${msg.nodeId} / ${msg.method}`, 'info');
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'modify-node',
+            nodeId: msg.nodeId,
+            method: msg.method,
+            args: msg.args,
+          },
+        },
+        '*'
+      );
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+      break;
+    }
 
     case 'PING':
       if (ws) ws.send(JSON.stringify({ type: 'PONG' }));

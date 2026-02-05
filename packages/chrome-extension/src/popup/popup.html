@@ -17,18 +17,32 @@
     </header>
 
     <main class="main">
-      <!-- 선택 모드 버튼 -->
-      <button class="btn btn-primary" id="selectBtn">
-        🎯 컴포넌트 선택
-      </button>
+      <!-- 선택 모드 버튼 그룹 -->
+      <div class="select-buttons">
+        <button class="btn btn-primary" id="selectBtn">
+          🎯 선택
+        </button>
+        <button class="btn btn-batch" id="batchSelectBtn">
+          🎯 일괄 선택
+        </button>
+      </div>
 
-      <!-- 추출된 데이터 미리보기 -->
+      <!-- 단일 추출 미리보기 -->
       <div class="preview" id="preview" style="display: none;">
         <div class="preview-header">
           <span id="previewTag">-</span>
           <span id="previewClass">-</span>
         </div>
         <div class="preview-size" id="previewSize">-</div>
+      </div>
+
+      <!-- 배치 추출 미리보기 -->
+      <div class="preview batch-preview" id="batchPreview" style="display: none;">
+        <div class="preview-header">
+          <span class="batch-icon">📦</span>
+          <span id="batchCount">0</span>개 컴포넌트 선택됨
+        </div>
+        <div class="batch-tags" id="batchTags"></div>
       </div>
 
       <!-- 형식 선택 -->

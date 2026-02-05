@@ -218,6 +218,36 @@ export class FigmaWebSocketServer {
           }
         }
         break;
+
+      case 'UPDATE_RESULT': {
+        const updateCommandId = message.commandId as string;
+        const updatePending = this.pendingCommands.get(updateCommandId);
+        if (updatePending) {
+          clearTimeout(updatePending.timeout);
+          this.pendingCommands.delete(updateCommandId);
+          if (message.success) {
+            updatePending.resolve(message.result);
+          } else {
+            updatePending.reject(new Error(message.error as string || 'Update failed'));
+          }
+        }
+        break;
+      }
+
+      case 'MODIFY_RESULT': {
+        const modifyCommandId = message.commandId as string;
+        const modifyPending = this.pendingCommands.get(modifyCommandId);
+        if (modifyPending) {
+          clearTimeout(modifyPending.timeout);
+          this.pendingCommands.delete(modifyCommandId);
+          if (message.success) {
+            modifyPending.resolve(message.result);
+          } else {
+            modifyPending.reject(new Error(message.error as string || 'Modify failed'));
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -521,6 +551,180 @@ export class FigmaWebSocketServer {
       });
 
       console.log(`[WebSocket] Sending DELETE_FRAME to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Update an existing frame's content
+   */
+  async updateFrame(
+    nodeId: string,
+    format: 'json' | 'html' = 'json',
+    data?: any | null,
+    html?: string,
+    name?: string,
+    pluginId?: string,
+    pageId?: string
+  ): Promise<{ nodeId: string; name: string; childCount: number }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    // Determine payload
+    const payload = format === 'html' ? html : JSON.stringify(data);
+    if (!payload) {
+      throw new Error(format === 'html' ? 'HTML 데이터가 필요합니다' : 'JSON 데이터가 필요합니다');
+    }
+
+    const dataSize = Buffer.byteLength(payload, 'utf-8');
+
+    // Use chunked transfer for >1MB
+    if (dataSize > CHUNK_THRESHOLD) {
+      console.log(`[WebSocket] Large update data detected (${(dataSize / 1024 / 1024).toFixed(2)}MB), using chunked transfer to ${targetPlugin.id}`);
+      return this.updateFrameChunked(targetPlugin.ws, nodeId, payload, name, format, pageId);
+    }
+
+    // Normal transfer
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'UPDATE_FRAME',
+        commandId,
+        nodeId,
+        format,
+        data: format === 'json' ? data : undefined,
+        html: format === 'html' ? html : undefined,
+        name,
+        pageId,
+      });
+
+      console.log(`[WebSocket] Sending UPDATE_FRAME to ${targetPlugin.id} (node: ${nodeId})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Chunked transfer for update (>1MB)
+   */
+  private async updateFrameChunked(
+    ws: WebSocket,
+    nodeId: string,
+    payload: string,
+    name?: string,
+    format: 'json' | 'html' = 'json',
+    pageId?: string
+  ): Promise<{ nodeId: string; name: string; childCount: number }> {
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const totalChunks = Math.ceil(payload.length / CHUNK_SIZE);
+
+    console.log(`[WebSocket] Sending ${totalChunks} update chunks for command ${commandId}`);
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (chunked update)'));
+      }, 60000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      // 1. CHUNK_START with operation='update'
+      ws.send(JSON.stringify({
+        type: 'CHUNK_START',
+        commandId,
+        totalChunks,
+        format,
+        name,
+        pageId,
+        operation: 'update',
+        nodeId,
+      }));
+
+      // 2. Send CHUNKs
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, payload.length);
+        ws.send(JSON.stringify({
+          type: 'CHUNK',
+          commandId,
+          index: i,
+          data: payload.slice(start, end),
+        }));
+      }
+
+      // 3. CHUNK_END
+      ws.send(JSON.stringify({
+        type: 'CHUNK_END',
+        commandId,
+      }));
+
+      console.log(`[WebSocket] All ${totalChunks} update chunks sent for command ${commandId}`);
+    });
+  }
+
+  /**
+   * Execute a modify operation on a Figma node
+   */
+  async modifyNode(
+    nodeId: string,
+    method: string,
+    args: Record<string, unknown>,
+    pluginId?: string
+  ): Promise<unknown> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'MODIFY_NODE',
+        commandId,
+        nodeId,
+        method,
+        args,
+      });
+
+      console.log(`[WebSocket] Sending MODIFY_NODE to ${targetPlugin.id} (node: ${nodeId}, method: ${method})`);
       targetPlugin.ws.send(message);
     });
   }

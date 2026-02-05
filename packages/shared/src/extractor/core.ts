@@ -357,6 +357,76 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
     return null;
   }
 
+  // Canvas 요소인 경우: 이미지 데이터 URL로 변환
+  if (tagName === 'canvas') {
+    const canvas = element as unknown as HTMLCanvasElement;
+    let imageDataUrl: string | undefined;
+    try {
+      imageDataUrl = canvas.toDataURL('image/png');
+    } catch {
+      // CORS 또는 보안 제한으로 데이터 추출 불가
+    }
+
+    return {
+      id: generateId(),
+      tagName: 'canvas',
+      className: getClassName(element),
+      textContent: '',
+      attributes: getAttributes(element as HTMLElement),
+      styles: extractStyles(computedStyle),
+      boundingRect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      },
+      children: [],
+      imageDataUrl,
+    };
+  }
+
+  // 이미지 요소인 경우: src 또는 data URL 캡처
+  if (tagName === 'img') {
+    const img = element as unknown as HTMLImageElement;
+    let imageDataUrl: string | undefined;
+
+    if (img.src && img.src.startsWith('data:')) {
+      // data URL인 경우 그대로 사용
+      imageDataUrl = img.src;
+    } else if (img.complete && img.naturalWidth > 0) {
+      // 로드된 이미지를 canvas로 변환
+      try {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = img.naturalWidth;
+        tempCanvas.height = img.naturalHeight;
+        const ctx = tempCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          imageDataUrl = tempCanvas.toDataURL('image/png');
+        }
+      } catch {
+        // CORS 제한으로 변환 불가
+      }
+    }
+
+    return {
+      id: generateId(),
+      tagName: 'img',
+      className: getClassName(element),
+      textContent: '',
+      attributes: getAttributes(element as HTMLElement),
+      styles: extractStyles(computedStyle),
+      boundingRect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      },
+      children: [],
+      imageDataUrl,
+    };
+  }
+
   // SVG 요소인 경우
   if (tagName === 'svg' || element instanceof SVGSVGElement) {
     const svgWithStyles = serializeSvgWithComputedStyles(element as SVGSVGElement);

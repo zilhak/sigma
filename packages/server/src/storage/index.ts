@@ -12,7 +12,7 @@ export interface StoredComponent {
 }
 
 const STORAGE_DIR = join(homedir(), '.sigma', 'extracted');
-const MAX_COMPONENTS = 20;
+const MAX_COMPONENTS = 100;
 
 // Ensure storage directory exists
 async function ensureDir() {

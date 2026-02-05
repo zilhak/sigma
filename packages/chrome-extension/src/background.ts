@@ -3,6 +3,7 @@ import type { ExtractedNode, ExtractPayload, ApiResponse } from '@sigma/shared';
 
 // 현재 추출된 데이터 저장
 let currentExtractedData: ExtractedNode | null = null;
+let batchExtractedData: ExtractedNode[] = [];
 
 /**
  * 메시지 리스너
@@ -65,6 +66,78 @@ async function handleMessage(
     case 'CHECK_SERVER_STATUS':
       const isConnected = await checkServerStatus();
       sendResponse({ success: true, connected: isConnected });
+      break;
+
+    case 'BATCH_ELEMENT_ADDED':
+      // 배치 모드에서 요소가 추가될 때
+      batchExtractedData.push(message.data as ExtractedNode);
+      chrome.runtime.sendMessage({
+        type: 'BATCH_UPDATE',
+        data: batchExtractedData,
+        count: batchExtractedData.length,
+      });
+      sendResponse({ success: true });
+      break;
+
+    case 'BATCH_EXTRACTION_COMPLETE':
+      // 배치 모드 완료
+      batchExtractedData = (message.data as ExtractedNode[]) || [];
+      currentExtractedData = null;
+      chrome.runtime.sendMessage({
+        type: 'BATCH_COMPLETE',
+        data: batchExtractedData,
+      });
+      sendResponse({ success: true });
+      break;
+
+    case 'BATCH_CANCELLED':
+      batchExtractedData = [];
+      chrome.runtime.sendMessage({ type: 'BATCH_RESET' });
+      sendResponse({ success: true });
+      break;
+
+    case 'GET_BATCH_DATA':
+      sendResponse({ success: true, data: batchExtractedData });
+      break;
+
+    case 'COPY_BATCH_TO_CLIPBOARD':
+      if (batchExtractedData.length > 0) {
+        const batchFormat = (message.format as string) || 'json';
+        const batchText =
+          batchFormat === 'json'
+            ? JSON.stringify(batchExtractedData, null, 2)
+            : batchExtractedData.map((node) => convertToHTML(node)).join('\n\n');
+        await copyToClipboard(batchText);
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'No batch data to copy' });
+      }
+      break;
+
+    case 'SEND_BATCH_TO_SERVER':
+      if (batchExtractedData.length > 0) {
+        const batchResults: ApiResponse[] = [];
+        for (let i = 0; i < batchExtractedData.length; i++) {
+          const node = batchExtractedData[i];
+          const batchName = message.name
+            ? `${message.name}-${i + 1}`
+            : `batch-${Date.now()}-${i + 1}`;
+          const result = await sendToServer(
+            node,
+            batchName,
+            (message.format as 'json' | 'html') || 'json'
+          );
+          batchResults.push(result);
+        }
+        const allSuccess = batchResults.every((r) => r.success);
+        sendResponse({
+          success: allSuccess,
+          data: batchResults,
+          error: allSuccess ? undefined : 'Some items failed to send',
+        });
+      } else {
+        sendResponse({ success: false, error: 'No batch data to send' });
+      }
       break;
 
     default:

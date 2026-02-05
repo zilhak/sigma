@@ -28,8 +28,8 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 | 방식 | 사용 주체 | 용도 |
 |------|-----------|------|
-| **Chrome Extension** | 사용자 (수동) | UI로 직접 컴포넌트 선택하여 추출 |
-| **Standalone Extractor** | AI Agent / Playwright | 자동화된 컴포넌트 추출 |
+| **Sigma 확장** (Chrome Extension) | 사용자 (수동) | UI로 직접 컴포넌트 선택하여 추출 |
+| **Sigma 임베드 스크립트** (추출 스크립트) | AI Agent / Playwright | 자동화된 컴포넌트 추출 |
 
 두 방식 모두 `packages/shared/src/extractor/core.ts`의 동일한 추출 로직을 사용합니다.
 
@@ -51,13 +51,13 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
    - **[복사]**: 클립보드에 JSON 복사 (서버 없이 사용 가능)
    - **[서버 전송]**: 서버로 POST → Figma로 자동 전송
 
-### AI Agent 자동화 시 (Standalone Extractor)
+### AI Agent 자동화 시 (Sigma 임베드 스크립트)
 
-Playwright로 브라우저를 조작할 때는 **Standalone Extractor**를 사용합니다:
+Playwright로 브라우저를 조작할 때는 **Sigma 임베드 스크립트**(추출 스크립트)를 사용합니다:
 
 ```
 ❌ 잘못된 방법: page.evaluate()로 직접 DOM 추출 로직 작성
-✅ 올바른 방법: Sigma MCP의 get_playwright_scripts로 경로 확인
+✅ 올바른 방법: Sigma MCP의 get_playwright_scripts로 임베드 스크립트 경로 확인
                → page.addScriptTag()로 inject
                → window.__sigma__.extract() 호출
 ```
@@ -133,7 +133,7 @@ AI Agent:
 | `figma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
 | `list_saved` | 저장된 컴포넌트 목록 |
 | `save_extracted` | 컴포넌트 저장 |
-| `get_playwright_scripts` | Playwright용 스크립트 경로 + API 정보 반환 |
+| `get_playwright_scripts` | Sigma 임베드 스크립트 목록 + 경로 + API 정보 반환 |
 
 ## 문서
 

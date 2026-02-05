@@ -203,3 +203,64 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* Select Button Group */
+.select-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.select-buttons .btn {
+  flex: 1;
+}
+
+.btn-batch {
+  background: #22c55e;
+  color: white;
+}
+
+.btn-batch:hover:not(:disabled) {
+  background: #16a34a;
+}
+
+/* Batch Preview */
+.batch-preview .preview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.batch-preview .batch-icon {
+  font-size: 16px;
+}
+
+.batch-preview #batchCount {
+  font-weight: 700;
+  color: #22c55e;
+  font-size: 16px;
+}
+
+.batch-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.batch-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #065f46;
+}
+
+.batch-tag .tag-num {
+  font-weight: 600;
+  color: #22c55e;
+}

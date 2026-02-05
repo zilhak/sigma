@@ -12,7 +12,9 @@
 |------|------|-------------|
 | **Sigma 플러그인** | Figma Plugin - JSON/HTML을 Figma 프레임으로 변환 | `packages/figma-plugin/` |
 | **Sigma 서버** | 중앙 서버 - MCP, HTTP API, WebSocket 통신 허브 | `packages/server/` |
-| **Sigma 확장** | Chrome Extension - 웹 컴포넌트 추출 | `packages/chrome-extension/` |
+| **Sigma 확장** | Chrome Extension - 웹 컴포넌트 추출 (사용자 수동) | `packages/chrome-extension/` |
+| **Sigma 임베드 스크립트** | 웹 페이지에 `addScriptTag()`로 주입하는 자체 완결형 JS 번들 모음. AI Agent / Playwright 자동화용. 비공식적으로 "시그마 스크립트"라고도 부름 | `packages/shared/dist/` |
+| **추출 스크립트** | Sigma 임베드 스크립트 중 하나. `window.__sigma__` API로 DOM → ExtractedNode JSON 추출. 소스: `extractor/core.ts`, 빌드 결과: `extractor.standalone.js` | `packages/shared/dist/extractor.standalone.js` |
 
 ---
 
@@ -44,12 +46,12 @@ sigma/
 
 | 방식 | 사용 주체 | 용도 |
 |------|-----------|------|
-| **Chrome Extension** | 사용자 (수동) | UI로 직접 컴포넌트 선택하여 추출 |
-| **Standalone Extractor** | AI Agent / Playwright | 자동화된 컴포넌트 추출 |
+| **Sigma 확장** (Chrome Extension) | 사용자 (수동) | UI로 직접 컴포넌트 선택하여 추출 |
+| **추출 스크립트** (Sigma 임베드 스크립트) | AI Agent / Playwright | 자동화된 컴포넌트 추출 |
 
-#### Standalone Extractor (Playwright 자동화용)
+#### 추출 스크립트 (Playwright 자동화용)
 
-Playwright에서 컴포넌트를 추출할 때는 **Standalone Extractor**를 사용합니다.
+Playwright에서 컴포넌트를 추출할 때는 **추출 스크립트** (Sigma 임베드 스크립트 중 하나)를 사용합니다.
 
 **소스:** `packages/shared/src/extractor/core.ts` (Single Source of Truth)
 **빌드 결과:** `packages/shared/dist/extractor.standalone.js` (esbuild IIFE 번들)
@@ -617,17 +619,17 @@ const mcpTools = [
     }
   },
 
-  // === Playwright 지원 ===
+  // === Sigma 임베드 스크립트 ===
   {
     name: "get_playwright_scripts",
-    description: "Playwright에서 사용할 수 있는 스크립트 목록 반환 (경로 + API 정보)",
+    description: "Sigma 임베드 스크립트 목록 반환 (경로 + API 정보). 추출 스크립트 등 포함",
     parameters: {}
     // 반환값: [{ name, path, exists, api: [...], usage }]
   }
 ];
 ```
 
-**Note:** Extension 제어 Tools는 없음. Playwright 자동화 시 `get_playwright_scripts`로 스크립트 경로를 확인한 후 `page.addScriptTag()`로 inject.
+**Note:** Extension 제어 Tools는 없음. Playwright 자동화 시 `get_playwright_scripts`로 Sigma 임베드 스크립트 경로를 확인한 후 `page.addScriptTag()`로 inject.
 
 #### 디렉토리 구조
 ```
@@ -750,7 +752,7 @@ startServerDetection();
 
 **목적:** 브라우저 자동화 (별도 MCP)
 
-MCP 자동화 시 Playwright로 브라우저를 제어하고, Standalone Extractor로 컴포넌트를 추출합니다.
+MCP 자동화 시 Playwright로 브라우저를 제어하고, Sigma 임베드 스크립트(추출 스크립트)로 컴포넌트를 추출합니다.
 
 ```
 AI Agent
@@ -919,9 +921,9 @@ sigma/
 │       │   ├── extractor-standalone-entry.ts  # IIFE 진입점 (window.__sigma__)
 │       │   ├── utils.ts          # 공통 유틸리티
 │       │   └── constants.ts      # 포트 번호 등 상수
-│       ├── build.ts              # esbuild (TS → standalone JS)
-│       ├── dist/                 # 빌드 결과
-│       │   └── extractor.standalone.js  # Playwright inject용 IIFE 번들
+│       ├── build.ts              # esbuild (TS → Sigma 임베드 스크립트)
+│       ├── dist/                 # Sigma 임베드 스크립트 빌드 결과
+│       │   └── extractor.standalone.js  # 추출 스크립트 (IIFE 번들)
 │       └── package.json
 │
 ├── CLAUDE.md                     # 아키텍처 및 구현 명세

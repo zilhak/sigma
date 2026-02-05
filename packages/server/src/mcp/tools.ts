@@ -289,6 +289,83 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
       required: ['token', 'nodeId'],
     },
   },
+  {
+    name: 'sigma_update_frame',
+    description: `Figma에서 기존 프레임의 내용을 새 데이터로 전체 교체합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+프레임 노드 자체는 유지하고, 자식을 모두 제거한 뒤 새 데이터로 재생성합니다.
+루트 레벨 스타일(크기, 배경, 패딩, 레이아웃 등)도 새 데이터에 맞게 업데이트됩니다.
+
+**중요: format은 반드시 'json'을 사용하세요.**`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '업데이트할 프레임 노드 ID (예: "123:456")',
+        },
+        data: {
+          type: 'object',
+          description: 'ExtractedNode JSON 데이터 (format이 json일 때)',
+        },
+        html: {
+          type: 'string',
+          description: 'HTML 문자열 (format이 html일 때)',
+        },
+        format: {
+          type: 'string',
+          enum: ['json', 'html'],
+          default: 'json',
+          description: "데이터 형식. 'json' 권장 (기본값)",
+        },
+        name: {
+          type: 'string',
+          description: '새 프레임 이름 (선택, 지정하지 않으면 기존 이름 유지)',
+        },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+  {
+    name: 'sigma_modify_node',
+    description: `Figma 노드에 개별 조작을 수행합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+허용된 메서드만 실행 가능하며, 허용되지 않은 메서드를 호출하면 사용 가능한 전체 메서드 목록이 반환됩니다.
+
+**사용 가능한 메서드:**
+- Basic: rename, resize, move, setOpacity, setVisible, setLocked, remove
+- Visual: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode
+- Layout: setLayoutMode, setPadding, setItemSpacing, setClipsContent, setPrimaryAxisSizingMode, setCounterAxisSizingMode, setPrimaryAxisAlignItems, setCounterAxisAlignItems
+- Text: setCharacters, setFontSize, setTextAlignHorizontal`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '대상 노드 ID (예: "123:456")',
+        },
+        method: {
+          type: 'string',
+          description: '실행할 메서드 이름 (예: "rename", "resize", "setSolidFill")',
+        },
+        args: {
+          type: 'object',
+          description: '메서드에 전달할 인자 (메서드별 다름)',
+        },
+      },
+      required: ['token', 'nodeId', 'method'],
+    },
+  },
 
   // === Combined Tools (토큰 필수) ===
   {
@@ -930,6 +1007,186 @@ export async function handleTool(
             },
           ],
         };
+      }
+
+      case 'sigma_update_frame': {
+        const updateToken = args.token as string;
+        const updateValidation = validateToken(updateToken);
+
+        if (!updateValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: updateValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: updatePluginId, pageId: updatePageId } = getTargetFromBinding(updateValidation.binding);
+
+        if (updatePluginId) {
+          const targetPlugin = wsServer.getPluginById(updatePluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${updatePluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const updateFormat = (args.format as 'json' | 'html') || 'json';
+        const updateNodeId = args.nodeId as string;
+
+        if (updateFormat === 'html') {
+          if (!args.html) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'html 필드가 필요합니다' }) }],
+            };
+          }
+          const result = await wsServer.updateFrame(
+            updateNodeId, 'html', null, args.html as string,
+            args.name as string | undefined, updatePluginId, updatePageId
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: '프레임 내용이 업데이트되었습니다',
+                  ...result,
+                  target: {
+                    pluginId: updatePluginId || '(default)',
+                    pageId: updatePageId || '(current)',
+                  },
+                  format: 'html',
+                }),
+              },
+            ],
+          };
+        } else {
+          if (!args.data) {
+            return {
+              content: [{ type: 'text', text: JSON.stringify({ error: 'data 필드가 필요합니다' }) }],
+            };
+          }
+          const result = await wsServer.updateFrame(
+            updateNodeId, 'json', args.data as any, undefined,
+            args.name as string | undefined, updatePluginId, updatePageId
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: '프레임 내용이 업데이트되었습니다',
+                  ...result,
+                  target: {
+                    pluginId: updatePluginId || '(default)',
+                    pageId: updatePageId || '(current)',
+                  },
+                  format: 'json',
+                }),
+              },
+            ],
+          };
+        }
+      }
+
+      case 'sigma_modify_node': {
+        const modifyToken = args.token as string;
+        const modifyValidation = validateToken(modifyToken);
+
+        if (!modifyValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: modifyValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: modifyPluginId } = getTargetFromBinding(modifyValidation.binding);
+
+        if (modifyPluginId) {
+          const targetPlugin = wsServer.getPluginById(modifyPluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${modifyPluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const modifyNodeId = args.nodeId as string;
+        const modifyMethod = args.method as string;
+        const modifyArgs = (args.args as Record<string, unknown>) || {};
+
+        try {
+          const modifyResult = await wsServer.modifyNode(modifyNodeId, modifyMethod, modifyArgs, modifyPluginId);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `${modifyMethod} 실행 완료`,
+                  nodeId: modifyNodeId,
+                  method: modifyMethod,
+                  result: modifyResult,
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          // Check if the error contains the JSON-formatted available methods list
+          try {
+            const parsedError = JSON.parse(errorMessage);
+            if (parsedError.availableMethods) {
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify({
+                      error: parsedError.error,
+                      availableMethods: parsedError.availableMethods,
+                    }),
+                  },
+                ],
+              };
+            }
+          } catch {
+            // Not a JSON error, return as-is
+          }
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: errorMessage,
+                  nodeId: modifyNodeId,
+                  method: modifyMethod,
+                }),
+              },
+            ],
+          };
+        }
       }
 
       // === Combined Tools ===
