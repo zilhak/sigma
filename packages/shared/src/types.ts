@@ -28,8 +28,16 @@ export interface ComputedStyles {
   flexDirection: string;
   justifyContent: string;
   alignItems: string;
+  alignSelf: string;
   flexWrap: string;
   gap: number;
+  rowGap: number;
+  columnGap: number;
+
+  // Flex 아이템 속성
+  flexGrow: number;
+  flexShrink: number;
+  flexBasis: number | 'auto';
 
   // 크기
   width: number | 'auto';
@@ -83,6 +91,9 @@ export interface ComputedStyles {
   textDecoration: string;
   lineHeight: number;
   letterSpacing: number;
+  whiteSpace: string;
+  textOverflow: string;
+  verticalAlign: string;
 
   // 기타
   opacity: number;
@@ -158,3 +169,77 @@ export type WebSocketMessage =
   | { type: 'RESULT'; commandId: string; success: boolean; error?: string }
   | { type: 'PING' }
   | { type: 'PONG' };
+
+// ============================================
+// Tree Traversal Types (sigma_find_node, sigma_get_tree)
+// ============================================
+
+/**
+ * 트리 탐색 필터
+ */
+export interface TreeFilter {
+  /** 허용할 노드 타입 (예: ['FRAME', 'SECTION']) */
+  types?: string[];
+  /** 이름 정규식 패턴 (예: 'Button.*') */
+  namePattern?: string;
+}
+
+/**
+ * 트리 노드 정보
+ */
+export interface TreeNode {
+  id: string;
+  name: string;
+  type: string;
+  boundingBox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  /** 직접 자식 수 */
+  childCount: number;
+  /** 자식 노드들 (depth > 0일 때만) */
+  children?: TreeNode[];
+  /** 루트부터의 전체 경로 (예: "Section/Frame/Button") */
+  fullPath?: string;
+  /** 타입별 추가 정보 */
+  meta?: {
+    visible?: boolean;
+    locked?: boolean;
+    /** FRAME/COMPONENT만 해당 */
+    layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+    /** TEXT만 해당 (처음 100자) */
+    characters?: string;
+  };
+}
+
+/**
+ * sigma_find_node 결과
+ */
+export interface FindNodeResult {
+  /** 단일 매칭 시 노드 정보 */
+  node?: TreeNode;
+  /** 다중 매칭 시 노드 목록 */
+  matches?: TreeNode[];
+  /** 다중 매칭 시 경고 메시지 */
+  warning?: string;
+}
+
+/**
+ * sigma_get_tree 결과
+ */
+export interface GetTreeResult {
+  pageId: string;
+  pageName: string;
+  /** 탐색 시작점 노드 ID (페이지 루트면 null) */
+  rootNodeId: string | null;
+  /** 탐색 시작점 경로 (path로 지정했을 때) */
+  rootNodePath?: string;
+  /** 자식 노드들 */
+  children: TreeNode[];
+  /** limit에 의해 결과가 잘렸는지 */
+  truncated?: boolean;
+  /** 총 탐색된 노드 수 */
+  totalCount?: number;
+}

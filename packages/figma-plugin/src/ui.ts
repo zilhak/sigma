@@ -403,6 +403,46 @@ window.onmessage = (event) => {
         pendingCommandId = null;
       }
       break;
+
+    case 'find-node-result':
+      if (pendingCommandId && serverConnected && ws) {
+        ws.send(
+          JSON.stringify({
+            type: 'FIND_NODE_RESULT',
+            commandId: pendingCommandId,
+            success: msg.success,
+            result: msg.result,
+            error: msg.error,
+          })
+        );
+        if (msg.success) {
+          log('노드 찾기 완료', 'success');
+        } else {
+          log(`노드 찾기 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'tree-result':
+      if (pendingCommandId && serverConnected && ws) {
+        ws.send(
+          JSON.stringify({
+            type: 'TREE_RESULT',
+            commandId: pendingCommandId,
+            success: msg.success,
+            result: msg.result,
+            error: msg.error,
+          })
+        );
+        if (msg.success) {
+          log('트리 조회 완료', 'success');
+        } else {
+          log(`트리 조회 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
   }
 };
 
@@ -549,7 +589,7 @@ function connectWebSocket() {
 }
 
 // Handle server messages
-function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string; pluginId?: string; method?: string; args?: Record<string, unknown>; operation?: string }) {
+function handleServerMessage(msg: { type: string; data?: unknown; html?: string; format?: 'json' | 'html'; name?: string; commandId?: string; position?: { x: number; y: number }; nodeId?: string; totalChunks?: number; index?: number; clientId?: string; pageId?: string; pluginId?: string; method?: string; args?: Record<string, unknown>; operation?: string; path?: string[]; typeFilter?: string[]; depth?: number; filter?: { type?: string[]; namePattern?: string; visible?: boolean }; limit?: number }) {
   switch (msg.type) {
     case 'REGISTERED':
       // 서버에서 할당받은 고유 플러그인 ID 저장
@@ -786,6 +826,46 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
       pendingCommandId = msg.commandId || null;
       sendToPlugin('test-roundtrip-html', msg.data, msg.name as string | undefined);
       break;
+
+    case 'FIND_NODE': {
+      log(`노드 찾기 요청: ${JSON.stringify(msg.path)}`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'find-node',
+            path: (msg as any).path,
+            typeFilter: (msg as any).typeFilter,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case 'GET_TREE': {
+      log(`트리 조회 요청: nodeId=${(msg as any).nodeId || 'root'}, depth=${(msg as any).depth || 1}`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'get-tree',
+            nodeId: msg.nodeId,
+            path: (msg as any).path,
+            depth: (msg as any).depth,
+            filter: (msg as any).filter,
+            limit: (msg as any).limit,
+            pageId: msg.pageId,
+          },
+        },
+        '*'
+      );
+      break;
+    }
   }
 }
 

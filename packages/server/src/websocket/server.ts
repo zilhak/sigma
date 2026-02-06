@@ -248,6 +248,36 @@ export class FigmaWebSocketServer {
         }
         break;
       }
+
+      case 'FIND_NODE_RESULT': {
+        const findCommandId = message.commandId as string;
+        const findPending = this.pendingCommands.get(findCommandId);
+        if (findPending) {
+          clearTimeout(findPending.timeout);
+          this.pendingCommands.delete(findCommandId);
+          if (message.success) {
+            findPending.resolve(message.result);
+          } else {
+            findPending.reject(new Error(message.error as string || 'Find node failed'));
+          }
+        }
+        break;
+      }
+
+      case 'TREE_RESULT': {
+        const treeCommandId = message.commandId as string;
+        const treePending = this.pendingCommands.get(treeCommandId);
+        if (treePending) {
+          clearTimeout(treePending.timeout);
+          this.pendingCommands.delete(treeCommandId);
+          if (message.success) {
+            treePending.resolve(message.result);
+          } else {
+            treePending.reject(new Error(message.error as string || 'Get tree failed'));
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -725,6 +755,110 @@ export class FigmaWebSocketServer {
       });
 
       console.log(`[WebSocket] Sending MODIFY_NODE to ${targetPlugin.id} (node: ${nodeId}, method: ${method})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * 경로로 노드 찾기
+   */
+  async findNode(
+    path: string | string[],
+    typeFilter?: string,
+    pluginId?: string
+  ): Promise<{ node?: unknown; matches?: unknown[]; warning?: string }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'FIND_NODE',
+        commandId,
+        path,
+        typeFilter,
+      });
+
+      console.log(`[WebSocket] Sending FIND_NODE to ${targetPlugin.id}`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * 트리 구조 조회
+   */
+  async getTree(
+    options: {
+      nodeId?: string;
+      path?: string | string[];
+      depth?: number | 'full';
+      filter?: { types?: string[]; namePattern?: string };
+      limit?: number;
+      pageId?: string;
+    },
+    pluginId?: string
+  ): Promise<{
+    pageId: string;
+    pageName: string;
+    rootNodeId: string | null;
+    rootNodePath?: string;
+    children: unknown[];
+    truncated?: boolean;
+    totalCount?: number;
+  }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, 60000);  // 60초 (트리가 클 수 있음)
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'GET_TREE',
+        commandId,
+        nodeId: options.nodeId,
+        path: options.path,
+        depth: options.depth,
+        filter: options.filter,
+        limit: options.limit,
+        pageId: options.pageId,
+      });
+
+      console.log(`[WebSocket] Sending GET_TREE to ${targetPlugin.id} (depth: ${options.depth || 1})`);
       targetPlugin.ws.send(message);
     });
   }

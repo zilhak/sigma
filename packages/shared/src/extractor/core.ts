@@ -84,8 +84,16 @@ export function extractStyles(style: CSSStyleDeclaration): ComputedStyles {
     flexDirection: style.flexDirection,
     justifyContent: style.justifyContent,
     alignItems: style.alignItems,
+    alignSelf: style.alignSelf,
     flexWrap: style.flexWrap,
     gap: parseSize(style.gap),
+    rowGap: parseSize(style.rowGap),
+    columnGap: parseSize(style.columnGap),
+
+    // Flex 아이템 속성
+    flexGrow: parseFloat(style.flexGrow) || 0,
+    flexShrink: parseFloat(style.flexShrink) || 1,
+    flexBasis: parseAutoSize(style.flexBasis),
 
     // 크기
     width: parseAutoSize(style.width),
@@ -139,6 +147,9 @@ export function extractStyles(style: CSSStyleDeclaration): ComputedStyles {
     textDecoration: style.textDecoration,
     lineHeight: parseSize(style.lineHeight),
     letterSpacing: parseSize(style.letterSpacing),
+    whiteSpace: style.whiteSpace,
+    textOverflow: style.textOverflow,
+    verticalAlign: style.verticalAlign,
 
     // 기타
     opacity: parseFloat(style.opacity),

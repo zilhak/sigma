@@ -20,6 +20,19 @@
 
 ## Claude Code 작업 지침
 
+### MCP 서버 재시작 금지 (CRITICAL)
+
+**절대로 Sigma MCP 서버를 재시작하지 마라.**
+
+Claude Code에서 MCP 서버(`bun run --filter @sigma/server start`)를 종료하거나 재시작하면:
+1. Agent와 MCP 서버의 연결이 끊어짐
+2. Agent가 MCP 도구를 MCP 서버와 재연결할 방법이 **존재하지 않음**
+3. Sigma MCP 도구들(`sigma_login`, `sigma_create_frame` 등)은 세션이 끝날 때까지 사용 불가
+
+**해결책:**
+- Sigma 서버 코드를 수정했다면, 사용자에게 Claude Code를 재시작하라고 안내
+- 또는 사용자에게 터미널에서 직접 서버를 재시작하고 `/mcp` 명령어로 재연결하도록 유도
+
 ### 임시 파일 및 문서 저장 규칙
 
 Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서 등은 **프로젝트 루트의 `.claude/` 폴더**에 저장합니다.

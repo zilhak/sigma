@@ -366,6 +366,112 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
       required: ['token', 'nodeId', 'method'],
     },
   },
+  {
+    name: 'sigma_find_node',
+    description: `경로 또는 이름으로 Figma 노드를 찾습니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+
+**경로 형식:**
+- 문자열: "Section/Frame/Button"
+- 배열: ["Section", "Frame", "Button"]
+
+**반환값:**
+- 단일 매칭: { node: { id, name, type, boundingBox, ... } }
+- 다중 매칭: { matches: [...], warning: "N개의 노드가 발견되었습니다" }
+
+**사용 예시:**
+- "Button" - 최상위에서 Button 이름의 노드 찾기
+- "Components/Button" - Components 안의 Button 찾기
+- "Design System/Buttons/Primary" - 깊은 경로 탐색`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        path: {
+          type: ['string', 'array'],
+          description: '찾을 노드의 경로 ("A/B/C" 또는 ["A", "B", "C"])',
+          items: { type: 'string' },
+        },
+        type: {
+          type: 'string',
+          description: '특정 타입만 필터링 (예: "FRAME", "SECTION", "GROUP")',
+        },
+      },
+      required: ['token', 'path'],
+    },
+  },
+  {
+    name: 'sigma_get_tree',
+    description: `Figma 문서의 계층 구조를 탐색합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+
+**시작점 지정 (둘 중 하나):**
+- nodeId: 노드 ID로 직접 지정
+- path: 경로로 찾아서 시작 ("Design System/Buttons")
+
+**탐색 깊이:**
+- 1 (기본값): 직접 자식만
+- N: N단계까지
+- -1 또는 "full": 전체 서브트리
+
+**필터 옵션:**
+- filter.types: 특정 타입만 (예: ["FRAME", "SECTION"])
+- filter.namePattern: 이름 정규식 (예: "Button.*")
+
+**limit:** 최대 노드 수 (기본 1000, 대용량 방지)
+
+**사용 예시:**
+- 페이지 최상위: sigma_get_tree({ token })
+- 특정 섹션 내부: sigma_get_tree({ token, path: "Design System" })
+- 프레임 전체 구조: sigma_get_tree({ token, nodeId: "1:234", depth: "full" })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '탐색 시작점 노드 ID (예: "123:456")',
+        },
+        path: {
+          type: ['string', 'array'],
+          description: '탐색 시작점 경로 ("A/B/C" 또는 ["A", "B", "C"])',
+          items: { type: 'string' },
+        },
+        depth: {
+          type: ['number', 'string'],
+          description: '탐색 깊이 (숫자, -1, 또는 "full"). 기본값 1',
+        },
+        filter: {
+          type: 'object',
+          description: '필터 조건',
+          properties: {
+            types: {
+              type: 'array',
+              items: { type: 'string' },
+              description: '허용할 노드 타입 (예: ["FRAME", "SECTION"])',
+            },
+            namePattern: {
+              type: 'string',
+              description: '이름 정규식 패턴 (예: "Button.*")',
+            },
+          },
+        },
+        limit: {
+          type: 'number',
+          description: '최대 노드 수 (기본 1000)',
+        },
+      },
+      required: ['token'],
+    },
+  },
 
   // === Combined Tools (토큰 필수) ===
   {
@@ -1185,6 +1291,113 @@ export async function handleTool(
                 }),
               },
             ],
+          };
+        }
+      }
+
+      case 'sigma_find_node': {
+        const token = args.token as string;
+        const path = args.path as string | string[];
+        const typeFilter = args.type as string | undefined;
+
+        // Validate token (also refreshes expiry)
+        const tokenEntry = tokenStore.validateToken(token);
+        if (!tokenEntry) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: '유효하지 않은 토큰입니다. sigma_login으로 새 토큰을 발급받으세요.' }) }],
+          };
+        }
+
+        // Check Figma connection
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다.' }) },
+            ],
+          };
+        }
+
+        // Resolve binding
+        const binding = tokenEntry.binding;
+        const pluginId = binding?.pluginId;
+
+        if (binding) {
+          const plugin = wsServer.getPluginById(pluginId!);
+          if (!plugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${pluginId})이 연결되어 있지 않습니다.` }) },
+              ],
+            };
+          }
+        }
+
+        try {
+          const result = await wsServer.findNode(path, typeFilter, pluginId);
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result) }],
+          };
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: errMsg }) }],
+          };
+        }
+      }
+
+      case 'sigma_get_tree': {
+        const token = args.token as string;
+        const nodeId = args.nodeId as string | undefined;
+        const path = args.path as string | string[] | undefined;
+        const depth = args.depth as number | string | undefined;
+        const filter = args.filter as { types?: string[]; namePattern?: string } | undefined;
+        const limit = args.limit as number | undefined;
+
+        // Validate token (also refreshes expiry)
+        const tokenEntry = tokenStore.validateToken(token);
+        if (!tokenEntry) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: '유효하지 않은 토큰입니다. sigma_login으로 새 토큰을 발급받으세요.' }) }],
+          };
+        }
+
+        // Check Figma connection
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다.' }) },
+            ],
+          };
+        }
+
+        // Resolve binding
+        const binding = tokenEntry.binding;
+        const pluginId = binding?.pluginId;
+        const pageId = binding?.pageId;
+
+        if (binding) {
+          const plugin = wsServer.getPluginById(pluginId!);
+          if (!plugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${pluginId})이 연결되어 있지 않습니다.` }) },
+              ],
+            };
+          }
+        }
+
+        try {
+          const result = await wsServer.getTree(
+            { nodeId, path, depth, filter, limit, pageId },
+            pluginId
+          );
+          return {
+            content: [{ type: 'text', text: JSON.stringify(result) }],
+          };
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: errMsg }) }],
           };
         }
       }

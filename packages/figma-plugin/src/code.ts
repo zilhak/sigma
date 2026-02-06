@@ -1,4 +1,4 @@
-import type { ExtractedNode, ComputedStyles, RGBA } from '@sigma/shared';
+import type { ExtractedNode, ComputedStyles, RGBA, TreeNode, TreeFilter, FindNodeResult, GetTreeResult } from '@sigma/shared';
 
 // UI 표시
 figma.showUI(__html__, { width: 320, height: 400 });
@@ -68,6 +68,184 @@ function getTargetPage(pageId?: string): PageNode {
     console.warn(`Page not found: ${pageId}, using current page`);
   }
   return figma.currentPage;
+}
+
+// ===== 트리 탐색 헬퍼 함수 =====
+
+/**
+ * 노드의 전체 경로를 구함 (루트부터)
+ */
+function getNodeFullPath(node: SceneNode): string {
+  const parts: string[] = [node.name];
+  let current: BaseNode | null = node.parent;
+
+  while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+    parts.unshift(current.name);
+    current = current.parent;
+  }
+
+  return parts.join('/');
+}
+
+/**
+ * 경로로 노드 찾기
+ * @param path "A/B/C" 또는 ["A", "B", "C"]
+ * @param startNode 시작점 (null이면 현재 페이지 루트)
+ * @returns 매칭되는 노드들 (이름 중복 가능)
+ */
+function findNodesByPath(path: string | string[], startNode: BaseNode | null): SceneNode[] {
+  const pathParts = typeof path === 'string' ? path.split('/') : path;
+  if (pathParts.length === 0) return [];
+
+  // 시작 노드의 자식들
+  const startChildren: readonly SceneNode[] = startNode && 'children' in startNode
+    ? (startNode as FrameNode | PageNode).children
+    : figma.currentPage.children;
+
+  // 첫 번째 경로 요소와 매칭되는 노드들 찾기
+  let currentMatches: SceneNode[] = startChildren.filter(child => child.name === pathParts[0]);
+
+  // 나머지 경로 요소들을 순회
+  for (let i = 1; i < pathParts.length; i++) {
+    const nextMatches: SceneNode[] = [];
+    const targetName = pathParts[i];
+
+    for (const match of currentMatches) {
+      if ('children' in match) {
+        const frame = match as FrameNode;
+        for (const child of frame.children) {
+          if (child.name === targetName) {
+            nextMatches.push(child);
+          }
+        }
+      }
+    }
+
+    currentMatches = nextMatches;
+    if (currentMatches.length === 0) break;
+  }
+
+  return currentMatches;
+}
+
+/**
+ * 직렬화 컨텍스트
+ */
+interface SerializeContext {
+  currentDepth: number;
+  maxDepth: number;  // -1 means infinite
+  filter?: TreeFilter;
+  limit?: number;
+  nodeCount: { value: number };  // mutable counter
+  parentPath: string;
+}
+
+/**
+ * SceneNode를 TreeNode로 직렬화
+ */
+function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeNode | null {
+  // limit 체크
+  if (ctx.limit !== undefined && ctx.nodeCount.value >= ctx.limit) {
+    return null;
+  }
+
+  // 타입 필터 적용
+  if (ctx.filter?.types && ctx.filter.types.length > 0) {
+    if (!ctx.filter.types.includes(node.type)) {
+      return null;
+    }
+  }
+
+  // 이름 필터 적용 (정규식)
+  if (ctx.filter?.namePattern) {
+    try {
+      const regex = new RegExp(ctx.filter.namePattern);
+      if (!regex.test(node.name)) {
+        return null;
+      }
+    } catch {
+      // 정규식 오류 시 무시
+    }
+  }
+
+  // 노드 카운트 증가
+  ctx.nodeCount.value++;
+
+  // 전체 경로 계산
+  const fullPath = ctx.parentPath
+    ? ctx.parentPath + '/' + node.name
+    : node.name;
+
+  // boundingBox 계산
+  const boundingBox = {
+    x: 'x' in node ? node.x : 0,
+    y: 'y' in node ? node.y : 0,
+    width: 'width' in node ? node.width : 0,
+    height: 'height' in node ? node.height : 0,
+  };
+
+  // childCount 계산
+  const hasChildren = 'children' in node;
+  const childCount = hasChildren ? (node as FrameNode).children.length : 0;
+
+  // meta 정보 구성
+  const meta: TreeNode['meta'] = {
+    visible: node.visible,
+    locked: node.locked,
+  };
+
+  // FRAME/COMPONENT의 layoutMode
+  if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') {
+    const frameNode = node as FrameNode;
+    meta.layoutMode = frameNode.layoutMode;
+  }
+
+  // TEXT의 characters
+  if (node.type === 'TEXT') {
+    const textNode = node as TextNode;
+    const chars = textNode.characters;
+    meta.characters = chars.length > 100 ? chars.slice(0, 100) + '...' : chars;
+  }
+
+  // TreeNode 구성
+  const treeNode: TreeNode = {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    boundingBox,
+    childCount,
+    fullPath,
+    meta,
+  };
+
+  // 자식 노드 처리 (depth가 허용하면)
+  const shouldTraverseChildren = ctx.maxDepth === -1 || ctx.currentDepth < ctx.maxDepth;
+  if (hasChildren && shouldTraverseChildren) {
+    const children: TreeNode[] = [];
+    const frameNode = node as FrameNode;
+
+    for (const child of frameNode.children) {
+      if (ctx.limit !== undefined && ctx.nodeCount.value >= ctx.limit) {
+        break;
+      }
+
+      const serializedChild = serializeTreeNode(child, {
+        ...ctx,
+        currentDepth: ctx.currentDepth + 1,
+        parentPath: fullPath,
+      });
+
+      if (serializedChild) {
+        children.push(serializedChild);
+      }
+    }
+
+    if (children.length > 0) {
+      treeNode.children = children;
+    }
+  }
+
+  return treeNode;
 }
 
 // 파일 정보 전달 (전체 페이지 목록 포함)
@@ -406,6 +584,179 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
+    case 'find-node': {
+      const findPath = msg.path as string | string[];
+      const findTypeFilter = msg.typeFilter as string | undefined;
+
+      if (!findPath) {
+        figma.ui.postMessage({
+          type: 'find-node-result',
+          success: false,
+          error: 'path가 필요합니다',
+        });
+        break;
+      }
+
+      const foundNodes = findNodesByPath(findPath, null);
+
+      // 타입 필터 적용
+      const filteredNodes = findTypeFilter
+        ? foundNodes.filter(n => n.type === findTypeFilter)
+        : foundNodes;
+
+      if (filteredNodes.length === 0) {
+        const pathStr = Array.isArray(findPath) ? findPath.join('/') : findPath;
+        figma.ui.postMessage({
+          type: 'find-node-result',
+          success: false,
+          error: `경로 "${pathStr}"에 해당하는 노드를 찾을 수 없습니다`,
+        });
+        break;
+      }
+
+      // 찾은 노드들을 직렬화 (자식은 포함하지 않음, depth=0)
+      const serializedNodes: TreeNode[] = [];
+      for (const node of filteredNodes) {
+        const serialized = serializeTreeNode(node, {
+          currentDepth: 0,
+          maxDepth: 0,  // 자식 포함 안 함
+          nodeCount: { value: 0 },
+          parentPath: '',
+        });
+        if (serialized) {
+          // 전체 경로 재계산 (루트부터)
+          serialized.fullPath = getNodeFullPath(node);
+          serializedNodes.push(serialized);
+        }
+      }
+
+      if (serializedNodes.length === 1) {
+        const result: FindNodeResult = { node: serializedNodes[0] };
+        figma.ui.postMessage({
+          type: 'find-node-result',
+          success: true,
+          result,
+        });
+      } else {
+        const result: FindNodeResult = {
+          matches: serializedNodes,
+          warning: `${serializedNodes.length}개의 노드가 발견되었습니다. 더 구체적인 경로를 사용하세요.`,
+        };
+        figma.ui.postMessage({
+          type: 'find-node-result',
+          success: true,
+          result,
+        });
+      }
+      break;
+    }
+
+    case 'get-tree': {
+      const treeNodeId = msg.nodeId as string | undefined;
+      const treePath = msg.path as string | string[] | undefined;
+      const requestedDepth = msg.depth as number | string | undefined;
+      const treeFilter = msg.filter as TreeFilter | undefined;
+      const treeLimit = msg.limit as number | undefined;
+      const treePageId = msg.pageId as string | undefined;
+
+      // maxDepth 결정 (-1 또는 "full"은 무한, 기본값 1)
+      let maxDepth = 1;
+      if (requestedDepth === 'full' || requestedDepth === -1) {
+        maxDepth = -1;
+      } else if (typeof requestedDepth === 'number') {
+        maxDepth = Math.min(requestedDepth, 50);  // 최대 50으로 제한
+      }
+
+      // 대상 페이지 결정
+      const targetPage = treePageId ? getPageById(treePageId) : figma.currentPage;
+      if (!targetPage) {
+        figma.ui.postMessage({
+          type: 'tree-result',
+          success: false,
+          error: `페이지를 찾을 수 없습니다: ${treePageId}`,
+        });
+        break;
+      }
+
+      // 시작 노드 결정
+      let startNode: SceneNode | null = null;
+      let rootPath: string | undefined = undefined;
+
+      if (treeNodeId) {
+        const nodeById = figma.getNodeById(treeNodeId);
+        if (!nodeById || nodeById.type === 'DOCUMENT' || nodeById.type === 'PAGE') {
+          figma.ui.postMessage({
+            type: 'tree-result',
+            success: false,
+            error: `노드를 찾을 수 없습니다: ${treeNodeId}`,
+          });
+          break;
+        }
+        startNode = nodeById as SceneNode;
+        rootPath = getNodeFullPath(startNode);
+      } else if (treePath) {
+        const found = findNodesByPath(treePath, null);
+        if (found.length === 0) {
+          const pathStr = Array.isArray(treePath) ? treePath.join('/') : treePath;
+          figma.ui.postMessage({
+            type: 'tree-result',
+            success: false,
+            error: `경로에 해당하는 노드를 찾을 수 없습니다: ${pathStr}`,
+          });
+          break;
+        }
+        startNode = found[0];  // 첫 번째 매칭 사용
+        rootPath = Array.isArray(treePath) ? treePath.join('/') : treePath;
+        if (found.length > 1) {
+          console.warn(`[get-tree] 다중 매칭: ${found.length}개 중 첫 번째 사용`);
+        }
+      }
+
+      // 탐색 및 직렬화
+      const nodeCount = { value: 0 };
+      const children: TreeNode[] = [];
+      const effectiveLimit = treeLimit !== undefined ? treeLimit : 1000;  // 기본 limit 1000
+
+      // 탐색 대상 결정
+      const targetChildren: readonly SceneNode[] = startNode && 'children' in startNode
+        ? (startNode as FrameNode).children
+        : targetPage.children;
+
+      for (const child of targetChildren) {
+        if (nodeCount.value >= effectiveLimit) break;
+
+        const serialized = serializeTreeNode(child, {
+          currentDepth: 0,
+          maxDepth,
+          filter: treeFilter,
+          limit: effectiveLimit,
+          nodeCount,
+          parentPath: rootPath || '',
+        });
+
+        if (serialized) {
+          children.push(serialized);
+        }
+      }
+
+      const treeResult: GetTreeResult = {
+        pageId: targetPage.id,
+        pageName: targetPage.name,
+        rootNodeId: startNode ? startNode.id : null,
+        rootNodePath: rootPath,
+        children,
+        truncated: nodeCount.value >= effectiveLimit,
+        totalCount: nodeCount.value,
+      };
+
+      figma.ui.postMessage({
+        type: 'tree-result',
+        success: true,
+        result: treeResult,
+      });
+      break;
+    }
+
     case 'cancel':
       figma.closePlugin();
       break;
@@ -513,8 +864,16 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
     applySizingMode(frame, styles, isRoot);
   }
 
-  // 정렬 설정
-  applyAlignment(frame, styles);
+  // overflow → clipsContent: hidden/clip/scroll/auto면 클리핑, visible이면 해제
+  if (styles.overflow === 'hidden' || styles.overflow === 'clip' ||
+      styles.overflow === 'scroll' || styles.overflow === 'auto') {
+    frame.clipsContent = true;
+  } else {
+    frame.clipsContent = false;
+  }
+
+  // 정렬 설정 (children 전달하여 space-between 보정)
+  applyAlignment(frame, styles, children);
 
   // 패딩 설정
   applyPadding(frame, styles);
@@ -541,6 +900,12 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
     const textNode = createTextNode(textContent, styles);
     if (textNode) {
       frame.appendChild(textNode);
+
+      // table-cell 내부 텍스트: 셀 너비를 채워 textAlign이 시각적으로 반영되도록
+      if (styles.display === 'table-cell' && frame.layoutMode !== 'NONE') {
+        textNode.layoutAlign = 'STRETCH';
+        textNode.textAutoResize = 'HEIGHT';
+      }
     }
   }
 
@@ -560,26 +925,50 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
           childFrame.layoutAlign = 'INHERIT';
         }
 
-        // 자식 요소가 부모보다 작고 중앙에 위치해야 하는 경우 감지
-        // (CSS margin: auto와 유사한 효과)
-        if (child.boundingRect && frame.width > 0) {
-          const childWidth = child.boundingRect.width;
-          const childX = child.boundingRect.x;
-          const parentWidth = frame.width;
+        // table-row 내 table-cell: 행 내 공간을 균등 분배
+        const childStyles = child.styles;
+        if (childStyles && childStyles.display === 'table-cell' &&
+            (styles.display === 'table-row')) {
+          childFrame.layoutGrow = 1;
+          childFrame.layoutAlign = 'STRETCH';
+        }
 
-          // 자식이 부모의 절반 이하이고, 중앙에 가까운 위치에 있으면 CENTER 적용
-          if (childWidth < parentWidth * 0.8) {
-            const expectedCenterX = (parentWidth - childWidth) / 2;
-            const tolerance = parentWidth * 0.1; // 10% 허용 오차
+        // flexGrow 적용: CSS flex-grow > 0이면 Figma에서 FILL로 설정
+        if (childStyles && childStyles.flexGrow > 0) {
+          childFrame.layoutGrow = childStyles.flexGrow;
+        }
 
-            if (Math.abs(childX - expectedCenterX) < tolerance) {
+        // alignSelf 적용: 개별 아이템의 교차축 정렬
+        if (childStyles && childStyles.alignSelf) {
+          switch (childStyles.alignSelf) {
+            case 'center':
               childFrame.layoutAlign = 'CENTER';
-            }
+              break;
+            case 'flex-start':
+            case 'start':
+              childFrame.layoutAlign = 'MIN';
+              break;
+            case 'flex-end':
+            case 'end':
+              childFrame.layoutAlign = 'MAX';
+              break;
+            case 'stretch':
+              childFrame.layoutAlign = 'STRETCH';
+              break;
+            // 'auto'나 다른 값은 부모의 alignItems를 따름 (INHERIT)
           }
         }
+
+        // NOTE: 자동 중앙 정렬 휴리스틱 제거됨
+        // 이전에 자식 위치 기반으로 CENTER를 강제 적용하는 로직이 있었으나,
+        // 이는 원본 CSS 스타일을 무시하고 잘못된 정렬을 만들었음.
+        // 이제는 원본 스타일의 justifyContent/alignItems만 반영함.
       }
     }
   }
+
+  // 자식 요소의 CSS margin을 부모의 itemSpacing/padding으로 변환
+  applyChildMargins(frame, children);
 
   return frame;
 }
@@ -712,7 +1101,19 @@ function createPseudoElementNode(node: ExtractedNode): FrameNode | TextNode | nu
     const textNode = createTextNode(textContent, styles);
     if (textNode) {
       frame.layoutMode = 'HORIZONTAL';
-      frame.primaryAxisAlignItems = 'CENTER';
+      // 원본 스타일의 textAlign을 반영
+      switch (styles.textAlign) {
+        case 'center':
+          frame.primaryAxisAlignItems = 'CENTER';
+          break;
+        case 'right':
+        case 'end':
+          frame.primaryAxisAlignItems = 'MAX';
+          break;
+        default:
+          // 'left', 'start', 기타: 좌측 정렬
+          frame.primaryAxisAlignItems = 'MIN';
+      }
       frame.counterAxisAlignItems = 'CENTER';
       frame.appendChild(textNode);
     }
@@ -944,6 +1345,9 @@ function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, children?: Ex
     frame.layoutMode = 'VERTICAL';
   } else if (display === 'table-row') {
     frame.layoutMode = 'HORIZONTAL';
+  } else if (display === 'table-cell') {
+    // 테이블 셀은 내부 콘텐츠를 수직 배치
+    frame.layoutMode = 'VERTICAL';
   } else if (display === 'inline' || display === 'inline-block') {
     frame.layoutMode = 'HORIZONTAL';
   } else {
@@ -960,19 +1364,49 @@ function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, children?: Ex
     }
   }
 
-  // 갭 설정
-  if (styles.gap > 0) {
-    frame.itemSpacing = styles.gap;
+  // flexWrap 설정 (Auto Layout이 활성화된 경우에만)
+  if (frame.layoutMode !== 'NONE' && styles.flexWrap === 'wrap') {
+    frame.layoutWrap = 'WRAP';
+  }
+
+  // 갭 설정 - rowGap/columnGap이 있으면 우선 사용, 없으면 gap 사용
+  if (frame.layoutMode !== 'NONE') {
+    // Figma에서 itemSpacing은 주축 방향 간격
+    // counterAxisSpacing은 교차축 방향 간격 (wrap 모드에서만 유효)
+    const mainAxisGap = frame.layoutMode === 'HORIZONTAL'
+      ? (styles.columnGap > 0 ? styles.columnGap : styles.gap)
+      : (styles.rowGap > 0 ? styles.rowGap : styles.gap);
+
+    const crossAxisGap = frame.layoutMode === 'HORIZONTAL'
+      ? (styles.rowGap > 0 ? styles.rowGap : styles.gap)
+      : (styles.columnGap > 0 ? styles.columnGap : styles.gap);
+
+    if (mainAxisGap > 0) {
+      frame.itemSpacing = mainAxisGap;
+    }
+
+    // counterAxisSpacing은 wrap 모드에서만 적용
+    if (frame.layoutWrap === 'WRAP' && crossAxisGap > 0) {
+      frame.counterAxisSpacing = crossAxisGap;
+    }
   }
 }
 
 /**
  * 정렬 적용
+ * @param frame - Figma 프레임
+ * @param styles - 계산된 스타일
+ * @param children - 자식 노드 배열 (선택, space-between 보정용)
  */
-function applyAlignment(frame: FrameNode, styles: ComputedStyles) {
+function applyAlignment(frame: FrameNode, styles: ComputedStyles, children?: ExtractedNode[]) {
   const { justifyContent, alignItems } = styles;
+  const childCount = children ? children.length : 0;
 
   // 주축 정렬
+  // NOTE: Figma와 CSS의 space-between 동작 차이 보정
+  // - CSS: space-between + 1자식 = 자식이 시작점(왼쪽)에 위치
+  // - Figma: SPACE_BETWEEN + 1자식 = 자식이 중앙에 위치 (버그 아님, 의도된 동작)
+  // 따라서 자식이 1개일 때는 MIN(시작점)으로 변환
   switch (justifyContent) {
     case 'center':
       frame.primaryAxisAlignItems = 'CENTER';
@@ -982,7 +1416,8 @@ function applyAlignment(frame: FrameNode, styles: ComputedStyles) {
       frame.primaryAxisAlignItems = 'MAX';
       break;
     case 'space-between':
-      frame.primaryAxisAlignItems = 'SPACE_BETWEEN';
+      // CSS와 Figma의 동작 차이 보정: 1자식일 때는 MIN으로
+      frame.primaryAxisAlignItems = childCount <= 1 ? 'MIN' : 'SPACE_BETWEEN';
       break;
     default:
       frame.primaryAxisAlignItems = 'MIN';
@@ -1033,41 +1468,104 @@ function applyBackground(frame: FrameNode, styles: ComputedStyles, isRoot: boole
 }
 
 /**
+ * 자식 요소의 CSS margin을 부모 Auto Layout의 itemSpacing/padding으로 변환
+ * CSS margin collapsing: 인접 마진 중 큰 값 사용
+ */
+function applyChildMargins(frame: FrameNode, children: ExtractedNode[]) {
+  if (frame.layoutMode === 'NONE' || children.length === 0) return;
+
+  const isVertical = frame.layoutMode === 'VERTICAL';
+  const leadingProp = isVertical ? 'marginTop' : 'marginLeft';
+  const trailingProp = isVertical ? 'marginBottom' : 'marginRight';
+
+  // 첫 자식의 leading margin → 부모 padding 시작 방향에 추가
+  const firstStyles = children[0].styles;
+  if (firstStyles) {
+    const firstLeading = (firstStyles as any)[leadingProp] || 0;
+    if (firstLeading > 0) {
+      if (isVertical) {
+        frame.paddingTop = (frame.paddingTop || 0) + firstLeading;
+      } else {
+        frame.paddingLeft = (frame.paddingLeft || 0) + firstLeading;
+      }
+    }
+  }
+
+  // 마지막 자식의 trailing margin → 부모 padding 끝 방향에 추가
+  const lastStyles = children[children.length - 1].styles;
+  if (lastStyles) {
+    const lastTrailing = (lastStyles as any)[trailingProp] || 0;
+    if (lastTrailing > 0) {
+      if (isVertical) {
+        frame.paddingBottom = (frame.paddingBottom || 0) + lastTrailing;
+      } else {
+        frame.paddingRight = (frame.paddingRight || 0) + lastTrailing;
+      }
+    }
+  }
+
+  // 인접 자식 간 margin → itemSpacing (gap이 이미 설정되지 않은 경우만)
+  if (children.length > 1 && (frame.itemSpacing === 0 || frame.itemSpacing === undefined)) {
+    let maxSpacing = 0;
+    for (let i = 0; i < children.length - 1; i++) {
+      const currentStyles = children[i].styles;
+      const nextStyles = children[i + 1].styles;
+      const currentTrailing = currentStyles ? ((currentStyles as any)[trailingProp] || 0) : 0;
+      const nextLeading = nextStyles ? ((nextStyles as any)[leadingProp] || 0) : 0;
+      // CSS margin collapsing: 인접 마진 중 큰 값
+      const collapsed = Math.max(currentTrailing, nextLeading);
+      if (collapsed > maxSpacing) {
+        maxSpacing = collapsed;
+      }
+    }
+    if (maxSpacing > 0) {
+      frame.itemSpacing = maxSpacing;
+    }
+  }
+}
+
+/**
  * 테두리 적용
  */
 function applyBorder(frame: FrameNode, styles: ComputedStyles) {
-  const borderWidth = Math.max(
-    styles.borderTopWidth || 0,
-    styles.borderRightWidth || 0,
-    styles.borderBottomWidth || 0,
-    styles.borderLeftWidth || 0
-  );
+  const top = styles.borderTopWidth || 0;
+  const right = styles.borderRightWidth || 0;
+  const bottom = styles.borderBottomWidth || 0;
+  const left = styles.borderLeftWidth || 0;
 
-  if (borderWidth > 0) {
-    // 개별 border 색상들을 수집
-    const borderColors = [
-      styles.borderTopColor,
-      styles.borderRightColor,
-      styles.borderBottomColor,
-      styles.borderLeftColor
-    ].filter(Boolean) as RGBA[];
+  const maxWidth = Math.max(top, right, bottom, left);
+  if (maxWidth <= 0) return;
 
-    // 가장 불투명한 색상 선택 (스피너 등에서 주요 색상 표시)
-    // Figma는 면별 stroke 색상을 지원하지 않으므로 가장 의미있는 색상 선택
-    let borderColor = borderColors[0];
-    if (borderColors.length > 1) {
-      // 불투명도가 가장 높은 색상 선택
-      borderColor = borderColors.reduce((best, current) => {
-        const bestAlpha = best && best.a !== undefined ? best.a : 0;
-        const currentAlpha = current && current.a !== undefined ? current.a : 0;
-        return currentAlpha > bestAlpha ? current : best;
-      }, borderColors[0]);
-    }
+  // 가장 두꺼운 면의 색상 사용 (border-bottom만 있으면 borderBottomColor 사용)
+  let borderColor: RGBA | null = null;
+  if (top >= right && top >= bottom && top >= left) {
+    borderColor = styles.borderTopColor;
+  } else if (bottom >= top && bottom >= right && bottom >= left) {
+    borderColor = styles.borderBottomColor;
+  } else if (right >= top && right >= bottom && right >= left) {
+    borderColor = styles.borderRightColor;
+  } else {
+    borderColor = styles.borderLeftColor;
+  }
 
-    if (borderColor) {
-      frame.strokes = [createSolidPaint(borderColor)];
-      frame.strokeWeight = borderWidth;
-    }
+  // fallback: 아무 색상이나 찾기
+  if (!borderColor) {
+    borderColor = styles.borderTopColor || styles.borderRightColor
+      || styles.borderBottomColor || styles.borderLeftColor;
+  }
+  if (!borderColor) return;
+
+  frame.strokes = [createSolidPaint(borderColor)];
+
+  // 4면 동일하면 uniform stroke, 다르면 per-side (IndividualStrokesMixin)
+  const allEqual = (top === right && right === bottom && bottom === left);
+  if (allEqual) {
+    frame.strokeWeight = top;
+  } else {
+    frame.strokeTopWeight = top;
+    frame.strokeRightWeight = right;
+    frame.strokeBottomWeight = bottom;
+    frame.strokeLeftWeight = left;
   }
 }
 
@@ -1401,8 +1899,8 @@ function applyRootStylesToExistingFrame(frame: FrameNode, sourceNode: ExtractedN
     applySizingMode(frame, styles, true);
   }
 
-  // 정렬 설정
-  applyAlignment(frame, styles);
+  // 정렬 설정 (children 전달하여 space-between 보정)
+  applyAlignment(frame, styles, children);
 
   // 패딩 설정
   applyPadding(frame, styles);
@@ -1425,6 +1923,86 @@ function applyRootStylesToExistingFrame(frame: FrameNode, sourceNode: ExtractedN
   } else {
     frame.opacity = 1;
   }
+}
+
+/**
+ * 노드 타입별 지원 메서드 매트릭스
+ * 각 메서드가 어떤 노드 타입에서 지원되는지 정의
+ */
+const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
+  // FRAME: 모든 메서드 지원
+  FRAME: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
+    'setLayoutMode', 'setPadding', 'setItemSpacing', 'setClipsContent', 'setPrimaryAxisSizingMode', 'setCounterAxisSizingMode', 'setPrimaryAxisAlignItems', 'setCounterAxisAlignItems',
+    'setCharacters', 'setFontSize', 'setTextAlignHorizontal',
+  ]),
+  // COMPONENT: FRAME과 동일
+  COMPONENT: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
+    'setLayoutMode', 'setPadding', 'setItemSpacing', 'setClipsContent', 'setPrimaryAxisSizingMode', 'setCounterAxisSizingMode', 'setPrimaryAxisAlignItems', 'setCounterAxisAlignItems',
+    'setCharacters', 'setFontSize', 'setTextAlignHorizontal',
+  ]),
+  // SECTION: 제한적 (Auto Layout 미지원, stroke/cornerRadius 미지원)
+  SECTION: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setEffects',
+  ]),
+  // GROUP: 가장 제한적 (크기는 자식에 의해 결정, fills 미지원)
+  GROUP: new Set([
+    'rename', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    // resize 미지원 - Group의 크기는 자식에 의해 자동 결정됨
+    // fills 미지원 - Group은 fills를 지원하지 않음
+  ]),
+  // TEXT: 텍스트 관련 메서드 + 기본 스타일
+  TEXT: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setEffects', 'setBlendMode',
+    'setCharacters', 'setFontSize', 'setTextAlignHorizontal',
+  ]),
+  // INSTANCE: 제한적 (컴포넌트 인스턴스)
+  INSTANCE: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setEffects', 'setBlendMode',
+  ]),
+  // RECTANGLE, ELLIPSE 등 Shape 노드
+  RECTANGLE: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
+  ]),
+  ELLIPSE: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+  ]),
+  VECTOR: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+  ]),
+  LINE: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+  ]),
+  // DEFAULT: 알 수 없는 타입에 대한 기본값 (가장 기본적인 메서드만)
+  DEFAULT: new Set([
+    'rename', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+  ]),
+};
+
+/**
+ * 특정 노드 타입이 특정 메서드를 지원하는지 확인
+ */
+function isMethodSupportedForType(nodeType: string, method: string): boolean {
+  const supported = METHOD_SUPPORT_MATRIX[nodeType] || METHOD_SUPPORT_MATRIX['DEFAULT'];
+  return supported.has(method);
+}
+
+/**
+ * 특정 노드 타입이 지원하는 메서드 목록 반환
+ */
+function getSupportedMethodsForType(nodeType: string): string[] {
+  const supported = METHOD_SUPPORT_MATRIX[nodeType] || METHOD_SUPPORT_MATRIX['DEFAULT'];
+  return Array.from(supported);
 }
 
 /**
@@ -1742,6 +2320,7 @@ async function executeModifyNode(
     throw new Error(`Document 또는 Page 노드는 수정할 수 없습니다`);
   }
 
+  // 1. 먼저 메서드가 ALLOWED_METHODS에 존재하는지 확인
   const allowed = ALLOWED_METHODS[method];
   if (!allowed) {
     const availableMethods: Record<string, string> = {};
@@ -1751,6 +2330,22 @@ async function executeModifyNode(
     throw new Error(JSON.stringify({
       error: `허용되지 않은 메서드입니다: ${method}`,
       availableMethods,
+    }));
+  }
+
+  // 2. 해당 노드 타입이 이 메서드를 지원하는지 확인
+  if (!isMethodSupportedForType(node.type, method)) {
+    const supportedForThisType = getSupportedMethodsForType(node.type);
+    const supportedWithDescriptions: Record<string, string> = {};
+    for (const m of supportedForThisType) {
+      if (ALLOWED_METHODS[m]) {
+        supportedWithDescriptions[m] = ALLOWED_METHODS[m].description;
+      }
+    }
+    throw new Error(JSON.stringify({
+      error: `'${method}' 메서드는 '${node.type}' 타입에서 지원되지 않습니다`,
+      nodeType: node.type,
+      supportedMethods: supportedWithDescriptions,
     }));
   }
 
