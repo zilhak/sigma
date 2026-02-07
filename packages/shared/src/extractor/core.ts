@@ -151,6 +151,15 @@ export function extractStyles(style: CSSStyleDeclaration): ComputedStyles {
     textOverflow: style.textOverflow,
     verticalAlign: style.verticalAlign,
 
+    // Grid
+    gridTemplateColumns: style.gridTemplateColumns,
+    gridTemplateRows: style.gridTemplateRows,
+    gridAutoFlow: style.gridAutoFlow,
+    gridColumnStart: style.gridColumnStart,
+    gridColumnEnd: style.gridColumnEnd,
+    gridRowStart: style.gridRowStart,
+    gridRowEnd: style.gridRowEnd,
+
     // 기타
     opacity: parseFloat(style.opacity),
     overflow: style.overflow,

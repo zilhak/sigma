@@ -95,6 +95,17 @@ export interface ComputedStyles {
   textOverflow: string;
   verticalAlign: string;
 
+  // Grid 컨테이너 속성
+  gridTemplateColumns: string;
+  gridTemplateRows: string;
+  gridAutoFlow: string;
+
+  // Grid 아이템 속성
+  gridColumnStart: string;
+  gridColumnEnd: string;
+  gridRowStart: string;
+  gridRowEnd: string;
+
   // 기타
   opacity: number;
   overflow: string;

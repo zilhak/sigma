@@ -856,13 +856,8 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
   const height = typeof styles.height === 'number' ? styles.height : boundingRect.height;
   frame.resize(Math.max(width, 1), Math.max(height, 1));
 
-  // 레이아웃 모드 설정 (children 전달하여 inline-block 자식 감지)
-  applyLayoutMode(frame, styles, children);
-
-  // Auto Layout 크기 모드 설정 (FIXED가 아닌 적절한 모드 사용)
-  if (frame.layoutMode !== 'NONE') {
-    applySizingMode(frame, styles, isRoot);
-  }
+  // Grid 컨테이너인 경우 별도 처리
+  const isGridContainer = styles.display === 'grid' || styles.display === 'inline-grid';
 
   // overflow → clipsContent: hidden/clip/scroll/auto면 클리핑, visible이면 해제
   if (styles.overflow === 'hidden' || styles.overflow === 'clip' ||
@@ -871,12 +866,6 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
   } else {
     frame.clipsContent = false;
   }
-
-  // 정렬 설정 (children 전달하여 space-between 보정)
-  applyAlignment(frame, styles, children);
-
-  // 패딩 설정
-  applyPadding(frame, styles);
 
   // 배경색 설정 (루트 프레임은 투명 배경을 흰색으로 대체)
   applyBackground(frame, styles, isRoot);
@@ -895,80 +884,111 @@ async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Pro
     frame.opacity = styles.opacity;
   }
 
-  // 부모의 텍스트 콘텐츠 먼저 추가 (자식이 있어도 부모 텍스트가 있으면 추가)
-  if (textContent) {
-    const textNode = createTextNode(textContent, styles);
-    if (textNode) {
-      frame.appendChild(textNode);
+  if (isGridContainer && children.length > 0) {
+    // ── CSS Grid → 중첩 Auto Layout 변환 ──
+    // 패딩은 grid 부모에도 적용
+    applyPadding(frame, styles);
 
-      // table-cell 내부 텍스트: 셀 너비를 채워 textAlign이 시각적으로 반영되도록
-      if (styles.display === 'table-cell' && frame.layoutMode !== 'NONE') {
-        textNode.layoutAlign = 'STRETCH';
-        textNode.textAutoResize = 'HEIGHT';
+    // 정렬 설정
+    applyAlignment(frame, styles, children);
+
+    // Grid 레이아웃 생성 (내부에서 layoutMode 설정)
+    await createGridLayout(frame, node, isRoot);
+
+    // Auto Layout 크기 모드 설정
+    if (frame.layoutMode !== 'NONE') {
+      applySizingMode(frame, styles, isRoot);
+    }
+  } else {
+    // ── 기존 Flex/Block 레이아웃 경로 ──
+    // 레이아웃 모드 설정 (children 전달하여 inline-block 자식 감지)
+    applyLayoutMode(frame, styles, children);
+
+    // Auto Layout 크기 모드 설정 (FIXED가 아닌 적절한 모드 사용)
+    if (frame.layoutMode !== 'NONE') {
+      applySizingMode(frame, styles, isRoot);
+    }
+
+    // 정렬 설정 (children 전달하여 space-between 보정)
+    applyAlignment(frame, styles, children);
+
+    // 패딩 설정
+    applyPadding(frame, styles);
+
+    // 부모의 텍스트 콘텐츠 먼저 추가 (자식이 있어도 부모 텍스트가 있으면 추가)
+    if (textContent) {
+      const textNode = createTextNode(textContent, styles);
+      if (textNode) {
+        frame.appendChild(textNode);
+
+        // table-cell 내부 텍스트: 셀 너비를 채워 textAlign이 시각적으로 반영되도록
+        if (styles.display === 'table-cell' && frame.layoutMode !== 'NONE') {
+          textNode.layoutAlign = 'STRETCH';
+          textNode.textAutoResize = 'HEIGHT';
+        }
       }
     }
-  }
 
-  // 자식 노드 추가 (isRoot: false로 호출하여 투명 배경 유지)
-  for (const child of children) {
-    const childNode = await createFigmaNode(child, false);
-    if (childNode) {
-      frame.appendChild(childNode);
+    // 자식 노드 추가 (isRoot: false로 호출하여 투명 배경 유지)
+    for (const child of children) {
+      const childNode = await createFigmaNode(child, false);
+      if (childNode) {
+        frame.appendChild(childNode);
 
-      // 부모의 정렬 설정에 따라 자식의 layoutAlign 설정
-      // Figma에서 자식 요소가 부모의 정렬을 따르도록 명시적 설정
-      if (frame.layoutMode !== 'NONE' && 'layoutAlign' in childNode) {
-        const childFrame = childNode as FrameNode;
+        // 부모의 정렬 설정에 따라 자식의 layoutAlign 설정
+        // Figma에서 자식 요소가 부모의 정렬을 따르도록 명시적 설정
+        if (frame.layoutMode !== 'NONE' && 'layoutAlign' in childNode) {
+          const childFrame = childNode as FrameNode;
 
-        // 부모가 center 정렬인 경우 자식도 center로 설정
-        if (frame.counterAxisAlignItems === 'CENTER') {
-          childFrame.layoutAlign = 'INHERIT';
-        }
-
-        // table-row 내 table-cell: 행 내 공간을 균등 분배
-        const childStyles = child.styles;
-        if (childStyles && childStyles.display === 'table-cell' &&
-            (styles.display === 'table-row')) {
-          childFrame.layoutGrow = 1;
-          childFrame.layoutAlign = 'STRETCH';
-        }
-
-        // flexGrow 적용: CSS flex-grow > 0이면 Figma에서 FILL로 설정
-        if (childStyles && childStyles.flexGrow > 0) {
-          childFrame.layoutGrow = childStyles.flexGrow;
-        }
-
-        // alignSelf 적용: 개별 아이템의 교차축 정렬
-        if (childStyles && childStyles.alignSelf) {
-          switch (childStyles.alignSelf) {
-            case 'center':
-              childFrame.layoutAlign = 'CENTER';
-              break;
-            case 'flex-start':
-            case 'start':
-              childFrame.layoutAlign = 'MIN';
-              break;
-            case 'flex-end':
-            case 'end':
-              childFrame.layoutAlign = 'MAX';
-              break;
-            case 'stretch':
-              childFrame.layoutAlign = 'STRETCH';
-              break;
-            // 'auto'나 다른 값은 부모의 alignItems를 따름 (INHERIT)
+          // 부모가 center 정렬인 경우 자식도 center로 설정
+          if (frame.counterAxisAlignItems === 'CENTER') {
+            childFrame.layoutAlign = 'INHERIT';
           }
-        }
 
-        // NOTE: 자동 중앙 정렬 휴리스틱 제거됨
-        // 이전에 자식 위치 기반으로 CENTER를 강제 적용하는 로직이 있었으나,
-        // 이는 원본 CSS 스타일을 무시하고 잘못된 정렬을 만들었음.
-        // 이제는 원본 스타일의 justifyContent/alignItems만 반영함.
+          // table-cell: 행 내 공간을 균등 분배 (table-row 부모 또는 anonymous table box)
+          const childStyles = child.styles;
+          if (childStyles && childStyles.display === 'table-cell') {
+            childFrame.layoutGrow = 1;
+            childFrame.layoutAlign = 'STRETCH';
+          }
+
+          // flexGrow 적용: CSS flex-grow > 0이면 Figma에서 FILL로 설정
+          if (childStyles && childStyles.flexGrow > 0) {
+            childFrame.layoutGrow = childStyles.flexGrow;
+          }
+
+          // alignSelf 적용: 개별 아이템의 교차축 정렬
+          if (childStyles && childStyles.alignSelf) {
+            switch (childStyles.alignSelf) {
+              case 'center':
+                childFrame.layoutAlign = 'CENTER';
+                break;
+              case 'flex-start':
+              case 'start':
+                childFrame.layoutAlign = 'MIN';
+                break;
+              case 'flex-end':
+              case 'end':
+                childFrame.layoutAlign = 'MAX';
+                break;
+              case 'stretch':
+                childFrame.layoutAlign = 'STRETCH';
+                break;
+              // 'auto'나 다른 값은 부모의 alignItems를 따름 (INHERIT)
+            }
+          }
+
+          // NOTE: 자동 중앙 정렬 휴리스틱 제거됨
+          // 이전에 자식 위치 기반으로 CENTER를 강제 적용하는 로직이 있었으나,
+          // 이는 원본 CSS 스타일을 무시하고 잘못된 정렬을 만들었음.
+          // 이제는 원본 스타일의 justifyContent/alignItems만 반영함.
+        }
       }
     }
-  }
 
-  // 자식 요소의 CSS margin을 부모의 itemSpacing/padding으로 변환
-  applyChildMargins(frame, children);
+    // 자식 요소의 CSS margin을 부모의 itemSpacing/padding으로 변환
+    applyChildMargins(frame, children);
+  }
 
   return frame;
 }
@@ -1326,6 +1346,313 @@ function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot: boole
   }
 }
 
+// ============================================================
+// CSS Grid → Figma Auto Layout 변환
+// ============================================================
+
+interface GridTrack {
+  type: 'fr' | 'auto' | 'fixed';
+  value: number;
+}
+
+interface GridCell {
+  column: number;
+  row: number;
+  colSpan: number;
+  rowSpan: number;
+  child: ExtractedNode;
+}
+
+/**
+ * CSS grid-template-columns/rows 값을 파싱
+ * getComputedStyle은 resolved px 값("156.469px 73.0312px")을 반환하므로
+ * 원본 fr/auto 정보는 유실됨. 두 형식 모두 처리.
+ */
+function parseGridTemplate(template: string): GridTrack[] {
+  if (!template || template === 'none') return [];
+
+  const tracks: GridTrack[] = [];
+  const parts = template.split(/\s+/).filter(function(p) { return p.length > 0; });
+
+  for (const part of parts) {
+    if (part.endsWith('fr')) {
+      const val = parseFloat(part);
+      tracks.push({ type: 'fr', value: isNaN(val) ? 1 : val });
+    } else if (part === 'auto' || part === 'min-content' || part === 'max-content') {
+      tracks.push({ type: 'auto', value: 0 });
+    } else if (part.endsWith('px') || part.endsWith('%') || !isNaN(parseFloat(part))) {
+      tracks.push({ type: 'fixed', value: parseFloat(part) || 0 });
+    }
+  }
+
+  return tracks;
+}
+
+/**
+ * CSS grid-column-start/end, grid-row-start/end 값을 파싱
+ * "auto" → start=-1, "span 2" → span=2, "2" → start=2
+ */
+function parseGridPlacement(startStr: string, endStr: string): { start: number; span: number } {
+  const startNum = parseInt(startStr, 10);
+  const start = isNaN(startNum) ? -1 : startNum; // -1 means auto
+
+  if (endStr && endStr.startsWith('span')) {
+    const spanVal = parseInt(endStr.replace('span', '').trim(), 10);
+    return { start: start, span: isNaN(spanVal) ? 1 : spanVal };
+  }
+
+  const endNum = parseInt(endStr, 10);
+  if (!isNaN(endNum) && start > 0) {
+    return { start: start, span: Math.max(1, endNum - start) };
+  }
+
+  return { start: start, span: 1 };
+}
+
+/**
+ * 자식 노드들을 그리드 셀에 배치
+ * CSS Grid auto-placement 알고리즘의 간소화 버전
+ */
+function assignChildrenToGrid(children: ExtractedNode[], colCount: number): GridCell[] {
+  const cells: GridCell[] = [];
+  const occupied = new Set<string>();
+
+  // CSS Grid spec: 명시적 배치 아이템을 먼저 배치, 그 후 auto 아이템 배치
+  // Phase 1: 명시적 배치 (gridColumnStart가 auto가 아닌 아이템)
+  const explicitChildren: Array<{ index: number; child: ExtractedNode }> = [];
+  const autoChildren: Array<{ index: number; child: ExtractedNode }> = [];
+
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    const styles = child.styles;
+    const colStart = styles ? styles.gridColumnStart : 'auto';
+    const rowStart = styles ? styles.gridRowStart : 'auto';
+
+    if (colStart !== 'auto' && rowStart !== 'auto') {
+      explicitChildren.push({ index: i, child: child });
+    } else {
+      autoChildren.push({ index: i, child: child });
+    }
+  }
+
+  // 명시적 배치 아이템 먼저 처리
+  for (const item of explicitChildren) {
+    const styles = item.child.styles;
+    const colPlacement = parseGridPlacement(
+      styles ? styles.gridColumnStart : 'auto',
+      styles ? styles.gridColumnEnd : 'auto'
+    );
+    const rowPlacement = parseGridPlacement(
+      styles ? styles.gridRowStart : 'auto',
+      styles ? styles.gridRowEnd : 'auto'
+    );
+
+    const col = colPlacement.start > 0 ? colPlacement.start - 1 : 0;
+    const row = rowPlacement.start > 0 ? rowPlacement.start - 1 : 0;
+    const colSpan = colPlacement.span;
+    const rowSpan = rowPlacement.span;
+
+    for (let c = col; c < col + colSpan; c++) {
+      for (let r = row; r < row + rowSpan; r++) {
+        occupied.add(c + ',' + r);
+      }
+    }
+
+    cells.push({ column: col, row: row, colSpan: colSpan, rowSpan: rowSpan, child: item.child });
+  }
+
+  // Phase 2: Auto 배치 아이템
+  let autoCol = 0;
+  let autoRow = 0;
+
+  for (const item of autoChildren) {
+    const styles = item.child.styles;
+    const colPlacement = parseGridPlacement(
+      styles ? styles.gridColumnStart : 'auto',
+      styles ? styles.gridColumnEnd : 'auto'
+    );
+    const rowPlacement = parseGridPlacement(
+      styles ? styles.gridRowStart : 'auto',
+      styles ? styles.gridRowEnd : 'auto'
+    );
+
+    const colSpan = colPlacement.span;
+    const rowSpan = rowPlacement.span;
+
+    // 빈 셀 찾기
+    while (true) {
+      if (autoCol >= colCount) {
+        autoCol = 0;
+        autoRow++;
+      }
+      const key = autoCol + ',' + autoRow;
+      if (!occupied.has(key)) break;
+      autoCol++;
+    }
+
+    const col = autoCol;
+    const row = autoRow;
+
+    for (let c = col; c < col + colSpan; c++) {
+      for (let r = row; r < row + rowSpan; r++) {
+        occupied.add(c + ',' + r);
+      }
+    }
+
+    cells.push({ column: col, row: row, colSpan: colSpan, rowSpan: rowSpan, child: item.child });
+
+    autoCol = col + colSpan;
+    if (autoCol >= colCount) {
+      autoCol = 0;
+      autoRow++;
+    }
+  }
+
+  return cells;
+}
+
+/**
+ * CSS Grid 컨테이너를 Figma 중첩 Auto Layout으로 변환
+ *
+ * 전략: 각 컬럼을 VERTICAL Auto Layout 프레임으로 만들고,
+ * 부모를 HORIZONTAL Auto Layout으로 설정하여 컬럼을 나란히 배치.
+ *
+ * 예시 (2컬럼 그리드):
+ *   HORIZONTAL Frame (grid container)
+ *   ├── VERTICAL Frame (grid-col-1)
+ *   │   ├── child A (row 0)
+ *   │   └── child B (row 1)
+ *   └── VERTICAL Frame (grid-col-2)
+ *       └── child C (row 0, spanning rows)
+ */
+async function createGridLayout(
+  frame: FrameNode,
+  node: ExtractedNode,
+  isRoot: boolean
+): Promise<void> {
+  const styles = node.styles;
+  const children = node.children || [];
+
+  if (children.length === 0) return;
+
+  // 그리드 템플릿 파싱
+  const columns = parseGridTemplate(styles.gridTemplateColumns);
+  const colCount = columns.length > 0 ? columns.length : 1;
+
+  // 1컬럼이면 단순 VERTICAL 레이아웃
+  if (colCount <= 1) {
+    frame.layoutMode = 'VERTICAL';
+
+    const rowGap = styles.rowGap > 0 ? styles.rowGap : styles.gap;
+    if (rowGap > 0) {
+      frame.itemSpacing = rowGap;
+    }
+
+    for (const child of children) {
+      const childNode = await createFigmaNode(child, false);
+      if (childNode) {
+        frame.appendChild(childNode);
+      }
+    }
+    return;
+  }
+
+  // 다중 컬럼: 컬럼 래퍼 프레임 생성
+  frame.layoutMode = 'HORIZONTAL';
+
+  // columnGap → 부모 itemSpacing
+  const colGap = styles.columnGap > 0 ? styles.columnGap : styles.gap;
+  if (colGap > 0) {
+    frame.itemSpacing = colGap;
+  }
+
+  const rowGap = styles.rowGap > 0 ? styles.rowGap : styles.gap;
+
+  // 자식을 그리드 셀에 배치
+  const cells = assignChildrenToGrid(children, colCount);
+
+  // 컬럼별 그룹화
+  const columnGroups: Map<number, GridCell[]> = new Map();
+  for (let i = 0; i < colCount; i++) {
+    columnGroups.set(i, []);
+  }
+  for (const cell of cells) {
+    const group = columnGroups.get(cell.column);
+    if (group) {
+      group.push(cell);
+    }
+  }
+
+  // 컬럼 래퍼 프레임 생성
+  for (let colIdx = 0; colIdx < colCount; colIdx++) {
+    const colCells = columnGroups.get(colIdx) || [];
+    const track = columns[colIdx];
+
+    // 행 순서대로 정렬
+    colCells.sort(function(a, b) { return a.row - b.row; });
+
+    const colWrapper = figma.createFrame();
+    colWrapper.name = 'grid-col-' + (colIdx + 1);
+    colWrapper.layoutMode = 'VERTICAL';
+    colWrapper.fills = [];
+    colWrapper.clipsContent = false;
+
+    // 행 간격
+    if (rowGap > 0) {
+      colWrapper.itemSpacing = rowGap;
+    }
+
+    // 자식 노드 추가
+    for (const cell of colCells) {
+      const childNode = await createFigmaNode(cell.child, false);
+      if (childNode) {
+        colWrapper.appendChild(childNode);
+
+        // 자식 정렬 적용
+        if ('layoutAlign' in childNode) {
+          const childFrame = childNode as FrameNode;
+          const childStyles = cell.child.styles;
+
+          if (childStyles && childStyles.alignSelf) {
+            switch (childStyles.alignSelf) {
+              case 'center':
+                childFrame.layoutAlign = 'CENTER';
+                break;
+              case 'flex-start':
+              case 'start':
+                childFrame.layoutAlign = 'MIN';
+                break;
+              case 'flex-end':
+              case 'end':
+                childFrame.layoutAlign = 'MAX';
+                break;
+              case 'stretch':
+                childFrame.layoutAlign = 'STRETCH';
+                break;
+            }
+          }
+        }
+      }
+    }
+
+    // 부모에 먼저 추가 (FILL/layoutGrow는 auto-layout 자식이어야 설정 가능)
+    frame.appendChild(colWrapper);
+
+    // 트랙 타입에 따른 컬럼 크기 설정
+    if (track && track.type === 'fixed') {
+      colWrapper.resize(Math.max(track.value, 1), Math.max(frame.height, 1));
+      colWrapper.layoutSizingHorizontal = 'FIXED';
+    } else if (track && track.type === 'fr') {
+      colWrapper.layoutGrow = track.value;
+      colWrapper.layoutSizingHorizontal = 'FILL';
+    } else {
+      // auto - 콘텐츠에 맞춤
+      colWrapper.layoutSizingHorizontal = 'HUG';
+    }
+    colWrapper.layoutSizingVertical = 'FILL';
+  }
+}
+
 /**
  * 레이아웃 모드 적용
  * @param frame - Figma 프레임
@@ -1356,8 +1683,12 @@ function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, children?: Ex
     const hasInlineBlockChildren = children && children.length > 0 && children.some(
       child => child.styles && (child.styles.display === 'inline-block' || child.styles.display === 'inline')
     );
+    // table-cell 자식 감지: CSS anonymous table box 모방 (가로 배치)
+    const hasTableCellChildren = children && children.length > 0 && children.some(
+      child => child.styles && child.styles.display === 'table-cell'
+    );
 
-    if (hasInlineBlockChildren) {
+    if (hasInlineBlockChildren || hasTableCellChildren) {
       frame.layoutMode = 'HORIZONTAL';
     } else {
       frame.layoutMode = 'VERTICAL';
