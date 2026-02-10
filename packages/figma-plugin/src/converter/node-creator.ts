@@ -1,6 +1,6 @@
 import type { ExtractedNode, ComputedStyles } from '@sigma/shared';
 import { createSolidPaint } from '../utils';
-import { applyBackground, applyBorder, applyCornerRadius, applyBoxShadow, applyPadding, applyChildMargins } from './styles';
+import { applyBackground, applyBorder, applyBorderOverlays, applyCornerRadius, applyBoxShadow, applyPadding, applyChildMargins } from './styles';
 import { applyLayoutMode, applySizingMode, applyAlignment, createGridLayout } from './layout';
 
 /**
@@ -83,6 +83,30 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     if (frame.layoutMode !== 'NONE') {
       applySizingMode(frame, styles, isRoot);
     }
+  } else if (children.length > 0 && hasNegativeMargins(children)) {
+    // ── 음수 마진 감지 → 절대 위치 배치 ──
+    // Figma Auto Layout은 음수 간격/가변 간격을 지원하지 않으므로
+    // boundingRect 기반으로 자식을 절대 위치에 배치
+    frame.layoutMode = 'NONE';
+
+    // 부모 텍스트 콘텐츠 추가 (있는 경우)
+    if (textContent) {
+      const textNode = createTextNode(textContent, styles);
+      if (textNode) {
+        frame.appendChild(textNode);
+      }
+    }
+
+    // 자식 노드를 boundingRect 기반으로 절대 배치
+    const parentRect = node.boundingRect;
+    for (const child of children) {
+      const childNode = await createFigmaNode(child, false);
+      if (childNode) {
+        frame.appendChild(childNode);
+        childNode.x = child.boundingRect.x - parentRect.x;
+        childNode.y = child.boundingRect.y - parentRect.y;
+      }
+    }
   } else {
     // ── 기존 Flex/Block 레이아웃 경로 ──
     // 레이아웃 모드 설정 (children 전달하여 inline-block 자식 감지)
@@ -105,8 +129,8 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
       if (textNode) {
         frame.appendChild(textNode);
 
-        // table-cell 내부 텍스트: 셀 너비를 채워 textAlign이 시각적으로 반영되도록
-        if (styles.display === 'table-cell' && frame.layoutMode !== 'NONE') {
+        // table-cell 내부 텍스트: VERTICAL 레이아웃일 때만 셀 너비를 채워 textAlign 반영
+        if (styles.display === 'table-cell' && frame.layoutMode === 'VERTICAL') {
           textNode.layoutAlign = 'STRETCH';
           textNode.textAutoResize = 'HEIGHT';
         }
@@ -174,7 +198,23 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     applyChildMargins(frame, children);
   }
 
+  // 면별 다른 border 색상 처리 (Auto Layout + 자식 추가 후에 overlay 추가)
+  applyBorderOverlays(frame, styles);
+
   return frame;
+}
+
+/**
+ * 자식 중 음수 마진이 있는지 확인
+ * 음수 마진은 CSS border-collapse 등에서 사용되며, Figma Auto Layout으로 표현 불가
+ */
+function hasNegativeMargins(children: ExtractedNode[]): boolean {
+  return children.some(function(child) {
+    const s = child.styles;
+    if (!s) return false;
+    return (s.marginLeft < 0) || (s.marginTop < 0) ||
+           (s.marginRight < 0) || (s.marginBottom < 0);
+  });
 }
 
 /**
@@ -323,6 +363,9 @@ function createPseudoElementNode(node: ExtractedNode): FrameNode | TextNode | nu
     }
   }
 
+  // 면별 다른 border 색상 처리 (Auto Layout + 자식 추가 후에 overlay 추가)
+  applyBorderOverlays(frame, styles);
+
   return frame;
 }
 
@@ -399,6 +442,16 @@ function createSvgNode(node: ExtractedNode): FrameNode | null {
       // SVG 크기가 추출된 크기와 다르면 스케일 조정
       if (Math.abs(currentWidth - targetWidth) > 1 || Math.abs(currentHeight - targetHeight) > 1) {
         svgFrame.resize(targetWidth, targetHeight);
+      }
+    }
+
+    // SVG 요소의 opacity 적용 (createNodeFromSvg가 root SVG의 opacity를 무시하므로)
+    if (node.styles && node.styles.opacity) {
+      const opacityVal = typeof node.styles.opacity === 'string'
+        ? parseFloat(node.styles.opacity)
+        : node.styles.opacity;
+      if (!isNaN(opacityVal) && opacityVal < 1) {
+        svgFrame.opacity = opacityVal;
       }
     }
 

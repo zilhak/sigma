@@ -377,15 +377,22 @@ export function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, childr
   } else if (display === 'table-row') {
     frame.layoutMode = 'HORIZONTAL';
   } else if (display === 'table-cell') {
-    // 테이블 셀은 내부 콘텐츠를 수직 배치
-    frame.layoutMode = 'VERTICAL';
+    // 테이블 셀: 인라인 자식(inline, inline-block, inline-flex)이 있으면 가로 배치
+    const hasInlineChildren = children && children.length > 0 && children.some(
+      child => child.styles && (
+        child.styles.display === 'inline-block' ||
+        child.styles.display === 'inline' ||
+        child.styles.display === 'inline-flex'
+      )
+    );
+    frame.layoutMode = hasInlineChildren ? 'HORIZONTAL' : 'VERTICAL';
   } else if (display === 'inline' || display === 'inline-block') {
     frame.layoutMode = 'HORIZONTAL';
   } else {
     // block 등 기본값 → VERTICAL
     // 단, 자식이 inline-block인 경우 HORIZONTAL로 변경 (CSS 인라인 흐름 모방)
     const hasInlineBlockChildren = children && children.length > 0 && children.some(
-      child => child.styles && (child.styles.display === 'inline-block' || child.styles.display === 'inline')
+      child => child.styles && (child.styles.display === 'inline-block' || child.styles.display === 'inline' || child.styles.display === 'inline-flex')
     );
     // table-cell 자식 감지: CSS anonymous table box 모방 (가로 배치)
     const hasTableCellChildren = children && children.length > 0 && children.some(
@@ -424,6 +431,19 @@ export function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, childr
     if (frame.layoutWrap === 'WRAP' && crossAxisGap > 0) {
       frame.counterAxisSpacing = crossAxisGap;
     }
+
+    // border-spacing → itemSpacing (테이블 전용 fallback)
+    if (frame.itemSpacing === 0 || frame.itemSpacing === undefined) {
+      const isTableVertical = display === 'table' || display === 'table-row-group'
+        || display === 'table-header-group' || display === 'table-footer-group';
+      const isTableHorizontal = display === 'table-row';
+
+      if (isTableVertical && styles.borderSpacingY > 0) {
+        frame.itemSpacing = styles.borderSpacingY;
+      } else if (isTableHorizontal && styles.borderSpacingX > 0) {
+        frame.itemSpacing = styles.borderSpacingX;
+      }
+    }
   }
 }
 
@@ -436,6 +456,34 @@ export function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, childr
 export function applyAlignment(frame: FrameNode, styles: ComputedStyles, children?: ExtractedNode[]) {
   const { justifyContent, alignItems } = styles;
   const childCount = children ? children.length : 0;
+
+  // table-cell: justifyContent/alignItems 대신 textAlign/verticalAlign 사용
+  if (styles.display === 'table-cell') {
+    // 주축 정렬 (textAlign → primaryAxisAlignItems)
+    switch (styles.textAlign) {
+      case 'center':
+        frame.primaryAxisAlignItems = 'CENTER';
+        break;
+      case 'right':
+      case 'end':
+        frame.primaryAxisAlignItems = 'MAX';
+        break;
+      default:
+        frame.primaryAxisAlignItems = 'MIN';
+    }
+    // 교차축 정렬 (verticalAlign → counterAxisAlignItems)
+    switch (styles.verticalAlign) {
+      case 'middle':
+        frame.counterAxisAlignItems = 'CENTER';
+        break;
+      case 'bottom':
+        frame.counterAxisAlignItems = 'MAX';
+        break;
+      default:
+        frame.counterAxisAlignItems = 'MIN';
+    }
+    return;
+  }
 
   // 주축 정렬
   // NOTE: Figma와 CSS의 space-between 동작 차이 보정

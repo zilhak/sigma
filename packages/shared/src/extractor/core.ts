@@ -28,6 +28,14 @@ export function parseAutoSize(value: string): number | 'auto' {
   return parseSize(value);
 }
 
+export function parseBorderSpacing(value: string): { x: number; y: number } {
+  if (!value || value === 'normal') return { x: 0, y: 0 };
+  const parts = value.split(/\s+/);
+  const x = parseFloat(parts[0]) || 0;
+  const y = parts.length > 1 ? (parseFloat(parts[1]) || 0) : x;
+  return { x, y };
+}
+
 export function getClassName(element: Element): string {
   const cn = element.className as unknown;
   if (typeof cn === 'object' && cn !== null && 'baseVal' in cn) {
@@ -89,6 +97,8 @@ export function extractStyles(style: CSSStyleDeclaration): ComputedStyles {
     gap: parseSize(style.gap),
     rowGap: parseSize(style.rowGap),
     columnGap: parseSize(style.columnGap),
+    borderSpacingX: parseBorderSpacing(style.borderSpacing).x,
+    borderSpacingY: parseBorderSpacing(style.borderSpacing).y,
 
     // Flex 아이템 속성
     flexGrow: parseFloat(style.flexGrow) || 0,

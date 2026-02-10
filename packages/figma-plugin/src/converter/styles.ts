@@ -89,7 +89,49 @@ export function applyChildMargins(frame: FrameNode, children: ExtractedNode[]) {
 }
 
 /**
- * 테두리 적용
+ * 색상 비교 헬퍼 (null-safe)
+ */
+function colorsEqual(a: RGBA | null | undefined, b: RGBA | null | undefined): boolean {
+  if (!a || !b) return false;
+  return Math.abs(a.r - b.r) < 0.01 && Math.abs(a.g - b.g) < 0.01
+      && Math.abs(a.b - b.b) < 0.01 && Math.abs(a.a - b.a) < 0.01;
+}
+
+/**
+ * 다수결 색상 찾기 (가장 많이 사용된 색상)
+ */
+function findMajorityColor(sides: Array<{ side: string; width: number; color: RGBA | null | undefined }>): RGBA | null {
+  if (sides.length === 0) return null;
+
+  // 색상별 카운트 (색상을 문자열로 변환하여 비교)
+  const colorCount = new Map<string, { color: RGBA; count: number }>();
+
+  for (const s of sides) {
+    if (!s.color) continue;
+    const key = `${s.color.r.toFixed(2)},${s.color.g.toFixed(2)},${s.color.b.toFixed(2)},${s.color.a.toFixed(2)}`;
+    const existing = colorCount.get(key);
+    if (existing) {
+      existing.count++;
+    } else {
+      colorCount.set(key, { color: s.color, count: 1 });
+    }
+  }
+
+  // 가장 많이 사용된 색상 찾기
+  let majorityColor: RGBA | null = null;
+  let maxCount = 0;
+  for (const entry of colorCount.values()) {
+    if (entry.count > maxCount) {
+      maxCount = entry.count;
+      majorityColor = entry.color;
+    }
+  }
+
+  return majorityColor;
+}
+
+/**
+ * 테두리 적용 (다수결 색상 기준)
  */
 export function applyBorder(frame: FrameNode, styles: ComputedStyles) {
   const top = styles.borderTopWidth || 0;
@@ -100,23 +142,16 @@ export function applyBorder(frame: FrameNode, styles: ComputedStyles) {
   const maxWidth = Math.max(top, right, bottom, left);
   if (maxWidth <= 0) return;
 
-  // 가장 두꺼운 면의 색상 사용 (border-bottom만 있으면 borderBottomColor 사용)
-  let borderColor: RGBA | null = null;
-  if (top >= right && top >= bottom && top >= left) {
-    borderColor = styles.borderTopColor;
-  } else if (bottom >= top && bottom >= right && bottom >= left) {
-    borderColor = styles.borderBottomColor;
-  } else if (right >= top && right >= bottom && right >= left) {
-    borderColor = styles.borderRightColor;
-  } else {
-    borderColor = styles.borderLeftColor;
-  }
+  // 면별 데이터 수집
+  const sides = [
+    { side: 'top', width: top, color: styles.borderTopColor },
+    { side: 'right', width: right, color: styles.borderRightColor },
+    { side: 'bottom', width: bottom, color: styles.borderBottomColor },
+    { side: 'left', width: left, color: styles.borderLeftColor },
+  ].filter(s => s.width > 0 && s.color);
 
-  // fallback: 아무 색상이나 찾기
-  if (!borderColor) {
-    borderColor = styles.borderTopColor || styles.borderRightColor
-      || styles.borderBottomColor || styles.borderLeftColor;
-  }
+  // 다수결 색상 찾기
+  const borderColor = findMajorityColor(sides);
   if (!borderColor) return;
 
   frame.strokes = [createSolidPaint(borderColor)];
@@ -130,6 +165,97 @@ export function applyBorder(frame: FrameNode, styles: ComputedStyles) {
     frame.strokeRightWeight = right;
     frame.strokeBottomWeight = bottom;
     frame.strokeLeftWeight = left;
+  }
+}
+
+/**
+ * 면별로 다른 border 색상을 Rectangle overlay로 표현
+ */
+export function applyBorderOverlays(frame: FrameNode, styles: ComputedStyles): void {
+  // 1. 면별 width/color 수집
+  const sides = [
+    { side: 'top', width: styles.borderTopWidth || 0, color: styles.borderTopColor },
+    { side: 'right', width: styles.borderRightWidth || 0, color: styles.borderRightColor },
+    { side: 'bottom', width: styles.borderBottomWidth || 0, color: styles.borderBottomColor },
+    { side: 'left', width: styles.borderLeftWidth || 0, color: styles.borderLeftColor },
+  ].filter(s => s.width > 0 && s.color);
+
+  // 2. 색상이 모두 동일하면 overlay 불필요 (기존 strokes로 충분)
+  if (sides.length <= 1) return;
+  const allSameColor = sides.every(s => colorsEqual(s.color, sides[0].color));
+  if (allSameColor) return;
+
+  // 3. 다수결 색상 찾기 (이미 frame.strokes에 적용됨)
+  const majorityColor = findMajorityColor(sides);
+  if (!majorityColor) return;
+
+  // 4. 다수결과 다른 면에만 overlay 추가
+  const frameWidth = frame.width;
+  const frameHeight = frame.height;
+
+  for (const s of sides) {
+    if (colorsEqual(s.color, majorityColor)) continue;
+
+    const rect = figma.createRectangle();
+    rect.fills = [createSolidPaint(s.color !== undefined && s.color !== null ? s.color : { r: 0, g: 0, b: 0, a: 1 })];
+    rect.strokes = [];
+
+    // pluginData로 border overlay 마킹 (나중에 역변환용)
+    rect.setPluginData('sigma:type', 'border_overlay');
+    rect.setPluginData('sigma:border', JSON.stringify({
+      side: s.side,
+      color: s.color,
+      width: s.width,
+    }));
+
+    let targetX = 0;
+    let targetY = 0;
+
+    switch (s.side) {
+      case 'top':
+        rect.resize(frameWidth, s.width);
+        rect.name = '__sigma_border_top';
+        targetX = 0;
+        targetY = 0;
+        break;
+      case 'right':
+        rect.resize(s.width, frameHeight);
+        rect.name = '__sigma_border_right';
+        targetX = frameWidth - s.width;
+        targetY = 0;
+        break;
+      case 'bottom':
+        rect.resize(frameWidth, s.width);
+        rect.name = '__sigma_border_bottom';
+        targetX = 0;
+        targetY = frameHeight - s.width;
+        break;
+      case 'left':
+        rect.resize(s.width, frameHeight);
+        rect.name = '__sigma_border_left';
+        targetX = 0;
+        targetY = 0;
+        break;
+    }
+
+    frame.appendChild(rect);
+
+    // Auto Layout 간섭 방지: absolute 포지셔닝 → 그 후 좌표 설정
+    rect.layoutPositioning = 'ABSOLUTE';
+    rect.x = targetX;
+    rect.y = targetY;
+  }
+
+  // 5. overlay로 대체한 면의 stroke weight를 0으로
+  for (const s of sides) {
+    if (!colorsEqual(s.color, majorityColor)) {
+      switch (s.side) {
+        case 'top': frame.strokeTopWeight = 0; break;
+        case 'right': frame.strokeRightWeight = 0; break;
+        case 'bottom': frame.strokeBottomWeight = 0; break;
+        case 'left': frame.strokeLeftWeight = 0; break;
+      }
+    }
   }
 }
 

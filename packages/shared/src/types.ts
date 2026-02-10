@@ -33,6 +33,8 @@ export interface ComputedStyles {
   gap: number;
   rowGap: number;
   columnGap: number;
+  borderSpacingX: number;  // border-spacing 가로 성분
+  borderSpacingY: number;  // border-spacing 세로 성분
 
   // Flex 아이템 속성
   flexGrow: number;
