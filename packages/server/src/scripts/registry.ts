@@ -57,6 +57,7 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
   const scriptsDir = getScriptsDir();
   const extractorPath = resolve(scriptsDir, 'extractor.standalone.js');
   const diffPath = resolve(scriptsDir, 'diff.standalone.js');
+  const storybookPath = resolve(scriptsDir, 'storybook.standalone.js');
 
   return [
     {
@@ -251,6 +252,110 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
         '// 4. 스냅샷과 현재 상태 비교',
         "const diff = await page.evaluate((id) => window.__sigma_diff__.compareWithSnapshot(id, '.component'), snapId);",
         'console.log(diff.equal ? "변경 없음" : `${diff.differences.length}개 차이 발견`);',
+      ].join('\n'),
+    },
+
+    {
+      name: 'storybook.standalone.js',
+      description:
+        'Storybook 전용 Sigma 임베드 스크립트. Story 목록 조회, story 렌더링 영역 감지, 컴포넌트 추출을 지원. ' +
+        'Playwright page.addScriptTag()로 inject 후 window.__sigma_storybook__ API 사용.',
+      path: storybookPath,
+      exists: existsSync(storybookPath),
+      api: [
+        {
+          method: 'window.__sigma_storybook__.getStoryRoot()',
+          description: 'Story 렌더링 컨테이너 (#storybook-root) 반환',
+          params: '-',
+          returns: 'HTMLElement | null',
+          example:
+            'const root = await page.evaluate(() => window.__sigma_storybook__.getStoryRoot());',
+        },
+        {
+          method: 'window.__sigma_storybook__.getStories(baseUrl?)',
+          description: 'Storybook /index.json에서 story 목록 조회 (docs 제외)',
+          params: 'baseUrl?: string (기본: 현재 origin)',
+          returns: 'Promise<StoryEntry[]> (id, title, name, type, importPath, tags)',
+          example:
+            'const stories = await page.evaluate(() => window.__sigma_storybook__.getStories());',
+        },
+        {
+          method: 'window.__sigma_storybook__.getCurrentStoryId()',
+          description: '현재 URL에서 story ID 추출',
+          params: '-',
+          returns: 'string | null',
+          example:
+            'const id = await page.evaluate(() => window.__sigma_storybook__.getCurrentStoryId());',
+        },
+        {
+          method: 'window.__sigma_storybook__.extractStory(selector?)',
+          description: '현재 렌더링된 story를 ExtractedNode로 추출. 기본: #storybook-root의 첫 번째 자식. iframe 내부에서 호출',
+          params: 'selector?: string (CSS 선택자)',
+          returns: 'ExtractedNode | null',
+          example:
+            'const data = await frame.evaluate(() => window.__sigma_storybook__.extractStory());',
+        },
+        {
+          method: 'window.__sigma_storybook__.extractAndSave(name, serverUrl?, selector?)',
+          description: '현재 story를 추출하여 Sigma 서버에 저장. iframe 내부에서 호출',
+          params: 'name: string, serverUrl?: string, selector?: string',
+          returns: 'Promise<SaveResult> { success, id?, error? }',
+          example:
+            "const result = await frame.evaluate(() => window.__sigma_storybook__.extractAndSave('Components/Button/Primary'));",
+        },
+        {
+          method: 'window.__sigma_storybook__.navigateToStory(storyId, options?)',
+          description: 'Story 전환 - preview iframe의 src를 변경하고 렌더링 완료까지 대기. 메인 Storybook 페이지에서 호출',
+          params: 'storyId: string, options?: { baseUrl?: string, timeout?: number }',
+          returns: 'Promise<boolean> (true=렌더링 완료, false=타임아웃)',
+          example:
+            "await page.evaluate((id) => window.__sigma_storybook__.navigateToStory(id), 'components-ccbadge--default');",
+        },
+        {
+          method: 'window.__sigma_storybook__.waitForStoryRendered(timeout?)',
+          description: '#storybook-root에 자식이 나타날 때까지 대기. 메인 프레임/iframe 양쪽에서 호출 가능',
+          params: 'timeout?: number (기본: 10000ms)',
+          returns: 'Promise<boolean>',
+          example:
+            'const ready = await page.evaluate(() => window.__sigma_storybook__.waitForStoryRendered());',
+        },
+        {
+          method: 'window.__sigma_storybook__.getStoryIframeUrl(storyId, baseUrl?)',
+          description: 'Story ID로 iframe URL 생성',
+          params: 'storyId: string, baseUrl?: string',
+          returns: 'string',
+          example:
+            "const url = await page.evaluate(() => window.__sigma_storybook__.getStoryIframeUrl('button--primary'));",
+        },
+        {
+          method: 'window.__sigma_storybook__.version',
+          description: '스크립트 버전',
+          params: '-',
+          returns: 'string',
+          example:
+            'const ver = await page.evaluate(() => window.__sigma_storybook__.version);',
+        },
+      ],
+      usage: [
+        '// === SPA 방식 (권장) - 메인 프레임에서 story 전환 + iframe에서 추출 ===',
+        '',
+        '// 1. 메인 Storybook 페이지 로드 + 스크립트 inject (1회)',
+        "await page.goto('http://localhost:6006');",
+        "await page.addScriptTag({ path: '<path>' });",
+        '',
+        '// 2. Story 목록 조회',
+        'const stories = await page.evaluate(() => window.__sigma_storybook__.getStories());',
+        '',
+        '// 3. Story 전환 (SPA 라우팅 - iframe만 변경, 메인 프레임 유지)',
+        "await page.evaluate((id) => window.__sigma_storybook__.navigateToStory(id), story.id);",
+        '',
+        '// 4. iframe에서 추출 + 서버 저장',
+        "const frame = page.frames().find(f => f.url().includes('iframe.html'));",
+        "await frame.addScriptTag({ path: '<path>' });",
+        "const result = await frame.evaluate(() => window.__sigma_storybook__.extractAndSave('Name'));",
+        '',
+        '// 5. 저장된 ID로 Sigma MCP로 Figma에 import',
+        '// sigma_import_file({ token, id: result.id, name: ... })',
       ].join('\n'),
     },
   ];

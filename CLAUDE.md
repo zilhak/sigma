@@ -15,6 +15,7 @@
 | **Sigma 확장** | Chrome Extension - 웹 컴포넌트 추출 (사용자 수동) | `packages/chrome-extension/` |
 | **Sigma 임베드 스크립트** | 웹 페이지에 `addScriptTag()`로 주입하는 자체 완결형 JS 번들 모음. AI Agent / Playwright 자동화용. 비공식적으로 "시그마 스크립트"라고도 부름 | `packages/shared/dist/` |
 | **추출 스크립트** | Sigma 임베드 스크립트 중 하나. `window.__sigma__` API로 DOM → ExtractedNode JSON 추출. 소스: `extractor/core.ts`, 빌드 결과: `extractor.standalone.js` | `packages/shared/dist/extractor.standalone.js` |
+| **Storybook 스크립트** | Sigma 임베드 스크립트 중 하나. `window.__sigma_storybook__` API로 story 목록 조회, SPA 전환, 추출+서버 저장. 소스: `storybook/core.ts`, 빌드 결과: `storybook.standalone.js` | `packages/shared/dist/storybook.standalone.js` |
 
 ---
 
@@ -64,41 +65,34 @@ sigma/
 
 #### 추출 스크립트 (Playwright 자동화용)
 
-Playwright에서 컴포넌트를 추출할 때는 **추출 스크립트** (Sigma 임베드 스크립트 중 하나)를 사용합니다.
+Playwright에서 컴포넌트를 추출할 때는 **Sigma 임베드 스크립트**를 사용합니다.
 
-**소스:** `packages/shared/src/extractor/core.ts` (Single Source of Truth)
-**빌드 결과:** `packages/shared/dist/extractor.standalone.js` (esbuild IIFE 번들)
+| 스크립트 | 빌드 결과 | 용도 |
+|----------|-----------|------|
+| **추출 스크립트** | `dist/extractor.standalone.js` | 범용 DOM → ExtractedNode 추출 (`window.__sigma__`) |
+| **Storybook 스크립트** | `dist/storybook.standalone.js` | Storybook 전용: story 목록, SPA 전환, 추출+저장 (`window.__sigma_storybook__`) |
 
-**스크립트 경로 확인:** Sigma MCP의 `get_playwright_scripts` 도구를 호출하면 스크립트의 절대 경로와 API 정보를 반환합니다.
+**소스:** `packages/shared/src/extractor/core.ts` (추출 로직 Single Source of Truth)
+**스크립트 경로 확인:** Sigma MCP의 `get_playwright_scripts` 도구를 호출하면 모든 스크립트의 절대 경로와 API 정보를 반환합니다.
 
-**사용법:**
+**범용 추출 (일반 웹페이지):**
 ```javascript
-// 0. (권장) MCP로 스크립트 경로 확인
-// sigma: get_playwright_scripts → { path: "/.../extractor.standalone.js", api: [...] }
-
 // 1. 스크립트 inject
-await page.addScriptTag({
-  path: '/path/to/sigma/packages/shared/dist/extractor.standalone.js'
-});
+await page.addScriptTag({ path: '.../dist/extractor.standalone.js' });
 
 // 2. 컴포넌트 추출
-const data = await page.evaluate(() => {
-  return window.__sigma__.extract('button.primary');
-});
+const data = await page.evaluate(() => window.__sigma__.extract('button.primary'));
 
-// 3. Sigma MCP로 Figma에 생성 (선택)
+// 3. Sigma MCP로 Figma에 생성
 // sigma_create_frame({ token, data, name: 'Button/Primary' })
 ```
 
-**API:**
+**API (extractor.standalone.js):**
 - `window.__sigma__.extract(selector)` - CSS 선택자로 요소 추출 (동기, ExtractedNode 반환)
 - `window.__sigma__.extractAt(x, y)` - 좌표로 요소 추출 (동기, ExtractedNode 반환)
 - `window.__sigma__.version` - 스크립트 버전 문자열
 
-**장점:**
-- Extension 설치/로드 불필요
-- 완전 자동화 가능 (CI/CD 친화적)
-- `packages/shared/src/extractor/core.ts`에서 빌드된 동일한 추출 로직 사용
+**Storybook 추출은 아래 "Storybook 자동화 워크플로우" 섹션 참조.**
 
 **절대 하지 말 것:**
 ```javascript
@@ -108,7 +102,7 @@ await page.evaluate(() => {
   return extractElement(document.querySelector(...));
 });
 
-// ✅ 올바른 방법 - Standalone Extractor 사용
+// ✅ 올바른 방법 - Sigma 임베드 스크립트 사용
 await page.addScriptTag({ path: '.../dist/extractor.standalone.js' });
 const data = await page.evaluate(() => window.__sigma__.extract('...'));
 ```
@@ -141,7 +135,7 @@ const data = await page.evaluate(() => window.__sigma__.extract('...'));
 }
 ```
 
-#### 컴포넌트 추출 워크플로우
+#### 컴포넌트 추출 워크플로우 (일반 웹페이지)
 
 ```
 1. Sigma MCP: get_playwright_scripts → 스크립트 경로 + API 정보 확인
@@ -151,26 +145,67 @@ const data = await page.evaluate(() => window.__sigma__.extract('...'));
 5. 결과를 Sigma MCP로 전달 → Figma에 프레임 생성
 ```
 
-**전체 예시:**
+#### Storybook 자동화 워크플로우 (권장)
+
+Storybook에서 컴포넌트를 추출할 때는 반드시 **storybook.standalone.js**를 사용합니다.
+이 스크립트는 SPA 라우팅으로 story를 전환하여 Chrome 메모리 과부하를 방지합니다.
+
+```
+1. Sigma MCP: get_playwright_scripts → storybook.standalone.js 경로 확인
+2. Playwright: 메인 Storybook 페이지 로드 (1회만)
+3. 메인 프레임에 storybook script inject (1회만)
+4. getStories() → story 목록 조회
+5. 각 story마다:
+   a. navigateToStory(storyId) → SPA 전환 + 렌더링 대기
+   b. iframe에 storybook script inject
+   c. extractAndSave(name) → 서버에 저장 (ID 반환)
+   d. Sigma MCP: sigma_import_file(token, id) → Figma에 프레임 생성
+```
+
+**전체 예시 (Storybook):**
 ```javascript
-// 0. (사전) get_playwright_scripts MCP 도구로 스크립트 경로 확인
-// → { path: "/.../packages/shared/dist/extractor.standalone.js", ... }
+// 0. get_playwright_scripts → storybook.standalone.js 경로 확인
 
-// 1. 페이지 이동
-await page.goto('http://localhost:6006/?path=/story/button--primary');
+// 1. 메인 Storybook 페이지 로드 (1회)
+await page.goto('http://localhost:6006');
+await page.addScriptTag({ path: storybookScriptPath });
 
-// 2. Extractor inject (빌드된 standalone JS 사용)
-await page.addScriptTag({
-  path: scriptPath  // get_playwright_scripts에서 받은 경로
-});
+// 2. Story 목록 조회
+const stories = await page.evaluate(() => window.__sigma_storybook__.getStories());
 
-// 3. 컴포넌트 추출
-const extracted = await page.evaluate(() => {
-  return window.__sigma__.extract('.storybook-button');
-});
+// 3. Story 전환 (SPA - 메인 프레임 유지, iframe만 변경)
+await page.evaluate((id) => window.__sigma_storybook__.navigateToStory(id), storyId);
 
-// 4. Sigma MCP로 Figma에 생성
-// sigma_create_frame({ token, data: extracted, name: 'Button/Primary' })
+// 4. iframe에서 추출 + 서버 저장
+const frame = page.frames().find(f => f.url().includes('iframe.html'));
+await frame.addScriptTag({ path: storybookScriptPath });
+const result = await frame.evaluate(() =>
+  window.__sigma_storybook__.extractAndSave('Components/CCBadge/Default')
+);
+// result = { success: true, id: "1770800548036-18mb1l" }
+
+// 5. Sigma MCP로 Figma에 import
+// sigma_import_file({ token, id: result.id, name: 'Components/CCBadge/Default' })
+```
+
+**API (storybook.standalone.js):**
+- `getStories(baseUrl?)` - /index.json에서 story 목록 조회 (메인 프레임)
+- `navigateToStory(storyId, options?)` - SPA story 전환 + 렌더링 대기 (메인 프레임)
+- `waitForStoryRendered(timeout?)` - 렌더링 완료 대기 (메인 프레임 / iframe)
+- `extractStory(selector?)` - ExtractedNode 추출 (iframe)
+- `extractAndSave(name, serverUrl?, selector?)` - 추출 + 서버 저장 (iframe)
+
+**⚠️ Storybook에서 절대 하지 말 것:**
+```javascript
+// ❌ page.goto로 각 story에 직접 이동 — Chrome 메모리 폭발
+for (const story of stories) {
+  await page.goto(`http://localhost:6006/iframe.html?id=${story.id}`);  // 금지!
+  // 매번 전체 페이지 reload → 렌더러 메모리 누적 → CPU 100% 타임아웃
+}
+
+// ✅ navigateToStory로 SPA 전환 — 메인 프레임 유지
+await page.evaluate((id) => window.__sigma_storybook__.navigateToStory(id), story.id);
+// iframe만 변경 → 수동 브라우징과 동일한 메모리 특성
 ```
 
 #### 기본 사용 규칙
@@ -765,42 +800,51 @@ startServerDetection();
 
 **목적:** 브라우저 자동화 (별도 MCP)
 
-MCP 자동화 시 Playwright로 브라우저를 제어하고, Sigma 임베드 스크립트(추출 스크립트)로 컴포넌트를 추출합니다.
+MCP 자동화 시 Playwright로 브라우저를 제어하고, Sigma 임베드 스크립트로 컴포넌트를 추출합니다.
 
 ```
 AI Agent
     │
     ├── Sigma MCP ──→ get_playwright_scripts()
-    │   │              → 스크립트 경로 + API 정보 반환
+    │   │              → extractor / storybook 스크립트 경로 + API 반환
     │   │
-    │   └──→ figma_create_frame() → Figma에 프레임 생성
+    │   ├──→ sigma_create_frame() → Figma에 프레임 생성
+    │   └──→ sigma_import_file()  → 저장된 데이터로 Figma에 import
     │
     └── Playwright MCP ──→ 브라우저 제어
-        │                  - navigate(url)
-        │                  - addScriptTag(extractor.standalone.js)
-        │                  - evaluate(window.__sigma__.extract(...))
         │
-        └──→ ExtractedNode JSON 반환
+        ├── 일반 웹: navigate → addScriptTag(extractor) → extract()
+        │
+        └── Storybook: navigate(1회) → addScriptTag(storybook) →
+                       navigateToStory(SPA) → extractAndSave() → import
 ```
 
-**Playwright로 컴포넌트 추출하는 방법:**
+**일반 웹페이지에서 추출:**
 ```typescript
-// 1. Sigma MCP로 스크립트 경로 확인
-// get_playwright_scripts → { path: "/.../dist/extractor.standalone.js", api: [...] }
+await page.goto('https://example.com');
+await page.addScriptTag({ path: extractorScriptPath });
+const data = await page.evaluate(() => window.__sigma__.extract('.my-component'));
+// sigma_create_frame({ token, data, name: 'Component' })
+```
 
-// 2. 페이지 이동
-await page.goto('http://localhost:6006/?path=/story/button--primary');
+**Storybook에서 추출 (SPA 방식):**
+```typescript
+// 메인 페이지 로드 + 스크립트 inject (1회)
+await page.goto('http://localhost:6006');
+await page.addScriptTag({ path: storybookScriptPath });
 
-// 3. Standalone Extractor inject
-await page.addScriptTag({ path: scriptPath });
+// SPA 전환 (iframe만 변경, 메인 프레임 유지)
+await page.evaluate((id) => window.__sigma_storybook__.navigateToStory(id), storyId);
 
-// 4. 컴포넌트 추출 (Extension 불필요)
-const data = await page.evaluate(() => {
-  return window.__sigma__.extract('.my-component');
-});
+// iframe에서 추출 + 서버 저장
+const frame = page.frames().find(f => f.url().includes('iframe.html'));
+await frame.addScriptTag({ path: storybookScriptPath });
+const result = await frame.evaluate(() =>
+  window.__sigma_storybook__.extractAndSave('Components/Button/Primary')
+);
 
-// 5. Sigma MCP로 Figma에 전송
-// sigma_create_frame({ token, data, name: 'Button/Primary' })
+// 저장된 데이터로 Figma에 import
+// sigma_import_file({ token, id: result.id })
 ```
 
 ---
@@ -837,12 +881,16 @@ User: "Storybook에서 Badge 컴포넌트를 Figma에 가져와줘"
 
 AI Agent:
 1. [Sigma] get_playwright_scripts()
-   → 스크립트 경로 확인
-2. [Playwright] navigate("http://localhost:6006/?path=/story/badge")
-3. [Playwright] addScriptTag(extractor.standalone.js)
-4. [Playwright] evaluate(() => window.__sigma__.extract('.badge'))
-   → ExtractedNode JSON 반환
-5. [Sigma] sigma_create_frame({ token, data: extracted, name: 'Badge' })
+   → storybook.standalone.js 경로 확인
+2. [Playwright] navigate("http://localhost:6006")
+   → 메인 Storybook 페이지 로드
+3. [Playwright] addScriptTag(storybook.standalone.js) (메인 프레임, 1회)
+4. [Playwright] evaluate(navigateToStory('components-ccbadge--default'))
+   → SPA 전환 + 렌더링 대기
+5. [Playwright] iframe에 addScriptTag(storybook.standalone.js)
+6. [Playwright] iframe.evaluate(extractAndSave('Components/CCBadge/Default'))
+   → 서버에 저장, { success: true, id: "..." } 반환
+7. [Sigma] sigma_import_file({ token, id, name: 'Components/CCBadge/Default' })
    → Figma에 프레임 생성됨
 
 AI: "Badge 컴포넌트를 Figma에 가져왔습니다!"
@@ -854,18 +902,24 @@ AI: "Badge 컴포넌트를 Figma에 가져왔습니다!"
 User: "Storybook의 모든 Button variant를 Figma로 동기화해줘"
 
 AI Agent:
-1. [Sigma] get_playwright_scripts() → 스크립트 경로 확인
-2. [Playwright] navigate("http://localhost:6006")
-3. [Playwright] 사이드바에서 Button 스토리 목록 수집
-4. for each variant in ["primary", "secondary", "outline", "ghost"]:
-   - [Playwright] click(variant story)
-   - [Playwright] addScriptTag(extractor.standalone.js) (페이지 변경 시 재inject)
-   - [Playwright] evaluate(() => window.__sigma__.extract('.storybook-button'))
-   - [Sigma] sigma_create_frame({ token, data, name: `Button/${variant}` })
-5. 완료
+1. [Sigma] get_playwright_scripts() → storybook.standalone.js 경로 확인
+2. [Playwright] navigate("http://localhost:6006") (1회)
+3. [Playwright] addScriptTag(storybook.standalone.js) (메인 프레임, 1회)
+4. [Playwright] evaluate(getStories()) → story 목록에서 Button 필터
+5. for each variant in [solid, border, mixed, loading]:
+   a. [Playwright] evaluate(navigateToStory(storyId)) → SPA 전환
+   b. [Playwright] iframe.addScriptTag(storybook.standalone.js)
+   c. [Playwright] iframe.evaluate(extractAndSave(`Button/${variant}`))
+      → 서버 저장, id 반환
+   d. [Sigma] sigma_import_file({ token, id, name: `Button/${variant}` })
+6. 완료
 
 AI: "4개의 Button variant를 Figma에 동기화했습니다!"
 ```
+
+> **⚠️ 주의:** Storybook 일괄 작업 시 반드시 SPA 전환(`navigateToStory`)을 사용할 것.
+> `page.goto()`로 각 story에 직접 이동하면 Chrome 렌더러 메모리가 누적되어
+> CPU 100% + 타임아웃이 발생합니다.
 
 ---
 
@@ -931,12 +985,17 @@ sigma/
 │       │   ├── extractor/        # 추출 로직 (Single Source of Truth)
 │       │   │   ├── core.ts       # extractElement 등 16개 함수
 │       │   │   └── index.ts      # Barrel export
-│       │   ├── extractor-standalone-entry.ts  # IIFE 진입점 (window.__sigma__)
+│       │   ├── storybook/        # Storybook 전용 유틸
+│       │   │   ├── core.ts       # getStories, navigateToStory, extractAndSave 등
+│       │   │   └── index.ts      # Barrel export
+│       │   ├── extractor-standalone-entry.ts   # IIFE 진입점 (window.__sigma__)
+│       │   ├── storybook-standalone-entry.ts   # IIFE 진입점 (window.__sigma_storybook__)
 │       │   ├── utils.ts          # 공통 유틸리티
 │       │   └── constants.ts      # 포트 번호 등 상수
 │       ├── build.ts              # esbuild (TS → Sigma 임베드 스크립트)
 │       ├── dist/                 # Sigma 임베드 스크립트 빌드 결과
-│       │   └── extractor.standalone.js  # 추출 스크립트 (IIFE 번들)
+│       │   ├── extractor.standalone.js   # 범용 추출 스크립트
+│       │   └── storybook.standalone.js   # Storybook 전용 스크립트
 │       └── package.json
 │
 ├── CLAUDE.md                     # 아키텍처 및 구현 명세

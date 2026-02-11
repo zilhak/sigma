@@ -3,6 +3,7 @@
  *
  * extractor-standalone-entry.ts → dist/extractor.standalone.js (IIFE)
  * diff-standalone-entry.ts → dist/diff.standalone.js (IIFE)
+ * storybook-standalone-entry.ts → dist/storybook.standalone.js (IIFE)
  */
 import * as esbuild from 'esbuild';
 import { resolve, dirname } from 'path';
@@ -37,6 +38,15 @@ async function build() {
     outfile: diffOut,
   });
   console.log(`✅ Built: ${diffOut}`);
+
+  // 3. Storybook Standalone
+  const storybookOut = resolve(__dirname, 'dist/storybook.standalone.js');
+  await esbuild.build({
+    ...commonOptions,
+    entryPoints: [resolve(__dirname, 'src/storybook-standalone-entry.ts')],
+    outfile: storybookOut,
+  });
+  console.log(`✅ Built: ${storybookOut}`);
 }
 
 build().catch((err) => {
