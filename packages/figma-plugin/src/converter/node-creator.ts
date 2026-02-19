@@ -27,6 +27,11 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     return createPseudoElementNode(node);
   }
 
+  // input 요소 처리 (radio, checkbox 등 네이티브 폼 컨트롤)
+  if (node.tagName === 'input') {
+    return createInputNode(node);
+  }
+
   // 텍스트만 있는 요소 (자식 없고 텍스트만)
   if (isTextOnlyElement(node)) {
     return createTextNode(textContent, styles);
@@ -82,6 +87,30 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     // Auto Layout 크기 모드 설정
     if (frame.layoutMode !== 'NONE') {
       applySizingMode(frame, styles, isRoot);
+    }
+  } else if (children.length > 0 && hasAbsoluteChildren(children)) {
+    // ── position: absolute 자식 감지 → 절대 위치 배치 ──
+    // CSS absolute 요소는 document flow에서 빠지며, Figma Auto Layout으로 표현 불가.
+    // 모든 자식을 boundingRect 기반으로 절대 배치
+    frame.layoutMode = 'NONE';
+
+    // 부모 텍스트 콘텐츠 추가 (있는 경우)
+    if (textContent) {
+      const textNode = createTextNode(textContent, styles);
+      if (textNode) {
+        frame.appendChild(textNode);
+      }
+    }
+
+    // 자식 노드를 boundingRect 기반으로 절대 배치
+    const parentRect = node.boundingRect;
+    for (const child of children) {
+      const childNode = await createFigmaNode(child, false);
+      if (childNode) {
+        frame.appendChild(childNode);
+        childNode.x = child.boundingRect.x - parentRect.x;
+        childNode.y = child.boundingRect.y - parentRect.y;
+      }
     }
   } else if (children.length > 0 && hasNegativeMargins(children)) {
     // ── 음수 마진 감지 → 절대 위치 배치 ──
@@ -202,6 +231,19 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
   applyBorderOverlays(frame, styles);
 
   return frame;
+}
+
+/**
+ * 자식 중 position: absolute가 있는지 확인
+ * CSS absolute 요소는 document flow에서 빠지므로 Auto Layout으로 표현 불가.
+ * 부모가 position: relative이고 자식이 absolute인 패턴 (캔버스, 오버레이 등) 감지.
+ */
+function hasAbsoluteChildren(children: ExtractedNode[]): boolean {
+  return children.some(function(child) {
+    const s = child.styles;
+    if (!s) return false;
+    return s.position === 'absolute';
+  });
 }
 
 /**
@@ -527,6 +569,48 @@ function createImageNode(node: ExtractedNode): FrameNode {
   applyCornerRadius(frame, styles);
 
   // 불투명도
+  if (styles.opacity < 1) {
+    frame.opacity = styles.opacity;
+  }
+
+  return frame;
+}
+
+/**
+ * input 요소 (radio, checkbox 등) 시각적 렌더링
+ * 네이티브 폼 컨트롤은 자식이 없어 빈 프레임이 되므로 별도 처리
+ */
+function createInputNode(node: ExtractedNode): FrameNode {
+  const { styles, boundingRect, attributes } = node;
+  const inputType = (attributes && attributes.type) ? attributes.type : 'text';
+
+  const frame = figma.createFrame();
+  const w = Math.max(boundingRect.width, 13);
+  const h = Math.max(boundingRect.height, 13);
+  frame.resize(w, h);
+
+  if (inputType === 'radio') {
+    // 라디오 버튼: 원형
+    frame.cornerRadius = Math.round(w / 2);
+    frame.strokes = [{ type: 'SOLID', color: { r: 0.55, g: 0.55, b: 0.55 } }];
+    frame.strokeWeight = 1.5;
+    frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+  } else if (inputType === 'checkbox') {
+    // 체크박스: 라운드 사각형
+    frame.cornerRadius = 2;
+    frame.strokes = [{ type: 'SOLID', color: { r: 0.55, g: 0.55, b: 0.55 } }];
+    frame.strokeWeight = 1.5;
+    frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+  } else {
+    // 기타 input: 기본 프레임
+    frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
+    frame.strokes = [{ type: 'SOLID', color: { r: 0.8, g: 0.8, b: 0.8 } }];
+    frame.strokeWeight = 1;
+    frame.cornerRadius = 3;
+  }
+
+  frame.name = '[INPUT] ' + inputType;
+
   if (styles.opacity < 1) {
     frame.opacity = styles.opacity;
   }

@@ -4,11 +4,15 @@ import { HTTP_PORT, WS_PORT } from '@sigma/shared';
 import { FigmaWebSocketServer } from './websocket/server.js';
 import { createHttpServer } from './http/server.js';
 import { createMcpRequestHandler, getMcpSessionCount } from './mcp/server.js';
+import { startupCleanup } from './storage/index.js';
 
 async function main() {
   console.log('╔═══════════════════════════════════════╗');
   console.log('║           Sigma Server v0.1.0         ║');
   console.log('╚═══════════════════════════════════════╝');
+
+  // Storage cleanup on startup (TTL + size limit)
+  await startupCleanup();
 
   // Start WebSocket server for Figma
   const wsServer = new FigmaWebSocketServer(WS_PORT);

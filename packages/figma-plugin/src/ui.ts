@@ -443,6 +443,42 @@ window.onmessage = (event) => {
         pendingCommandId = null;
       }
       break;
+
+    case 'export-image-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'EXPORT_IMAGE_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log(`이미지 export 완료: ${msg.result?.nodeName || 'unknown'}`, 'success');
+        } else {
+          log(`이미지 export 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'extract-node-json-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'EXTRACT_NODE_JSON_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log(`노드 JSON 추출 완료: ${msg.result?.nodeName || 'unknown'}`, 'success');
+        } else {
+          log(`노드 JSON 추출 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
   }
 };
 
@@ -860,6 +896,42 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
             filter: (msg as any).filter,
             limit: (msg as any).limit,
             pageId: msg.pageId,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case 'EXPORT_IMAGE': {
+      log(`이미지 export 요청: ${msg.nodeId} (${(msg as any).format || 'PNG'}, scale: ${(msg as any).scale || 2})`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'export-image',
+            nodeId: msg.nodeId,
+            format: (msg as any).format,
+            scale: (msg as any).scale,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case 'EXTRACT_NODE_JSON': {
+      log(`노드 JSON 추출 요청: ${msg.nodeId}`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'extract-node-json',
+            nodeId: msg.nodeId,
           },
         },
         '*'

@@ -502,6 +502,149 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
+    case 'extract-node-json': {
+      const extractNodeId = msg.nodeId as string;
+
+      if (!extractNodeId) {
+        figma.ui.postMessage({
+          type: 'extract-node-json-result',
+          success: false,
+          error: 'nodeId가 필요합니다',
+        });
+        break;
+      }
+
+      const targetNode = figma.getNodeById(extractNodeId);
+      if (!targetNode) {
+        figma.ui.postMessage({
+          type: 'extract-node-json-result',
+          success: false,
+          error: `노드를 찾을 수 없습니다: ${extractNodeId}`,
+        });
+        break;
+      }
+
+      if (targetNode.type === 'DOCUMENT' || targetNode.type === 'PAGE') {
+        figma.ui.postMessage({
+          type: 'extract-node-json-result',
+          success: false,
+          error: `이 노드 타입은 추출할 수 없습니다: ${targetNode.type}`,
+        });
+        break;
+      }
+
+      try {
+        const extracted = extractNodeToJSON(targetNode as SceneNode);
+        if (!extracted) {
+          figma.ui.postMessage({
+            type: 'extract-node-json-result',
+            success: false,
+            error: '추출 가능한 데이터가 없습니다',
+          });
+          break;
+        }
+
+        figma.ui.postMessage({
+          type: 'extract-node-json-result',
+          success: true,
+          result: {
+            nodeId: extractNodeId,
+            nodeName: targetNode.name,
+            nodeType: targetNode.type,
+            data: extracted,
+          },
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        figma.ui.postMessage({
+          type: 'extract-node-json-result',
+          success: false,
+          error: `추출 실패: ${errMsg}`,
+        });
+      }
+      break;
+    }
+
+    case 'export-image': {
+      const exportNodeId = msg.nodeId as string;
+      const exportFormat = (msg.format as string || 'PNG').toUpperCase();
+      const exportScale = msg.scale as number || 2;
+
+      if (!exportNodeId) {
+        figma.ui.postMessage({
+          type: 'export-image-result',
+          success: false,
+          error: 'nodeId가 필요합니다',
+        });
+        break;
+      }
+
+      const exportNode = figma.getNodeById(exportNodeId);
+      if (!exportNode) {
+        figma.ui.postMessage({
+          type: 'export-image-result',
+          success: false,
+          error: `노드를 찾을 수 없습니다: ${exportNodeId}`,
+        });
+        break;
+      }
+
+      // exportAsync is available on SceneNode (not DOCUMENT or PAGE)
+      if (exportNode.type === 'DOCUMENT' || exportNode.type === 'PAGE') {
+        figma.ui.postMessage({
+          type: 'export-image-result',
+          success: false,
+          error: `이 노드 타입은 export할 수 없습니다: ${exportNode.type}`,
+        });
+        break;
+      }
+
+      try {
+        const sceneNode = exportNode as SceneNode;
+
+        // Determine export settings
+        const validFormats = ['PNG', 'SVG', 'JPG', 'PDF'];
+        const finalFormat = validFormats.includes(exportFormat) ? exportFormat : 'PNG';
+
+        const exportSettings: ExportSettings = finalFormat === 'SVG'
+          ? { format: 'SVG' }
+          : finalFormat === 'PDF'
+            ? { format: 'PDF' }
+            : {
+                format: finalFormat as 'PNG' | 'JPG',
+                constraint: { type: 'SCALE', value: exportScale },
+              };
+
+        const bytes = await sceneNode.exportAsync(exportSettings);
+        const base64 = figma.base64Encode(bytes);
+
+        // Get dimensions
+        const width = 'width' in sceneNode ? (sceneNode as any).width : 0;
+        const height = 'height' in sceneNode ? (sceneNode as any).height : 0;
+
+        figma.ui.postMessage({
+          type: 'export-image-result',
+          success: true,
+          result: {
+            base64,
+            format: finalFormat,
+            nodeId: exportNodeId,
+            nodeName: sceneNode.name,
+            width: Math.round(width),
+            height: Math.round(height),
+          },
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        figma.ui.postMessage({
+          type: 'export-image-result',
+          success: false,
+          error: `export 실패: ${errMsg}`,
+        });
+      }
+      break;
+    }
+
     case 'cancel':
       figma.closePlugin();
       break;

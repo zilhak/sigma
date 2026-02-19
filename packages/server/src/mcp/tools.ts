@@ -473,6 +473,103 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     },
   },
 
+  {
+    name: 'sigma_screenshot',
+    description: `Figma 노드를 이미지로 캡처하여 로컬 파일로 저장합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+노드의 exportAsync()를 사용하여 PNG/SVG/JPG/PDF로 export한 후,
+~/.sigma/screenshots/ 디렉토리에 저장하고 파일 경로를 반환합니다.
+
+반환된 filePath를 Read 도구로 읽으면 이미지를 직접 확인할 수 있습니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '캡처할 노드 ID (예: "123:456")',
+        },
+        format: {
+          type: 'string',
+          enum: ['PNG', 'SVG', 'JPG', 'PDF'],
+          default: 'PNG',
+          description: '이미지 형식 (기본값: PNG)',
+        },
+        scale: {
+          type: 'number',
+          default: 2,
+          description: 'Export 스케일 (기본값: 2, SVG/PDF에는 미적용)',
+        },
+        filename: {
+          type: 'string',
+          description: '저장할 파일명 (선택, 미지정 시 노드 이름 + 타임스탬프로 자동 생성)',
+        },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+
+  {
+    name: 'sigma_extract_node',
+    description: `Figma 노드를 ExtractedNode JSON으로 추출합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+노드 ID를 지정하면 해당 노드의 구조, 스타일, 자식 요소를 포함한 ExtractedNode JSON을 반환합니다.
+반환된 JSON은 sigma_create_frame으로 다시 Figma에 생성하거나, 외부에서 분석하는 데 사용할 수 있습니다.
+
+**주의:** 대형 노드(자식이 많은 경우)는 JSON 크기가 클 수 있습니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '추출할 노드 ID (예: "123:456")',
+        },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+  {
+    name: 'sigma_test_roundtrip',
+    description: `Figma 노드를 JSON으로 추출한 후, 그 JSON으로 새 프레임을 생성하는 라운드트립 테스트입니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+
+**용도:** JSON 추출 품질을 시각적으로 검증하는 수동 테스트.
+원본 노드 옆에 추출된 JSON으로 만든 복제본이 생성되므로, 둘을 나란히 비교할 수 있습니다.
+
+**동작:**
+1. nodeId로 원본 노드를 ExtractedNode JSON으로 추출
+2. 추출된 JSON으로 새 프레임을 생성 (이름: "[Test] {원본이름}")
+3. 원본 정보 + 생성된 프레임 정보를 반환`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '테스트할 원본 노드 ID (예: "123:456")',
+        },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+
   // === Combined Tools (토큰 필수) ===
   {
     name: 'save_and_import',
@@ -523,6 +620,66 @@ API 정보에 따라 window.__sigma__ 함수를 호출합니다.`,
     inputSchema: {
       type: 'object',
       properties: {},
+    },
+  },
+
+  // === Storage Management (토큰 불필요) ===
+  {
+    name: 'sigma_storage_stats',
+    description: `스토리지 용량 현황을 카테고리별로 조회합니다.
+
+extracted(추출 데이터)와 screenshots(스크린샷) 각각의 파일 수, 용량을 확인할 수 있습니다.
+스토리지는 서버 시작 시 자동 정리되지만, 가끔씩 이 도구로 확인하는 것을 권장합니다.`,
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'sigma_cleanup',
+    description: `스토리지를 조건부로 일괄 정리합니다.
+
+기본적으로 7일 경과 파일을 삭제합니다. olderThanDays로 기간을 조정할 수 있습니다.
+category로 extracted/screenshots/all 중 대상을 선택할 수 있습니다.
+
+**참고:** 서버 시작 시 자동 정리가 실행되므로, 수동 정리는 급한 경우에만 사용하세요.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        olderThanDays: {
+          type: 'number',
+          default: 7,
+          description: '이 일수보다 오래된 파일 삭제 (기본값: 7)',
+        },
+        category: {
+          type: 'string',
+          enum: ['extracted', 'screenshots', 'all'],
+          default: 'all',
+          description: "정리 대상 카테고리 (기본값: 'all')",
+        },
+      },
+    },
+  },
+  {
+    name: 'list_screenshots',
+    description: '저장된 스크린샷 목록을 조회합니다 (파일명, 경로, 크기, 생성일)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'delete_screenshot',
+    description: '저장된 스크린샷을 파일명으로 삭제합니다',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filename: {
+          type: 'string',
+          description: '삭제할 스크린샷 파일명 (list_screenshots로 확인)',
+        },
+      },
+      required: ['filename'],
     },
   },
 
@@ -1402,6 +1559,243 @@ export async function handleTool(
         }
       }
 
+      case 'sigma_screenshot': {
+        const screenshotToken = args.token as string;
+        const screenshotValidation = validateToken(screenshotToken);
+
+        if (!screenshotValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: screenshotValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: screenshotPluginId } = getTargetFromBinding(screenshotValidation.binding);
+
+        if (screenshotPluginId) {
+          const targetPlugin = wsServer.getPluginById(screenshotPluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${screenshotPluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const screenshotNodeId = args.nodeId as string;
+        const screenshotFormat = (args.format as 'PNG' | 'SVG' | 'JPG' | 'PDF') || 'PNG';
+        const screenshotScale = (args.scale as number) || 2;
+
+        try {
+          const exportResult = await wsServer.exportImage(
+            screenshotNodeId,
+            { format: screenshotFormat, scale: screenshotScale },
+            screenshotPluginId
+          );
+
+          // Generate filename
+          const ext = screenshotFormat.toLowerCase();
+          const safeName = (exportResult.nodeName || 'node')
+            .toLowerCase()
+            .replace(/[^a-z0-9가-힣-_]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+          const timestamp = Date.now();
+          const filename = (args.filename as string) || `${safeName}-${timestamp}.${ext}`;
+
+          // Save to file
+          const filePath = await storage.saveScreenshot(exportResult.base64, filename);
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  filePath,
+                  filename,
+                  nodeId: exportResult.nodeId,
+                  nodeName: exportResult.nodeName,
+                  width: exportResult.width,
+                  height: exportResult.height,
+                  format: screenshotFormat,
+                  scale: screenshotScale,
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: errorMessage,
+                  nodeId: screenshotNodeId,
+                }),
+              },
+            ],
+          };
+        }
+      }
+
+      case 'sigma_extract_node': {
+        const extractToken = args.token as string;
+        const extractValidation = validateToken(extractToken);
+
+        if (!extractValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: extractValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: extractPluginId } = getTargetFromBinding(extractValidation.binding);
+
+        if (extractPluginId) {
+          const targetPlugin = wsServer.getPluginById(extractPluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${extractPluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const extractNodeId = args.nodeId as string;
+
+        try {
+          const extractResult = await wsServer.extractNode(extractNodeId, extractPluginId);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  nodeId: extractResult.nodeId,
+                  nodeName: extractResult.nodeName,
+                  nodeType: extractResult.nodeType,
+                  data: extractResult.data,
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: errorMessage, nodeId: extractNodeId }),
+              },
+            ],
+          };
+        }
+      }
+
+      case 'sigma_test_roundtrip': {
+        const rtToken = args.token as string;
+        const rtValidation = validateToken(rtToken);
+
+        if (!rtValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: rtValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: rtPluginId, pageId: rtPageId } = getTargetFromBinding(rtValidation.binding);
+
+        if (rtPluginId) {
+          const targetPlugin = wsServer.getPluginById(rtPluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${rtPluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const rtNodeId = args.nodeId as string;
+
+        try {
+          // 1. Extract node to JSON
+          const extractResult = await wsServer.extractNode(rtNodeId, rtPluginId);
+
+          // 2. Create frame from extracted JSON
+          const frameName = `[Test] ${extractResult.nodeName}`;
+          await wsServer.createFrame(
+            extractResult.data as ExtractedNode,
+            frameName,
+            undefined,
+            'json',
+            undefined,
+            rtPluginId,
+            rtPageId
+          );
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `라운드트립 테스트 완료: "${extractResult.nodeName}" → "${frameName}" 생성됨`,
+                  original: {
+                    nodeId: extractResult.nodeId,
+                    nodeName: extractResult.nodeName,
+                    nodeType: extractResult.nodeType,
+                  },
+                  created: {
+                    name: frameName,
+                    format: 'json',
+                  },
+                  target: {
+                    pluginId: rtPluginId || '(default)',
+                    pageId: rtPageId || '(current)',
+                  },
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: errorMessage, nodeId: rtNodeId }),
+              },
+            ],
+          };
+        }
+      }
+
       // === Combined Tools ===
       case 'save_and_import': {
         const saveImportToken = args.token as string;
@@ -1535,10 +1929,129 @@ export async function handleTool(
         };
       }
 
+      // === Storage Management ===
+      case 'sigma_storage_stats': {
+        const fullStats = await storage.getFullStorageStats();
+
+        const formatSize = (bytes: number) => {
+          if (bytes < 1024) return `${bytes}B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+          return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                extracted: {
+                  count: fullStats.extracted.count,
+                  size: formatSize(fullStats.extracted.totalSize),
+                  sizeBytes: fullStats.extracted.totalSize,
+                },
+                screenshots: {
+                  count: fullStats.screenshots.count,
+                  size: formatSize(fullStats.screenshots.totalSize),
+                  sizeBytes: fullStats.screenshots.totalSize,
+                },
+                total: {
+                  count: fullStats.total.count,
+                  size: formatSize(fullStats.total.totalSize),
+                  sizeBytes: fullStats.total.totalSize,
+                },
+                autoCleanup: {
+                  ttlDays: 7,
+                  startupThreshold: '100MB',
+                  startupTarget: '50MB',
+                },
+              }),
+            },
+          ],
+        };
+      }
+
+      case 'sigma_cleanup': {
+        const olderThanDays = (args.olderThanDays as number) || 7;
+        const category = (args.category as 'extracted' | 'screenshots' | 'all') || 'all';
+
+        const result = await storage.cleanup({ olderThanDays, category });
+
+        const formatSize = (bytes: number) => {
+          if (bytes < 1024) return `${bytes}B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+          return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                deleted: result.deleted,
+                freedSize: formatSize(result.freedBytes),
+                freedBytes: result.freedBytes,
+                criteria: {
+                  olderThanDays,
+                  category,
+                },
+                message: result.deleted > 0
+                  ? `${result.deleted}개 파일 삭제됨 (${formatSize(result.freedBytes)} 확보)`
+                  : '삭제할 파일이 없습니다',
+              }),
+            },
+          ],
+        };
+      }
+
+      case 'list_screenshots': {
+        const screenshots = await storage.listScreenshots();
+
+        const formatSize = (bytes: number) => {
+          if (bytes < 1024) return `${bytes}B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+          return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                count: screenshots.length,
+                screenshots: screenshots.map(s => ({
+                  filename: s.filename,
+                  path: s.path,
+                  size: formatSize(s.size),
+                  sizeBytes: s.size,
+                  createdAt: s.createdAt,
+                })),
+              }),
+            },
+          ],
+        };
+      }
+
+      case 'delete_screenshot': {
+        const filename = args.filename as string;
+        const deleted = await storage.deleteScreenshot(filename);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: deleted,
+                message: deleted ? `'${filename}' 삭제됨` : `'${filename}'을 찾을 수 없습니다`,
+              }),
+            },
+          ],
+        };
+      }
+
       // === Server Status ===
       case 'server_status': {
         const figmaStatus = wsServer.getStatus();
-        const storageStats = await storage.getStorageStats();
+        const storageStats = await storage.getFullStorageStats();
         const tokenStatus = tokenStore.getStatus();
 
         return {

@@ -49,6 +49,76 @@ export function getDirectTextContent(element: HTMLElement): string {
   for (const node of element.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       text += node.textContent?.trim() || '';
+    } else if (
+      node.nodeType === Node.ELEMENT_NODE &&
+      (node as HTMLElement).tagName === 'BR'
+    ) {
+      text += '\n';
+    }
+  }
+  return text;
+}
+
+/**
+ * 순수 텍스트 포매팅용 인라인 태그 목록
+ * 시각적 스타일 없이 텍스트만 꾸미는 태그들
+ */
+const INLINE_TEXT_TAGS = new Set([
+  'span', 'strong', 'em', 'b', 'i', 'a', 'br', 'code', 'small',
+  'sub', 'sup', 'mark', 'abbr', 'cite', 'q', 'time', 'kbd', 'var', 'samp',
+]);
+
+/**
+ * 요소의 모든 자식이 순수 인라인 텍스트 콘텐츠인지 확인
+ * true이면 자식을 개별 노드로 분리하지 않고 텍스트로 병합 가능
+ */
+export function isAllInlineTextContent(element: HTMLElement): boolean {
+  for (const child of element.children) {
+    const tag = child.tagName.toLowerCase();
+    if (!INLINE_TEXT_TAGS.has(tag)) return false;
+
+    // 인라인 태그라도 시각적 스타일(배경, 테두리, 패딩)이 있으면 병합하지 않음
+    if (tag !== 'br') {
+      const style = window.getComputedStyle(child);
+      const bgColor = style.backgroundColor;
+      // transparent나 rgba(0,0,0,0)이 아닌 배경색이 있으면 시각적 요소
+      if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {
+        return false;
+      }
+      if (parseFloat(style.borderTopWidth) > 0 || parseFloat(style.borderBottomWidth) > 0) {
+        return false;
+      }
+      if (parseFloat(style.paddingTop) > 2 || parseFloat(style.paddingBottom) > 2) {
+        return false;
+      }
+    }
+
+    // 재귀: 자식의 자식도 인라인이어야 함
+    if (child.children.length > 0 && !isAllInlineTextContent(child as HTMLElement)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 요소의 전체 인라인 콘텐츠를 순서대로 하나의 텍스트로 병합
+ * text node, <br>, inline element 텍스트를 DOM 순서 그대로 수집
+ */
+export function getFullInlineTextContent(element: HTMLElement): string {
+  let text = '';
+  for (const node of element.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const t = node.textContent?.trim();
+      if (t) text += t;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      if (el.tagName === 'BR') {
+        text += '\n';
+      } else {
+        // 인라인 자식 재귀
+        text += getFullInlineTextContent(el);
+      }
     }
   }
   return text;
@@ -285,6 +355,20 @@ export function serializeSvgWithComputedStyles(svg: SVGSVGElement): string {
   const originalElements = svg.querySelectorAll('*');
   const cloneElements = clone.querySelectorAll('*');
 
+  // viewBox / width / height가 없는 SVG 보정
+  // ReactFlow 등 CSS로만 크기를 지정하는 SVG는 이 속성이 없어
+  // Figma createNodeFromSvg()가 좌표계를 잘못 해석함
+  const rect = svg.getBoundingClientRect();
+  if (!clone.getAttribute('viewBox') && rect.width > 0 && rect.height > 0) {
+    clone.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+  }
+  if (!clone.getAttribute('width') && rect.width > 0) {
+    clone.setAttribute('width', String(rect.width));
+  }
+  if (!clone.getAttribute('height') && rect.height > 0) {
+    clone.setAttribute('height', String(rect.height));
+  }
+
   // 루트 SVG 요소에도 스타일 적용
   applySvgComputedStyles(svg, clone);
 
@@ -476,6 +560,34 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
       },
       children: [],
       svgString: svgWithStyles,
+    };
+  }
+
+  // 혼합 인라인 콘텐츠 감지:
+  // 모든 자식이 순수 텍스트 포매팅용 인라인 태그이고
+  // 시각적 스타일(배경, 테두리)이 없으면 하나의 텍스트로 병합
+  if (element.children.length > 0 && isAllInlineTextContent(element)) {
+    const mergedText = getFullInlineTextContent(element);
+    // Pseudo-elements도 포함
+    const pseudoElements = extractPseudoElements(element as HTMLElement);
+    const beforeElements = pseudoElements.filter(p => p.tagName === '::before');
+    const afterElements = pseudoElements.filter(p => p.tagName === '::after');
+    const allChildren = [...beforeElements, ...afterElements];
+
+    return {
+      id: generateId(),
+      tagName: tagName,
+      className: getClassName(element),
+      textContent: mergedText,
+      attributes: getAttributes(element as HTMLElement),
+      styles: extractStyles(computedStyle),
+      boundingRect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      },
+      children: allChildren,
     };
   }
 

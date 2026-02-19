@@ -13,6 +13,13 @@ export function createMcpServer(context: ToolContext) {
     {
       name: 'sigma',
       version: '0.1.0',
+      description: [
+        'Sigma - Modular Design-to-Code Bridge.',
+        '웹 컴포넌트 추출 → Figma 변환 자동화 MCP 서버.',
+        '',
+        '스토리지(~/.sigma/)는 서버 시작 시 자동 정리됩니다 (7일 경과 파일 삭제, 100MB 초과 시 50MB로 축소).',
+        '그래도 가끔씩 sigma_storage_stats로 용량을 확인하고, 필요하면 sigma_cleanup으로 수동 정리하는 것을 권장합니다.',
+      ].join('\n'),
     },
     {
       capabilities: {

@@ -40,3 +40,9 @@ export const API = {
  */
 export const STORAGE_PATH = '~/.sigma';
 export const EXTRACTED_PATH = `${STORAGE_PATH}/extracted`;
+export const SCREENSHOTS_PATH = `${STORAGE_PATH}/screenshots`;
+
+export const STORAGE_SUBDIRS = {
+  EXTRACTED: 'extracted',
+  SCREENSHOTS: 'screenshots',
+} as const;

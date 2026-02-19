@@ -278,6 +278,36 @@ export class FigmaWebSocketServer {
         }
         break;
       }
+
+      case 'EXPORT_IMAGE_RESULT': {
+        const exportCommandId = message.commandId as string;
+        const exportPending = this.pendingCommands.get(exportCommandId);
+        if (exportPending) {
+          clearTimeout(exportPending.timeout);
+          this.pendingCommands.delete(exportCommandId);
+          if (message.success) {
+            exportPending.resolve(message.result);
+          } else {
+            exportPending.reject(new Error(message.error as string || 'Export image failed'));
+          }
+        }
+        break;
+      }
+
+      case 'EXTRACT_NODE_JSON_RESULT': {
+        const extractCommandId = message.commandId as string;
+        const extractPending = this.pendingCommands.get(extractCommandId);
+        if (extractPending) {
+          clearTimeout(extractPending.timeout);
+          this.pendingCommands.delete(extractCommandId);
+          if (message.success) {
+            extractPending.resolve(message.result);
+          } else {
+            extractPending.reject(new Error(message.error as string || 'Extract node failed'));
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -859,6 +889,94 @@ export class FigmaWebSocketServer {
       });
 
       console.log(`[WebSocket] Sending GET_TREE to ${targetPlugin.id} (depth: ${options.depth || 1})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Export a Figma node as image
+   */
+  async exportImage(
+    nodeId: string,
+    options?: { format?: 'PNG' | 'SVG' | 'JPG' | 'PDF'; scale?: number },
+    pluginId?: string
+  ): Promise<{ base64: string; format: string; nodeId: string; nodeName: string; width: number; height: number }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (export image)'));
+      }, 60000);  // 60초 (이미지 export는 대용량 가능)
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const format = options?.format || 'PNG';
+      const scale = options?.scale || 2;
+
+      const message = JSON.stringify({
+        type: 'EXPORT_IMAGE',
+        commandId,
+        nodeId,
+        format,
+        scale,
+      });
+
+      console.log(`[WebSocket] Sending EXPORT_IMAGE to ${targetPlugin.id} (node: ${nodeId}, format: ${format}, scale: ${scale})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Extract a Figma node to ExtractedNode JSON
+   */
+  async extractNode(
+    nodeId: string,
+    pluginId?: string
+  ): Promise<{ nodeId: string; nodeName: string; nodeType: string; data: unknown }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (extract node)'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'EXTRACT_NODE_JSON',
+        commandId,
+        nodeId,
+      });
+
+      console.log(`[WebSocket] Sending EXTRACT_NODE_JSON to ${targetPlugin.id} (node: ${nodeId})`);
       targetPlugin.ws.send(message);
     });
   }
