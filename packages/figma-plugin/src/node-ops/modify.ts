@@ -100,12 +100,21 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   resize: {
     description: '노드 크기 변경. args: { width: number, height: number }',
     handler: (node, args) => {
-      if (!('resize' in node)) throw new Error('이 노드는 resize를 지원하지 않습니다');
       const w = args.width as number;
       const h = args.height as number;
       if (w === undefined || h === undefined) throw new Error('width, height가 필요합니다');
-      (node as FrameNode).resize(Math.max(w, 0.01), Math.max(h, 0.01));
-      return { width: (node as FrameNode).width, height: (node as FrameNode).height };
+      const safeW = Math.max(w, 0.01);
+      const safeH = Math.max(h, 0.01);
+      // SectionNode는 resize() 메서드가 없고 width/height 직접 설정
+      if (node.type === 'SECTION') {
+        const section = node as SectionNode;
+        section.resizeWithoutConstraints(safeW, safeH);
+      } else if ('resize' in node) {
+        (node as FrameNode).resize(safeW, safeH);
+      } else {
+        throw new Error('이 노드는 resize를 지원하지 않습니다');
+      }
+      return { width: (node as any).width, height: (node as any).height };
     },
   },
   move: {
