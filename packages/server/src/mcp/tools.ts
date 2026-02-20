@@ -474,6 +474,140 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
   },
 
   {
+    name: 'sigma_create_section',
+    description: `Figma에 Section을 생성합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+
+Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout을 지원하지 않지만,
+페이지의 콘텐츠를 논리적으로 그룹화하는 데 사용됩니다.
+
+**children**: 기존 노드의 ID 배열을 전달하면, 해당 노드들이 Section 안으로 이동합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        name: {
+          type: 'string',
+          description: 'Section 이름',
+        },
+        position: {
+          type: 'object',
+          description: 'Section 생성 위치 (x, y 좌표)',
+          properties: {
+            x: { type: 'number', description: 'X 좌표' },
+            y: { type: 'number', description: 'Y 좌표' },
+          },
+        },
+        size: {
+          type: 'object',
+          description: 'Section 크기 (width, height)',
+          properties: {
+            width: { type: 'number', description: '너비' },
+            height: { type: 'number', description: '높이' },
+          },
+        },
+        children: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Section에 포함시킬 기존 노드 ID 배열 (선택사항)',
+        },
+        fills: {
+          type: 'array',
+          description: 'Section 배경 채우기 (Figma Paint 배열, 선택사항)',
+        },
+      },
+      required: ['token', 'name'],
+    },
+  },
+  {
+    name: 'sigma_move_node',
+    description: `Figma 노드를 다른 부모 노드로 이동(reparent)합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+
+노드를 Section, Frame, Group, 또는 Page의 자식으로 이동시킵니다.
+기존 부모에서 자동으로 제거되고 새 부모에 추가됩니다.
+
+**사용 예시:**
+- 프레임을 Section으로 이동: sigma_move_node({ nodeId: "1:234", parentId: "5:678" })
+- 특정 위치에 삽입: sigma_move_node({ nodeId: "1:234", parentId: "5:678", index: 0 })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '이동할 노드 ID (예: "123:456")',
+        },
+        parentId: {
+          type: 'string',
+          description: '대상 부모 노드 ID (Section, Frame, Group, Page 등)',
+        },
+        index: {
+          type: 'number',
+          description: '삽입 위치 인덱스 (선택, 미지정 시 맨 뒤에 추가)',
+        },
+      },
+      required: ['token', 'nodeId', 'parentId'],
+    },
+  },
+  {
+    name: 'sigma_clone_node',
+    description: `Figma 노드를 복제합니다.
+
+**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+
+모든 SceneNode 타입(Frame, Section, Group, Text, Rectangle 등)을 복제할 수 있습니다.
+복제된 노드는 기본적으로 원본과 같은 부모에 생성됩니다.
+parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 좌표를 지정할 수 있습니다.
+
+**사용 예시:**
+- 같은 위치에 복제: sigma_clone_node({ nodeId: "1:234" })
+- 다른 부모로 복제: sigma_clone_node({ nodeId: "1:234", parentId: "5:678" })
+- 좌표 지정: sigma_clone_node({ nodeId: "1:234", position: { x: 100, y: 200 } })
+- 이름 변경: sigma_clone_node({ nodeId: "1:234", name: "Button Copy" })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: {
+          type: 'string',
+          description: 'Sigma 토큰 (stk-...)',
+        },
+        nodeId: {
+          type: 'string',
+          description: '복제할 원본 노드 ID (예: "123:456")',
+        },
+        parentId: {
+          type: 'string',
+          description: '복제된 노드의 부모 ID (선택, 미지정 시 원본과 같은 부모)',
+        },
+        position: {
+          type: 'object',
+          description: '복제된 노드의 좌표 (선택)',
+          properties: {
+            x: { type: 'number' },
+            y: { type: 'number' },
+          },
+          required: ['x', 'y'],
+        },
+        name: {
+          type: 'string',
+          description: '복제된 노드의 이름 (선택, 미지정 시 원본 이름 유지)',
+        },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+
+  {
     name: 'sigma_screenshot',
     description: `Figma 노드를 이미지로 캡처하여 로컬 파일로 저장합니다.
 
@@ -1445,6 +1579,213 @@ export async function handleTool(
                   error: errorMessage,
                   nodeId: modifyNodeId,
                   method: modifyMethod,
+                }),
+              },
+            ],
+          };
+        }
+      }
+
+      case 'sigma_create_section': {
+        const createSectionToken = args.token as string;
+        const createSectionValidation = validateToken(createSectionToken);
+
+        if (!createSectionValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: createSectionValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: createSectionPluginId, pageId: createSectionPageId } = getTargetFromBinding(createSectionValidation.binding);
+
+        if (createSectionPluginId) {
+          const targetPlugin = wsServer.getPluginById(createSectionPluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${createSectionPluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const sectionName = args.name as string;
+        const sectionOptions = {
+          position: args.position as { x: number; y: number } | undefined,
+          size: args.size as { width: number; height: number } | undefined,
+          children: args.children as string[] | undefined,
+          fills: args.fills as unknown[] | undefined,
+          pageId: createSectionPageId,
+        };
+
+        try {
+          const sectionResult = await wsServer.createSection(sectionName, sectionOptions, createSectionPluginId);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `Section '${sectionResult.name}'이 생성되었습니다`,
+                  ...sectionResult,
+                  target: {
+                    pluginId: createSectionPluginId || '(default)',
+                    pageId: createSectionPageId || '(current)',
+                  },
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: errorMessage }),
+              },
+            ],
+          };
+        }
+      }
+
+      case 'sigma_move_node': {
+        const moveNodeToken = args.token as string;
+        const moveNodeValidation = validateToken(moveNodeToken);
+
+        if (!moveNodeValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: moveNodeValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: moveNodePluginId } = getTargetFromBinding(moveNodeValidation.binding);
+
+        if (moveNodePluginId) {
+          const targetPlugin = wsServer.getPluginById(moveNodePluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${moveNodePluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const moveNodeId = args.nodeId as string;
+        const moveParentId = args.parentId as string;
+        const moveIndex = args.index as number | undefined;
+
+        try {
+          const moveResult = await wsServer.moveNode(moveNodeId, moveParentId, moveIndex, moveNodePluginId);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `'${moveResult.nodeName}'이 '${moveResult.newParentName}'으로 이동되었습니다`,
+                  ...moveResult,
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: errorMessage,
+                  nodeId: moveNodeId,
+                  parentId: moveParentId,
+                }),
+              },
+            ],
+          };
+        }
+      }
+
+      case 'sigma_clone_node': {
+        const cloneToken = args.token as string;
+        const cloneValidation = validateToken(cloneToken);
+
+        if (!cloneValidation.valid) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: cloneValidation.error }) }],
+          };
+        }
+
+        if (!wsServer.isFigmaConnected()) {
+          return {
+            content: [
+              { type: 'text', text: JSON.stringify({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) },
+            ],
+          };
+        }
+
+        const { pluginId: clonePluginId } = getTargetFromBinding(cloneValidation.binding);
+
+        if (clonePluginId) {
+          const targetPlugin = wsServer.getPluginById(clonePluginId);
+          if (!targetPlugin) {
+            return {
+              content: [
+                { type: 'text', text: JSON.stringify({ error: `바인딩된 플러그인(${clonePluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.` }) },
+              ],
+            };
+          }
+        }
+
+        const cloneNodeId = args.nodeId as string;
+        const cloneParentId = args.parentId as string | undefined;
+        const clonePosition = args.position as { x: number; y: number } | undefined;
+        const cloneName = args.name as string | undefined;
+
+        try {
+          const cloneResult = await wsServer.cloneNode(
+            cloneNodeId,
+            { parentId: cloneParentId, position: clonePosition, name: cloneName },
+            clonePluginId
+          );
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `'${cloneResult.name}' 노드가 복제되었습니다`,
+                  ...cloneResult,
+                }),
+              },
+            ],
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: errorMessage,
+                  nodeId: cloneNodeId,
                 }),
               },
             ],

@@ -188,7 +188,7 @@ const result = await frame.evaluate(() =>
 // sigma_import_file({ token, id: result.id, name: 'Components/CCBadge/Default' })
 ```
 
-**API (storybook.standalone.js):**
+**API (storybook.standalone.js v1.3.0):**
 - `getStories(baseUrl?)` - /index.json에서 story 목록 조회 (메인 프레임)
 - `navigateToStory(storyId, options?)` - SPA story 전환 + 렌더링 대기 (메인 프레임)
 - `waitForStoryRendered(timeout?)` - 렌더링 완료 대기 (메인 프레임 / iframe)

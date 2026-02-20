@@ -565,6 +565,267 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
+    case 'create-section': {
+      const sectionName = msg.name as string || 'Section';
+      const sectionPageId = msg.pageId as string | undefined;
+      const sectionPosition = msg.position as { x: number; y: number } | undefined;
+      const sectionSize = msg.size as { width: number; height: number } | undefined;
+      const childrenIds = msg.children as string[] | undefined;
+      const sectionFills = msg.fills as Paint[] | undefined;
+
+      try {
+        const section = figma.createSection();
+        section.name = sectionName;
+
+        if (sectionPosition) {
+          section.x = sectionPosition.x;
+          section.y = sectionPosition.y;
+        }
+
+        if (sectionSize) {
+          section.resizeWithoutConstraints(
+            Math.max(sectionSize.width, 1),
+            Math.max(sectionSize.height, 1)
+          );
+        }
+
+        if (sectionFills) {
+          section.fills = sectionFills;
+        }
+
+        // 특정 페이지에 생성해야 하는 경우
+        if (sectionPageId) {
+          const targetPage = getPageById(sectionPageId);
+          if (targetPage && targetPage.id !== figma.currentPage.id) {
+            targetPage.appendChild(section);
+          }
+        }
+
+        // 자식 노드 이동
+        if (childrenIds && childrenIds.length > 0) {
+          for (const childId of childrenIds) {
+            const child = figma.getNodeById(childId);
+            if (child && child.type !== 'DOCUMENT' && child.type !== 'PAGE') {
+              section.appendChild(child as SceneNode);
+            }
+          }
+        }
+
+        figma.ui.postMessage({
+          type: 'create-section-result',
+          success: true,
+          result: {
+            nodeId: section.id,
+            name: section.name,
+            x: section.x,
+            y: section.y,
+            width: section.width,
+            height: section.height,
+            childCount: section.children.length,
+          },
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        figma.ui.postMessage({
+          type: 'create-section-result',
+          success: false,
+          error: `Section 생성 실패: ${errMsg}`,
+        });
+      }
+      break;
+    }
+
+    case 'move-node': {
+      const moveNodeId = msg.nodeId as string;
+      const targetParentId = msg.parentId as string;
+      const insertIndex = msg.index as number | undefined;
+
+      if (!moveNodeId) {
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: false,
+          error: 'nodeId가 필요합니다',
+        });
+        break;
+      }
+
+      if (!targetParentId) {
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: false,
+          error: 'parentId가 필요합니다',
+        });
+        break;
+      }
+
+      const moveNode = figma.getNodeById(moveNodeId);
+      if (!moveNode) {
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: false,
+          error: `노드를 찾을 수 없습니다: ${moveNodeId}`,
+        });
+        break;
+      }
+
+      const targetParent = figma.getNodeById(targetParentId);
+      if (!targetParent) {
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: false,
+          error: `대상 부모 노드를 찾을 수 없습니다: ${targetParentId}`,
+        });
+        break;
+      }
+
+      if (!('appendChild' in targetParent)) {
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: false,
+          error: `대상 노드(${targetParent.type})는 자식을 가질 수 없습니다`,
+        });
+        break;
+      }
+
+      try {
+        const oldParentId = moveNode.parent ? moveNode.parent.id : null;
+        const oldParentName = moveNode.parent ? moveNode.parent.name : null;
+
+        if (insertIndex !== undefined) {
+          (targetParent as ChildrenMixin).insertChild(insertIndex, moveNode as SceneNode);
+        } else {
+          (targetParent as ChildrenMixin).appendChild(moveNode as SceneNode);
+        }
+
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: true,
+          result: {
+            nodeId: moveNode.id,
+            nodeName: moveNode.name,
+            nodeType: moveNode.type,
+            oldParentId,
+            oldParentName,
+            newParentId: targetParent.id,
+            newParentName: targetParent.name,
+            newParentType: targetParent.type,
+            index: insertIndex,
+          },
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        figma.ui.postMessage({
+          type: 'move-node-result',
+          success: false,
+          error: `노드 이동 실패: ${errMsg}`,
+        });
+      }
+      break;
+    }
+
+    case 'clone-node': {
+      const cloneNodeId = msg.nodeId as string;
+      const cloneParentId = msg.parentId as string | undefined;
+      const clonePosition = msg.position as { x: number; y: number } | undefined;
+      const cloneName = msg.name as string | undefined;
+
+      if (!cloneNodeId) {
+        figma.ui.postMessage({
+          type: 'clone-node-result',
+          success: false,
+          error: 'nodeId가 필요합니다',
+        });
+        break;
+      }
+
+      const sourceNode = figma.getNodeById(cloneNodeId);
+      if (!sourceNode) {
+        figma.ui.postMessage({
+          type: 'clone-node-result',
+          success: false,
+          error: `노드를 찾을 수 없습니다: ${cloneNodeId}`,
+        });
+        break;
+      }
+
+      if (sourceNode.type === 'DOCUMENT' || sourceNode.type === 'PAGE') {
+        figma.ui.postMessage({
+          type: 'clone-node-result',
+          success: false,
+          error: `Document 또는 Page는 복제할 수 없습니다`,
+        });
+        break;
+      }
+
+      try {
+        const cloned = (sourceNode as SceneNode).clone();
+
+        // 이름 변경
+        if (cloneName) {
+          cloned.name = cloneName;
+        }
+
+        // 다른 부모로 이동
+        if (cloneParentId) {
+          const newParent = figma.getNodeById(cloneParentId);
+          if (!newParent) {
+            // 복제는 이미 됐으므로 제거하고 에러 반환
+            cloned.remove();
+            figma.ui.postMessage({
+              type: 'clone-node-result',
+              success: false,
+              error: `대상 부모 노드를 찾을 수 없습니다: ${cloneParentId}`,
+            });
+            break;
+          }
+          if (!('appendChild' in newParent)) {
+            cloned.remove();
+            figma.ui.postMessage({
+              type: 'clone-node-result',
+              success: false,
+              error: `대상 노드(${newParent.type})는 자식을 가질 수 없습니다`,
+            });
+            break;
+          }
+          (newParent as ChildrenMixin).appendChild(cloned);
+        }
+
+        // 위치 설정
+        if (clonePosition) {
+          cloned.x = clonePosition.x;
+          cloned.y = clonePosition.y;
+        }
+
+        const width = 'width' in cloned ? (cloned as any).width : 0;
+        const height = 'height' in cloned ? (cloned as any).height : 0;
+
+        figma.ui.postMessage({
+          type: 'clone-node-result',
+          success: true,
+          result: {
+            nodeId: cloned.id,
+            name: cloned.name,
+            type: cloned.type,
+            x: cloned.x,
+            y: cloned.y,
+            width: Math.round(width),
+            height: Math.round(height),
+            parentId: cloned.parent ? cloned.parent.id : null,
+            parentName: cloned.parent ? cloned.parent.name : null,
+            sourceNodeId: cloneNodeId,
+          },
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        figma.ui.postMessage({
+          type: 'clone-node-result',
+          success: false,
+          error: `노드 복제 실패: ${errMsg}`,
+        });
+      }
+      break;
+    }
+
     case 'export-image': {
       const exportNodeId = msg.nodeId as string;
       const exportFormat = (msg.format as string || 'PNG').toUpperCase();

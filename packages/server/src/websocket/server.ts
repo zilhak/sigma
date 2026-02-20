@@ -308,6 +308,51 @@ export class FigmaWebSocketServer {
         }
         break;
       }
+
+      case 'CREATE_SECTION_RESULT': {
+        const createSectionCommandId = message.commandId as string;
+        const createSectionPending = this.pendingCommands.get(createSectionCommandId);
+        if (createSectionPending) {
+          clearTimeout(createSectionPending.timeout);
+          this.pendingCommands.delete(createSectionCommandId);
+          if (message.success) {
+            createSectionPending.resolve(message.result);
+          } else {
+            createSectionPending.reject(new Error(message.error as string || 'Create section failed'));
+          }
+        }
+        break;
+      }
+
+      case 'MOVE_NODE_RESULT': {
+        const moveNodeCommandId = message.commandId as string;
+        const moveNodePending = this.pendingCommands.get(moveNodeCommandId);
+        if (moveNodePending) {
+          clearTimeout(moveNodePending.timeout);
+          this.pendingCommands.delete(moveNodeCommandId);
+          if (message.success) {
+            moveNodePending.resolve(message.result);
+          } else {
+            moveNodePending.reject(new Error(message.error as string || 'Move node failed'));
+          }
+        }
+        break;
+      }
+
+      case 'CLONE_NODE_RESULT': {
+        const cloneNodeCommandId = message.commandId as string;
+        const cloneNodePending = this.pendingCommands.get(cloneNodeCommandId);
+        if (cloneNodePending) {
+          clearTimeout(cloneNodePending.timeout);
+          this.pendingCommands.delete(cloneNodeCommandId);
+          if (message.success) {
+            cloneNodePending.resolve(message.result);
+          } else {
+            cloneNodePending.reject(new Error(message.error as string || 'Clone node failed'));
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -977,6 +1022,153 @@ export class FigmaWebSocketServer {
       });
 
       console.log(`[WebSocket] Sending EXTRACT_NODE_JSON to ${targetPlugin.id} (node: ${nodeId})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Create a Section in Figma
+   */
+  async createSection(
+    name: string,
+    options?: {
+      position?: { x: number; y: number };
+      size?: { width: number; height: number };
+      children?: string[];
+      fills?: unknown[];
+      pageId?: string;
+    },
+    pluginId?: string
+  ): Promise<{ nodeId: string; name: string; x: number; y: number; width: number; height: number; childCount: number }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (create section)'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'CREATE_SECTION',
+        commandId,
+        name,
+        position: options?.position,
+        size: options?.size,
+        children: options?.children,
+        fills: options?.fills,
+        pageId: options?.pageId,
+      });
+
+      console.log(`[WebSocket] Sending CREATE_SECTION to ${targetPlugin.id} (name: ${name})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Move a node to a new parent
+   */
+  async moveNode(
+    nodeId: string,
+    parentId: string,
+    index?: number,
+    pluginId?: string
+  ): Promise<{ nodeId: string; nodeName: string; nodeType: string; oldParentId: string | null; oldParentName: string | null; newParentId: string; newParentName: string; newParentType: string }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (move node)'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'MOVE_NODE',
+        commandId,
+        nodeId,
+        parentId,
+        index,
+      });
+
+      console.log(`[WebSocket] Sending MOVE_NODE to ${targetPlugin.id} (node: ${nodeId} → parent: ${parentId})`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * Clone a node with optional reparent and position
+   */
+  async cloneNode(
+    nodeId: string,
+    options?: {
+      parentId?: string;
+      position?: { x: number; y: number };
+      name?: string;
+    },
+    pluginId?: string
+  ): Promise<{ nodeId: string; name: string; type: string; x: number; y: number; width: number; height: number; parentId: string | null; parentName: string | null; sourceNodeId: string }> {
+    const targetPlugin = this.resolveTargetPlugin(pluginId);
+    if (!targetPlugin) {
+      if (pluginId) {
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과 (clone node)'));
+      }, 30000);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: 'CLONE_NODE',
+        commandId,
+        nodeId,
+        parentId: options?.parentId,
+        position: options?.position,
+        name: options?.name,
+      });
+
+      console.log(`[WebSocket] Sending CLONE_NODE to ${targetPlugin.id} (source: ${nodeId})`);
       targetPlugin.ws.send(message);
     });
   }

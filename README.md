@@ -72,35 +72,48 @@ Playwright로 브라우저를 조작할 때는 **Sigma 임베드 스크립트**(
 - **MCP:** @modelcontextprotocol/sdk
 - **Package Manager:** Bun workspace
 
-## 빠른 시작
+## 설치
 
-### 개발 환경
+### 사전 요구사항
+
+- [Bun](https://bun.sh/) v1.0+
+- [Figma Desktop App](https://www.figma.com/downloads/) (Web 버전 미지원)
+
+### 빌드 및 실행
 
 ```bash
-# 의존성 설치
+# 1. 소스 클론
+git clone https://github.com/anthropics/sigma.git
+cd sigma
+
+# 2. 의존성 설치
 bun install
 
-# 개발 모드 (watch)
-bun dev
+# 3. 전체 빌드 (서버 + 임베드 스크립트 + Figma Plugin)
+bun run build
 
-# 서버만 실행
+# 4. 서버 실행
 bun run --filter @sigma/server start
 ```
 
-### 프로덕션 환경 (Docker)
+### Figma Plugin 설치
+
+1. Figma Desktop App 실행
+2. Plugins → Development → **Import plugin from manifest**
+3. `packages/figma-plugin/manifest.json` 선택
+
+### Chrome Extension 설치 (선택)
+
+1. `chrome://extensions` → 개발자 모드 ON
+2. **압축해제된 확장 프로그램을 로드합니다** 클릭
+3. `packages/chrome-extension/dist` 폴더 선택
+
+### 개발 모드
 
 ```bash
-# 서버 시작 (백그라운드, 자동 재시작)
-docker compose up -d
-
-# 로그 확인
-docker compose logs -f sigma
-
-# 서버 중지
-docker compose down
+# 파일 변경 시 자동 재빌드 (watch)
+bun dev
 ```
-
-> Docker Desktop의 "Start on login" 옵션과 함께 사용하면 컴퓨터 부팅 시 자동으로 서버가 시작됩니다.
 
 ## 사용 방법
 
@@ -108,9 +121,9 @@ docker compose down
 1. Extension으로 컴포넌트 추출 → 클립보드 복사
 2. Figma Plugin에서 JSON 붙여넣기 → 프레임 생성
 
-### AI Agent 자동화
+### AI Agent 자동화 (Claude Code + MCP)
 
-**MCP 서버 등록 (Claude Code):**
+**MCP 서버 등록:**
 ```bash
 claude mcp add --transport http sigma http://localhost:19832/api/mcp
 ```
@@ -134,6 +147,14 @@ AI Agent:
 | `list_saved` | 저장된 컴포넌트 목록 |
 | `save_extracted` | 컴포넌트 저장 |
 | `get_playwright_scripts` | Sigma 임베드 스크립트 목록 + 경로 + API 정보 반환 |
+
+### Docker (선택 - 서버만)
+
+> MCP(stdio)와 Playwright 스크립트 inject는 로컬 실행이 필요하므로, AI Agent 자동화를 사용하려면 위의 소스 빌드 방식을 권장합니다. Docker는 HTTP API + WebSocket 서버만 분리 실행할 때 사용합니다.
+
+```bash
+docker compose up -d
+```
 
 ## 문서
 

@@ -479,6 +479,60 @@ window.onmessage = (event) => {
         pendingCommandId = null;
       }
       break;
+
+    case 'create-section-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'CREATE_SECTION_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log(`Section 생성 완료: ${msg.result?.name || 'unknown'} (${msg.result?.nodeId})`, 'success');
+        } else {
+          log(`Section 생성 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'move-node-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'MOVE_NODE_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log(`노드 이동 완료: ${msg.result?.nodeName || 'unknown'} → ${msg.result?.newParentName || 'unknown'}`, 'success');
+        } else {
+          log(`노드 이동 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
+
+    case 'clone-node-result':
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        ws.send(JSON.stringify({
+          type: 'CLONE_NODE_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        }));
+        if (msg.success) {
+          log(`노드 복제 완료: ${msg.result?.name || 'unknown'} (${msg.result?.nodeId})`, 'success');
+        } else {
+          log(`노드 복제 실패: ${msg.error}`, 'error');
+        }
+        pendingCommandId = null;
+      }
+      break;
   }
 };
 
@@ -932,6 +986,68 @@ function handleServerMessage(msg: { type: string; data?: unknown; html?: string;
           pluginMessage: {
             type: 'extract-node-json',
             nodeId: msg.nodeId,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case 'CREATE_SECTION': {
+      const sectionPageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
+      log(`Section 생성 요청: ${msg.name || 'Section'}${sectionPageInfo}`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'create-section',
+            name: msg.name,
+            position: msg.position,
+            size: (msg as any).size,
+            children: (msg as any).children,
+            fills: (msg as any).fills,
+            pageId: msg.pageId,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case 'MOVE_NODE': {
+      log(`노드 이동 요청: ${msg.nodeId} → ${(msg as any).parentId}`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'move-node',
+            nodeId: msg.nodeId,
+            parentId: (msg as any).parentId,
+            index: (msg as any).index,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case 'CLONE_NODE': {
+      log(`노드 복제 요청: ${msg.nodeId}${(msg as any).parentId ? ` → ${(msg as any).parentId}` : ''}`, 'info');
+
+      pendingCommandId = msg.commandId !== undefined ? msg.commandId : null;
+
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'clone-node',
+            nodeId: msg.nodeId,
+            parentId: (msg as any).parentId,
+            position: msg.position,
+            name: msg.name,
           },
         },
         '*'
