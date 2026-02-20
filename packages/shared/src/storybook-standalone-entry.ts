@@ -47,7 +47,7 @@ interface SigmaStorybookAPI {
   extractStory: (selector?: string) => ExtractedNode | null;
   /** 추출하여 Sigma 서버에 저장 (iframe 내부) */
   extractAndSave: (name: string, serverUrl?: string, selector?: string) => Promise<SaveResult>;
-  /** Story 전환 - iframe src 변경 + 렌더링 대기 (메인 프레임) */
+  /** Story 전환 - Channel API + storyRendered 이벤트 대기 (메인 프레임) */
   navigateToStory: (
     storyId: string,
     options?: { baseUrl?: string; timeout?: number }
@@ -70,10 +70,10 @@ if (!window.__sigma_storybook__) {
     navigateToStory,
     waitForStoryRendered,
     getStoryIframeUrl,
-    version: '1.2.0',
+    version: '1.3.0',
   };
 
   console.log(
-    '[Sigma] Storybook script v1.2.0 loaded. APIs: getStoryRoot, getStories, getCurrentStoryId, extractStory, extractAndSave, navigateToStory, waitForStoryRendered, getStoryIframeUrl'
+    '[Sigma] Storybook script v1.3.0 loaded. APIs: getStoryRoot, getStories, getCurrentStoryId, extractStory, extractAndSave, navigateToStory, waitForStoryRendered, getStoryIframeUrl'
   );
 }

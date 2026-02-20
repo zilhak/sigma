@@ -244,6 +244,23 @@ export function applyBorderOverlays(frame: FrameNode, styles: ComputedStyles): v
     rect.layoutPositioning = 'ABSOLUTE';
     rect.x = targetX;
     rect.y = targetY;
+
+    // 부모 프레임 리사이즈 시 overlay가 함께 조정되도록 constraints 설정
+    // (table-cell 등에서 layoutGrow로 인한 리사이즈에 대응)
+    switch (s.side) {
+      case 'top':
+        rect.constraints = { horizontal: 'STRETCH', vertical: 'MIN' };
+        break;
+      case 'bottom':
+        rect.constraints = { horizontal: 'STRETCH', vertical: 'MAX' };
+        break;
+      case 'left':
+        rect.constraints = { horizontal: 'MIN', vertical: 'STRETCH' };
+        break;
+      case 'right':
+        rect.constraints = { horizontal: 'MAX', vertical: 'STRETCH' };
+        break;
+    }
   }
 
   // 5. overlay로 대체한 면의 stroke weight를 0으로

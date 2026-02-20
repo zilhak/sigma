@@ -80,6 +80,14 @@ export function isAllInlineTextContent(element: HTMLElement): boolean {
     // 인라인 태그라도 시각적 스타일(배경, 테두리, 패딩)이 있으면 병합하지 않음
     if (tag !== 'br') {
       const style = window.getComputedStyle(child);
+
+      // flex/grid 컨테이너는 내부 레이아웃(justifyContent 등)이 시각적 정렬에 영향 → 병합 금지
+      const displayVal = style.display;
+      if (displayVal === 'flex' || displayVal === 'inline-flex' ||
+          displayVal === 'grid' || displayVal === 'inline-grid') {
+        return false;
+      }
+
       const bgColor = style.backgroundColor;
       // transparent나 rgba(0,0,0,0)이 아닌 배경색이 있으면 시각적 요소
       if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent') {

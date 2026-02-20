@@ -170,39 +170,44 @@ export async function extractAndSave(
  * Story ID로 Storybook의 preview iframe을 전환 (SPA 라우팅)
  *
  * 메인 Storybook 페이지(localhost:6006)에서 호출해야 합니다.
- * iframe의 src를 변경하여 story를 전환하고, 렌더링 완료까지 대기합니다.
+ * Storybook Channel API를 통해 story를 전환하고, storyRendered 이벤트로
+ * 렌더링 완료를 감지합니다.
  *
  * @param storyId - Story ID (e.g., "components-ccbadge--default")
- * @param options.baseUrl - Storybook base URL (기본: 현재 origin)
+ * @param options.baseUrl - (미사용, 하위 호환용)
  * @param options.timeout - 렌더링 대기 타임아웃 ms (기본: 10000)
  */
 export async function navigateToStory(
   storyId: string,
   options?: { baseUrl?: string; timeout?: number }
 ): Promise<boolean> {
-  const iframe = document.getElementById('storybook-preview-iframe') as HTMLIFrameElement | null;
-  if (!iframe) {
+  const timeout = options?.timeout || 10000;
+
+  // Storybook 7+ Channel API
+  const channel = (window as any).__STORYBOOK_ADDONS_CHANNEL__;
+  if (!channel) {
     throw new Error(
-      '[Sigma Storybook] storybook-preview-iframe not found. Call from main Storybook page.'
+      '[Sigma Storybook] __STORYBOOK_ADDONS_CHANNEL__ not found. ' +
+      'Call from the main Storybook page (not iframe).'
     );
   }
 
-  const base = options?.baseUrl || window.location.origin;
-  const timeout = options?.timeout || 10000;
-  const url = `${base}/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story`;
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => {
+      channel.off('storyRendered', onRendered);
+      console.warn(`[Sigma Storybook] navigateToStory timeout (${timeout}ms): ${storyId}`);
+      resolve(false);
+    }, timeout);
 
-  // iframe load 대기
-  await new Promise<void>((resolve) => {
-    const onLoad = () => {
-      iframe.removeEventListener('load', onLoad);
-      resolve();
+    const onRendered = () => {
+      clearTimeout(timer);
+      channel.off('storyRendered', onRendered);
+      resolve(true);
     };
-    iframe.addEventListener('load', onLoad);
-    iframe.src = url;
-  });
 
-  // 렌더링 완료 대기
-  return waitForStoryRendered(timeout);
+    channel.on('storyRendered', onRendered);
+    channel.emit('setCurrentStory', { storyId });
+  });
 }
 
 // ============================================================
@@ -212,35 +217,38 @@ export async function navigateToStory(
 /**
  * Story 렌더링 완료를 대기
  *
- * #storybook-root에 자식 요소가 나타날 때까지 폴링합니다.
- * 메인 프레임에서 호출하면 iframe의 contentDocument를 확인하고,
- * iframe 내부에서 호출하면 로컬 DOM을 확인합니다.
+ * 메인 프레임에서 호출 시: Storybook Channel API의 storyRendered 이벤트를 사용합니다.
+ * iframe 내부에서 호출 시: #storybook-root에 자식 요소가 나타날 때까지 폴링합니다.
  *
  * @param timeout - 최대 대기 시간 ms (기본: 10000)
  * @returns true면 렌더링 완료, false면 타임아웃
  */
 export function waitForStoryRendered(timeout = 10000): Promise<boolean> {
+  // 메인 프레임: Channel API의 storyRendered 이벤트 사용
+  const channel = (window as any).__STORYBOOK_ADDONS_CHANNEL__;
+  if (channel) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        channel.off('storyRendered', onRendered);
+        resolve(false);
+      }, timeout);
+
+      const onRendered = () => {
+        clearTimeout(timer);
+        channel.off('storyRendered', onRendered);
+        resolve(true);
+      };
+
+      channel.on('storyRendered', onRendered);
+    });
+  }
+
+  // iframe 내부: DOM 폴링
   return new Promise((resolve) => {
     const start = Date.now();
 
-    const getRoot = (): HTMLElement | null => {
-      // iframe 내부에서 호출된 경우
-      const localRoot = document.getElementById('storybook-root');
-      if (localRoot) return localRoot;
-
-      // 메인 프레임에서 호출된 경우 → iframe의 contentDocument 접근
-      const iframe = document.getElementById(
-        'storybook-preview-iframe'
-      ) as HTMLIFrameElement | null;
-      try {
-        return iframe?.contentDocument?.getElementById('storybook-root') ?? null;
-      } catch {
-        return null;
-      }
-    };
-
     const check = () => {
-      const root = getRoot();
+      const root = document.getElementById('storybook-root');
       if (root && root.children.length > 0) {
         resolve(true);
         return;

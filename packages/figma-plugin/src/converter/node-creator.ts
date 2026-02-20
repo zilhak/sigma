@@ -189,6 +189,14 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
             childFrame.layoutAlign = 'STRETCH';
           }
 
+          // table-cell 부모의 block/flex 자식: CSS에서 셀 전체 너비를 채우므로 STRETCH 적용
+          if (styles.display === 'table-cell' && frame.layoutMode === 'VERTICAL' && childStyles) {
+            const cd = childStyles.display;
+            if (cd === 'block' || cd === 'flex' || cd === 'inline-flex' || cd === 'grid') {
+              childFrame.layoutAlign = 'STRETCH';
+            }
+          }
+
           // flexGrow 적용: CSS flex-grow > 0이면 Figma에서 FILL로 설정
           if (childStyles && childStyles.flexGrow > 0) {
             childFrame.layoutGrow = childStyles.flexGrow;
@@ -269,8 +277,11 @@ export function isTextOnlyElement(node: ExtractedNode): boolean {
   if (node.children && node.children.length > 0) return false;
   if (!node.textContent) return false;
 
-  // 배경색, 패딩, 테두리가 있으면 프레임으로 처리 (TextNode는 stroke 미지원)
+  // flex/grid 컨테이너는 프레임으로 처리 (내부 레이아웃 정보 유지 → 시각적 정렬 보존)
   const { styles } = node;
+  if (styles.display === 'flex' || styles.display === 'inline-flex' || styles.display === 'grid') return false;
+
+  // 배경색, 패딩, 테두리가 있으면 프레임으로 처리 (TextNode는 stroke 미지원)
   if (styles.backgroundColor && styles.backgroundColor.a > 0) return false;
   if (styles.paddingTop > 0 || styles.paddingBottom > 0) return false;
   if (styles.paddingLeft > 0 || styles.paddingRight > 0) return false;
@@ -577,8 +588,12 @@ function createImageNode(node: ExtractedNode): FrameNode {
 }
 
 /**
- * input 요소 (radio, checkbox 등) 시각적 렌더링
+ * input 요소 (radio, checkbox, text 등) 시각적 렌더링
  * 네이티브 폼 컨트롤은 자식이 없어 빈 프레임이 되므로 별도 처리
+ *
+ * text input: 추출된 실제 CSS 스타일(배경, 테두리, 라운드)을 적용하고,
+ * placeholder/value 텍스트를 자식 TextNode로 렌더링.
+ * (하드코딩 스타일을 사용하면 래퍼 div 테두리와 합쳐져 이중 테두리 발생)
  */
 function createInputNode(node: ExtractedNode): FrameNode {
   const { styles, boundingRect, attributes } = node;
@@ -602,11 +617,46 @@ function createInputNode(node: ExtractedNode): FrameNode {
     frame.strokeWeight = 1.5;
     frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
   } else {
-    // 기타 input: 기본 프레임
-    frame.fills = [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }];
-    frame.strokes = [{ type: 'SOLID', color: { r: 0.8, g: 0.8, b: 0.8 } }];
-    frame.strokeWeight = 1;
-    frame.cornerRadius = 3;
+    // text input: 추출된 실제 스타일 사용 (이중 테두리 방지)
+    applyBackground(frame, styles, false);
+    applyBorder(frame, styles);
+    applyCornerRadius(frame, styles);
+
+    // placeholder 또는 value 텍스트 렌더링
+    const value = attributes && attributes.value;
+    const placeholder = attributes && attributes.placeholder;
+    const displayText = value || placeholder;
+    const isPlaceholder = !value && !!placeholder;
+
+    if (displayText) {
+      // Auto Layout으로 텍스트 수직 중앙 배치
+      frame.layoutMode = 'HORIZONTAL';
+      frame.counterAxisAlignItems = 'CENTER';
+      frame.layoutSizingHorizontal = 'FIXED';
+      frame.layoutSizingVertical = 'FIXED';
+      applyPadding(frame, styles);
+
+      const textNode = figma.createText();
+      textNode.characters = displayText;
+      textNode.fontSize = styles.fontSize || 14;
+
+      const weight = parseInt(styles.fontWeight) || 400;
+      let fontStyle = 'Regular';
+      if (weight >= 700) fontStyle = 'Bold';
+      else if (weight >= 600) fontStyle = 'Semi Bold';
+      else if (weight >= 500) fontStyle = 'Medium';
+      textNode.fontName = { family: 'Inter', style: fontStyle };
+
+      if (isPlaceholder) {
+        // placeholder: 회색 텍스트
+        textNode.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.6, b: 0.6 } }];
+      } else if (styles.color) {
+        textNode.fills = [createSolidPaint(styles.color)];
+      }
+
+      textNode.textAutoResize = 'WIDTH_AND_HEIGHT';
+      frame.appendChild(textNode);
+    }
   }
 
   frame.name = '[INPUT] ' + inputType;

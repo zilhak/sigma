@@ -390,19 +390,32 @@ export function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, childr
     frame.layoutMode = 'HORIZONTAL';
   } else {
     // block 등 기본값 → VERTICAL
-    // 단, 자식이 inline-block인 경우 HORIZONTAL로 변경 (CSS 인라인 흐름 모방)
-    const hasInlineBlockChildren = children && children.length > 0 && children.some(
-      child => child.styles && (child.styles.display === 'inline-block' || child.styles.display === 'inline' || child.styles.display === 'inline-flex')
-    );
     // table-cell 자식 감지: CSS anonymous table box 모방 (가로 배치)
     const hasTableCellChildren = children && children.length > 0 && children.some(
       child => child.styles && child.styles.display === 'table-cell'
     );
 
-    if (hasInlineBlockChildren || hasTableCellChildren) {
+    if (hasTableCellChildren) {
       frame.layoutMode = 'HORIZONTAL';
     } else {
-      frame.layoutMode = 'VERTICAL';
+      // inline 자식만 있으면 HORIZONTAL (CSS 인라인 흐름 모방)
+      // block 자식이 섞여 있으면 VERTICAL 유지 (CSS anonymous block box)
+      const hasInlineChildren = children && children.length > 0 && children.some(
+        child => child.styles && (child.styles.display === 'inline-block' || child.styles.display === 'inline' || child.styles.display === 'inline-flex')
+      );
+      const hasBlockChildren = children && children.length > 0 && children.some(
+        child => child.styles && (
+          child.styles.display === 'block' || child.styles.display === 'flex' ||
+          child.styles.display === 'grid' || child.styles.display === 'table' ||
+          child.styles.display === 'list-item'
+        )
+      );
+
+      if (hasInlineChildren && !hasBlockChildren) {
+        frame.layoutMode = 'HORIZONTAL';
+      } else {
+        frame.layoutMode = 'VERTICAL';
+      }
     }
   }
 
@@ -458,29 +471,30 @@ export function applyAlignment(frame: FrameNode, styles: ComputedStyles, childre
   const childCount = children ? children.length : 0;
 
   // table-cell: justifyContent/alignItems 대신 textAlign/verticalAlign 사용
+  // layoutMode에 따라 올바른 축에 매핑해야 함
+  // HORIZONTAL: primaryAxis=X(가로), counterAxis=Y(세로)
+  // VERTICAL: primaryAxis=Y(세로), counterAxis=X(가로)
   if (styles.display === 'table-cell') {
-    // 주축 정렬 (textAlign → primaryAxisAlignItems)
+    // textAlign → 가로(X축) 정렬값
+    let hAlign: 'MIN' | 'CENTER' | 'MAX' = 'MIN';
     switch (styles.textAlign) {
-      case 'center':
-        frame.primaryAxisAlignItems = 'CENTER';
-        break;
+      case 'center': hAlign = 'CENTER'; break;
       case 'right':
-      case 'end':
-        frame.primaryAxisAlignItems = 'MAX';
-        break;
-      default:
-        frame.primaryAxisAlignItems = 'MIN';
+      case 'end': hAlign = 'MAX'; break;
     }
-    // 교차축 정렬 (verticalAlign → counterAxisAlignItems)
+    // verticalAlign → 세로(Y축) 정렬값
+    let vAlign: 'MIN' | 'CENTER' | 'MAX' = 'MIN';
     switch (styles.verticalAlign) {
-      case 'middle':
-        frame.counterAxisAlignItems = 'CENTER';
-        break;
-      case 'bottom':
-        frame.counterAxisAlignItems = 'MAX';
-        break;
-      default:
-        frame.counterAxisAlignItems = 'MIN';
+      case 'middle': vAlign = 'CENTER'; break;
+      case 'bottom': vAlign = 'MAX'; break;
+    }
+
+    if (frame.layoutMode === 'VERTICAL') {
+      frame.primaryAxisAlignItems = vAlign;
+      frame.counterAxisAlignItems = hAlign;
+    } else {
+      frame.primaryAxisAlignItems = hAlign;
+      frame.counterAxisAlignItems = vAlign;
     }
     return;
   }
