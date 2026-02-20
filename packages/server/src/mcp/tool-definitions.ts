@@ -62,10 +62,16 @@ export const toolDefinitions = [
   // === Sigma Auth Tools ===
   {
     name: 'sigma_login',
-    description: `Sigma 토큰을 발급받습니다. 이 토큰은 Figma 작업공간과 바인딩하여 사용합니다.
+    description: `Sigma 토큰을 발급합니다. 토큰 자체는 아직 아무 대상에도 연결되지 않은 상태입니다.
 
-토큰은 10분간 유효하며, 사용할 때마다 자동으로 갱신됩니다.
-발급된 토큰으로 sigma_bind를 호출하여 특정 플러그인/페이지에 바인딩하세요.`,
+**Figma 작업을 하려면 반드시 바인딩이 필요합니다:**
+1. sigma_login → 토큰 발급
+2. sigma_list_plugins → pluginId 확인
+3. sigma_list_pages(pluginId) → pageId 확인
+4. sigma_bind(token, pluginId, pageId) → 토큰을 특정 플러그인+페이지에 바인딩
+
+바인딩 후에는 같은 token으로 호출하는 모든 Figma 도구가 해당 플러그인/페이지를 대상으로 동작합니다.
+토큰은 10분간 유효하며, 사용할 때마다 자동 갱신됩니다.`,
     inputSchema: {
       type: 'object',
       properties: {},
@@ -73,7 +79,7 @@ export const toolDefinitions = [
   },
   {
     name: 'sigma_logout',
-    description: 'Sigma 토큰을 삭제합니다 (로그아웃)',
+    description: 'Sigma 토큰을 삭제합니다. 해당 토큰의 바인딩도 함께 해제됩니다.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -164,9 +170,8 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_create_frame',
     description: `Figma에 프레임을 생성합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰이 플러그인/페이지에 바인딩되어 있으면 해당 위치에 생성됩니다.
-바인딩되지 않은 토큰은 첫 번째 연결된 플러그인의 현재 페이지에 생성됩니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+바인딩된 페이지에 프레임이 생성됩니다.
 
 **중요: format은 반드시 'json'을 사용하세요.**
 - json (기본값, 권장): ExtractedNode 구조로 정확한 스타일 보존
@@ -212,8 +217,8 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_import_file',
     description: `저장된 컴포넌트를 Figma로 가져옵니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.`,
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+바인딩된 페이지에 프레임이 생성됩니다.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -245,8 +250,7 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_get_frames',
     description: `Figma 페이지의 모든 프레임 위치와 크기를 조회합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 조회 대상 플러그인/페이지가 결정됩니다.`,
+**바인딩 필수**: 토큰이 바인딩된 페이지의 프레임 목록을 반환합니다.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -262,8 +266,7 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_delete_frame',
     description: `Figma에서 프레임을 삭제합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.`,
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -283,7 +286,7 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_update_frame',
     description: `Figma에서 기존 프레임의 내용을 새 데이터로 전체 교체합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
 프레임 노드 자체는 유지하고, 자식을 모두 제거한 뒤 새 데이터로 재생성합니다.
 루트 레벨 스타일(크기, 배경, 패딩, 레이아웃 등)도 새 데이터에 맞게 업데이트됩니다.
 
@@ -325,7 +328,7 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_modify_node',
     description: `Figma 노드에 개별 조작을 수행합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 허용된 메서드만 실행 가능하며, 허용되지 않은 메서드를 호출하면 사용 가능한 전체 메서드 목록이 반환됩니다.
 
 **사용 가능한 메서드:**
@@ -360,7 +363,8 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_find_node',
     description: `경로 또는 이름으로 Figma 노드를 찾습니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰이 바인딩된 페이지 내에서 검색합니다.
+바인딩되지 않은 토큰으로는 사용할 수 없습니다. 먼저 sigma_bind로 대상 페이지를 지정하세요.
 
 **경로 형식:**
 - 문자열: "Section/Frame/Button"
@@ -371,9 +375,9 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
 - 다중 매칭: { matches: [...], warning: "N개의 노드가 발견되었습니다" }
 
 **사용 예시:**
-- "Button" - 최상위에서 Button 이름의 노드 찾기
-- "Components/Button" - Components 안의 Button 찾기
-- "Design System/Buttons/Primary" - 깊은 경로 탐색`,
+- "Button" — 바인딩된 페이지 최상위에서 Button 이름의 노드 찾기
+- "Components/Button" — Components 안의 Button 찾기
+- "Design System/Buttons/Primary" — 깊은 경로 탐색`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -398,9 +402,10 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_get_tree',
     description: `Figma 문서의 계층 구조를 탐색합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰이 바인딩된 페이지를 대상으로 탐색합니다.
+시작점을 지정하지 않으면 바인딩된 페이지의 최상위 자식부터 탐색합니다.
 
-**시작점 지정 (둘 중 하나):**
+**시작점 지정 (둘 중 하나, 선택):**
 - nodeId: 노드 ID로 직접 지정
 - path: 경로로 찾아서 시작 ("Design System/Buttons")
 
@@ -416,7 +421,7 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
 **limit:** 최대 노드 수 (기본 1000, 대용량 방지)
 
 **사용 예시:**
-- 페이지 최상위: sigma_get_tree({ token })
+- 바인딩된 페이지 최상위: sigma_get_tree({ token })
 - 특정 섹션 내부: sigma_get_tree({ token, path: "Design System" })
 - 프레임 전체 구조: sigma_get_tree({ token, nodeId: "1:234", depth: "full" })`,
     inputSchema: {
@@ -467,8 +472,8 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     name: 'sigma_create_section',
     description: `Figma에 Section을 생성합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+바인딩된 페이지에 Section이 생성됩니다.
 
 Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout을 지원하지 않지만,
 페이지의 콘텐츠를 논리적으로 그룹화하는 데 사용됩니다.
@@ -518,7 +523,7 @@ Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout
     name: 'sigma_move_node',
     description: `Figma 노드를 다른 부모 노드로 이동(reparent)합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 
 노드를 Section, Frame, Group, 또는 Page의 자식으로 이동시킵니다.
 기존 부모에서 자동으로 제거되고 새 부모에 추가됩니다.
@@ -553,7 +558,7 @@ Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout
     name: 'sigma_clone_node',
     description: `Figma 노드를 복제합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 
 모든 SceneNode 타입(Frame, Section, Group, Text, Rectangle 등)을 복제할 수 있습니다.
 복제된 노드는 기본적으로 원본과 같은 부모에 생성됩니다.
@@ -601,8 +606,7 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
     name: 'sigma_screenshot',
     description: `Figma 노드를 이미지로 캡처하여 로컬 파일로 저장합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 
 노드의 exportAsync()를 사용하여 PNG/SVG/JPG/PDF로 export한 후,
 ~/.sigma/screenshots/ 디렉토리에 저장하고 파일 경로를 반환합니다.
@@ -643,8 +647,7 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
     name: 'sigma_extract_node',
     description: `Figma 노드를 ExtractedNode JSON으로 추출합니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 
 노드 ID를 지정하면 해당 노드의 구조, 스타일, 자식 요소를 포함한 ExtractedNode JSON을 반환합니다.
 반환된 JSON은 sigma_create_frame으로 다시 Figma에 생성하거나, 외부에서 분석하는 데 사용할 수 있습니다.
@@ -669,7 +672,7 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
     name: 'sigma_test_roundtrip',
     description: `Figma 노드를 JSON으로 추출한 후, 그 JSON으로 새 프레임을 생성하는 라운드트립 테스트입니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 
 **용도:** JSON 추출 품질을 시각적으로 검증하는 수동 테스트.
 원본 노드 옆에 추출된 JSON으로 만든 복제본이 생성되므로, 둘을 나란히 비교할 수 있습니다.
@@ -699,8 +702,8 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
     name: 'save_and_import',
     description: `컴포넌트를 저장하고 바로 Figma로 가져옵니다.
 
-**토큰 필수**: sigma_login으로 발급받은 토큰이 필요합니다.
-토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+바인딩된 페이지에 프레임이 생성됩니다.
 
 **중요: format은 반드시 'json'을 사용하세요.**`,
     inputSchema: {
