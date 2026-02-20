@@ -1,5 +1,43 @@
 import type { ExtractedNode, ComputedStyles, RGBA } from '@sigma/shared';
-import { createDefaultStyles, parseSpacing, extractBoundingFromStyle } from '../utils';
+import { parseColor } from '@sigma/shared';
+import { createDefaultStyles } from '../utils';
+
+/**
+ * CSS spacing 값 파싱 (padding, margin, border-radius)
+ */
+function parseSpacing(value: string): [number, number, number, number] {
+  const parts = value.split(/\s+/).map((v) => parseFloat(v) || 0);
+
+  switch (parts.length) {
+    case 1:
+      return [parts[0], parts[0], parts[0], parts[0]];
+    case 2:
+      return [parts[0], parts[1], parts[0], parts[1]];
+    case 3:
+      return [parts[0], parts[1], parts[2], parts[1]];
+    case 4:
+      return [parts[0], parts[1], parts[2], parts[3]];
+    default:
+      return [0, 0, 0, 0];
+  }
+}
+
+/**
+ * style 속성에서 width/height 추출
+ */
+function extractBoundingFromStyle(attrsString: string): { x: number; y: number; width: number; height: number } {
+  const result = { x: 0, y: 0, width: 0, height: 0 };
+  const styleMatch = attrsString.match(/style\s*=\s*["']([^"']*)["']/i);
+
+  if (styleMatch) {
+    const widthMatch = styleMatch[1].match(/width\s*:\s*([\d.]+)/);
+    const heightMatch = styleMatch[1].match(/height\s*:\s*([\d.]+)/);
+    if (widthMatch) result.width = parseFloat(widthMatch[1]);
+    if (heightMatch) result.height = parseFloat(heightMatch[1]);
+  }
+
+  return result;
+}
 
 /**
  * HTML 문자열을 ExtractedNode로 파싱
@@ -348,43 +386,9 @@ function applyStyleProperty(styles: ComputedStyles, prop: string, value: string)
 }
 
 /**
- * CSS 색상 파싱 (hex, rgb, rgba)
- * NOTE: This is different from parseColorFromCSS in utils.
- * This one always returns RGBA (never null), used by the HTML parser.
+ * CSS 색상 파싱 (hex, rgb, rgba, named colors)
+ * parseColor에 위임하되, null 대신 기본값(투명)을 반환
  */
 export function parseCSSColor(colorStr: string): RGBA {
-  // rgba
-  const rgbaMatch = colorStr.match(/rgba?\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+))?\s*\)/);
-  if (rgbaMatch) {
-    return {
-      r: parseFloat(rgbaMatch[1]) / 255,
-      g: parseFloat(rgbaMatch[2]) / 255,
-      b: parseFloat(rgbaMatch[3]) / 255,
-      a: rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1,
-    };
-  }
-
-  // hex
-  const hexMatch = colorStr.match(/#([0-9a-fA-F]{3,8})/);
-  if (hexMatch) {
-    const hex = hexMatch[1];
-    if (hex.length === 3) {
-      return {
-        r: parseInt(hex[0] + hex[0], 16) / 255,
-        g: parseInt(hex[1] + hex[1], 16) / 255,
-        b: parseInt(hex[2] + hex[2], 16) / 255,
-        a: 1,
-      };
-    } else if (hex.length >= 6) {
-      return {
-        r: parseInt(hex.slice(0, 2), 16) / 255,
-        g: parseInt(hex.slice(2, 4), 16) / 255,
-        b: parseInt(hex.slice(4, 6), 16) / 255,
-        a: hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
-      };
-    }
-  }
-
-  // 기본값 (투명)
-  return { r: 0, g: 0, b: 0, a: 0 };
+  return parseColor(colorStr) || { r: 0, g: 0, b: 0, a: 0 };
 }

@@ -3,7 +3,7 @@ import { getRequestListener } from '@hono/node-server';
 import { HTTP_PORT, WS_PORT } from '@sigma/shared';
 import { FigmaWebSocketServer } from './websocket/server.js';
 import { createHttpServer } from './http/server.js';
-import { createMcpRequestHandler, getMcpSessionCount } from './mcp/server.js';
+import { createMcpRouter } from './mcp/router.js';
 import { startupCleanup } from './storage/index.js';
 
 async function main() {
@@ -21,55 +21,16 @@ async function main() {
   const httpApp = createHttpServer(wsServer);
   const honoListener = getRequestListener(httpApp.fetch);
 
-  // Create MCP request handler
-  const mcpHandler = createMcpRequestHandler({ wsServer });
+  // MCP 라우터 생성
+  const mcpRouter = createMcpRouter({ wsServer });
 
   // Create unified HTTP server
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    const url = req.url || '';
+    // MCP 요청을 라우터에 위임
+    const handled = await mcpRouter.handleRequest(req, res);
+    if (handled) return;
 
-    // Handle MCP status endpoint
-    if (url === '/api/mcp/status') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ activeSessions: getMcpSessionCount() }));
-      return;
-    }
-
-    // Route MCP requests to MCP handler
-    if (url.startsWith('/api/mcp')) {
-      // Parse JSON body for POST requests
-      if (req.method === 'POST') {
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk.toString();
-        });
-        req.on('end', async () => {
-          console.log('[MCP] Received body:', body);
-          let parsedBody;
-          try {
-            parsedBody = body ? JSON.parse(body) : undefined;
-            console.log('[MCP] Parsed body:', parsedBody);
-          } catch (parseError) {
-            console.error('[MCP] JSON parse error:', parseError);
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid JSON' }));
-            return;
-          }
-          try {
-            await mcpHandler(req, res, parsedBody);
-          } catch (handlerError) {
-            console.error('[MCP] Handler error:', handlerError);
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'MCP handler error', details: String(handlerError) }));
-          }
-        });
-      } else {
-        await mcpHandler(req, res);
-      }
-      return;
-    }
-
-    // Route all other requests to Hono
+    // 나머지 요청은 Hono로 라우팅
     honoListener(req, res);
   });
 

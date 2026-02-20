@@ -23,57 +23,58 @@ export async function createFrameFromJSON(
   position?: { x: number; y: number },
   pageId?: string,
   getTargetPage?: (pageId?: string) => PageNode
-) {
-  try {
-    // 대상 페이지 결정
-    const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
-    const isCurrentPage = targetPage.id === figma.currentPage.id;
+): Promise<{ nodeId: string; name: string; childCount: number; pageName: string }> {
+  // 대상 페이지 결정
+  const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
+  const isCurrentPage = targetPage.id === figma.currentPage.id;
 
-    // 폰트 로드 (영문 + 한글)
-    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+  // 폰트 로드 (영문 + 한글)
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
 
-    // 노드 생성
-    const frame = await createFigmaNode(node);
+  // 노드 생성
+  const frame = await createFigmaNode(node);
 
-    if (frame) {
-      // 이름 설정
-      frame.name = name || node.className || node.tagName;
-
-      // 위치 결정: 명시적 좌표 > 이전 위치 오프셋 > 뷰포트 중앙
-      if (position) {
-        frame.x = position.x;
-        frame.y = position.y;
-      } else if (lastCreatedPosition) {
-        frame.x = lastCreatedPosition.x + OFFSET_X;
-        frame.y = lastCreatedPosition.y + OFFSET_Y;
-      } else {
-        const center = figma.viewport.center;
-        frame.x = center.x - frame.width / 2;
-        frame.y = center.y - frame.height / 2;
-      }
-
-      // 마지막 위치 저장
-      lastCreatedPosition = { x: frame.x, y: frame.y };
-
-      // 대상 페이지에 추가
-      targetPage.appendChild(frame);
-
-      // 현재 페이지인 경우에만 선택 및 뷰포트 이동
-      if (isCurrentPage) {
-        figma.currentPage.selection = [frame];
-        figma.viewport.scrollAndZoomIntoView([frame]);
-      }
-
-      const pageInfo = isCurrentPage ? '' : ` (페이지: ${targetPage.name})`;
-      figma.ui.postMessage({ type: 'success', message: `프레임이 생성되었습니다!${pageInfo}` });
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    figma.ui.postMessage({ type: 'error', message });
+  if (!frame) {
+    throw new Error('프레임 생성 실패');
   }
+
+  // 이름 설정
+  frame.name = name || node.className || node.tagName;
+
+  // 위치 결정: 명시적 좌표 > 이전 위치 오프셋 > 뷰포트 중앙
+  if (position) {
+    frame.x = position.x;
+    frame.y = position.y;
+  } else if (lastCreatedPosition) {
+    frame.x = lastCreatedPosition.x + OFFSET_X;
+    frame.y = lastCreatedPosition.y + OFFSET_Y;
+  } else {
+    const center = figma.viewport.center;
+    frame.x = center.x - frame.width / 2;
+    frame.y = center.y - frame.height / 2;
+  }
+
+  // 마지막 위치 저장
+  lastCreatedPosition = { x: frame.x, y: frame.y };
+
+  // 대상 페이지에 추가
+  targetPage.appendChild(frame);
+
+  // 현재 페이지인 경우에만 선택 및 뷰포트 이동
+  if (isCurrentPage) {
+    figma.currentPage.selection = [frame];
+    figma.viewport.scrollAndZoomIntoView([frame]);
+  }
+
+  return {
+    nodeId: frame.id,
+    name: frame.name,
+    childCount: 'children' in frame ? frame.children.length : 0,
+    pageName: targetPage.name
+  };
 }
 
 /**
@@ -85,62 +86,62 @@ export async function createFrameFromHTML(
   position?: { x: number; y: number },
   pageId?: string,
   getTargetPage?: (pageId?: string) => PageNode
-) {
-  try {
-    // 대상 페이지 결정
-    const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
-    const isCurrentPage = targetPage.id === figma.currentPage.id;
+): Promise<{ nodeId: string; name: string; childCount: number; pageName: string }> {
+  // 대상 페이지 결정
+  const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
+  const isCurrentPage = targetPage.id === figma.currentPage.id;
 
-    // 폰트 로드
-    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+  // 폰트 로드
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
 
-    // HTML 파싱 → ExtractedNode 변환
-    const node = parseHTML(html);
-    if (!node) {
-      figma.ui.postMessage({ type: 'error', message: 'HTML 파싱 실패' });
-      return;
-    }
-
-    // 기존 JSON 변환 로직 재사용
-    const frame = await createFigmaNode(node);
-
-    if (frame) {
-      frame.name = name || 'HTML Import';
-
-      // 위치 결정
-      if (position) {
-        frame.x = position.x;
-        frame.y = position.y;
-      } else if (lastCreatedPosition) {
-        frame.x = lastCreatedPosition.x + OFFSET_X;
-        frame.y = lastCreatedPosition.y + OFFSET_Y;
-      } else {
-        const center = figma.viewport.center;
-        frame.x = center.x - frame.width / 2;
-        frame.y = center.y - frame.height / 2;
-      }
-
-      lastCreatedPosition = { x: frame.x, y: frame.y };
-
-      // 대상 페이지에 추가
-      targetPage.appendChild(frame);
-
-      // 현재 페이지인 경우에만 선택 및 뷰포트 이동
-      if (isCurrentPage) {
-        figma.currentPage.selection = [frame];
-        figma.viewport.scrollAndZoomIntoView([frame]);
-      }
-
-      const pageInfo = isCurrentPage ? '' : ` (페이지: ${targetPage.name})`;
-      figma.ui.postMessage({ type: 'success', message: `HTML에서 프레임이 생성되었습니다!${pageInfo}` });
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    figma.ui.postMessage({ type: 'error', message: `HTML 변환 오류: ${message}` });
+  // HTML 파싱 → ExtractedNode 변환
+  const node = parseHTML(html);
+  if (!node) {
+    throw new Error('HTML 파싱 실패');
   }
+
+  // 기존 JSON 변환 로직 재사용
+  const frame = await createFigmaNode(node);
+
+  if (!frame) {
+    throw new Error('프레임 생성 실패');
+  }
+
+  frame.name = name || 'HTML Import';
+
+  // 위치 결정
+  if (position) {
+    frame.x = position.x;
+    frame.y = position.y;
+  } else if (lastCreatedPosition) {
+    frame.x = lastCreatedPosition.x + OFFSET_X;
+    frame.y = lastCreatedPosition.y + OFFSET_Y;
+  } else {
+    const center = figma.viewport.center;
+    frame.x = center.x - frame.width / 2;
+    frame.y = center.y - frame.height / 2;
+  }
+
+  lastCreatedPosition = { x: frame.x, y: frame.y };
+
+  // 대상 페이지에 추가
+  targetPage.appendChild(frame);
+
+  // 현재 페이지인 경우에만 선택 및 뷰포트 이동
+  if (isCurrentPage) {
+    figma.currentPage.selection = [frame];
+    figma.viewport.scrollAndZoomIntoView([frame]);
+  }
+
+  return {
+    nodeId: frame.id,
+    name: frame.name,
+    childCount: 'children' in frame ? frame.children.length : 0,
+    pageName: targetPage.name
+  };
 }
 
 /**
@@ -152,26 +153,16 @@ export async function updateExistingFrame(
   data: ExtractedNode | string,
   name?: string,
   pageId?: string
-) {
+): Promise<{ nodeId: string; name: string; childCount: number }> {
   // 1. 노드 찾기
   const targetNode = figma.getNodeById(nodeId);
   if (!targetNode) {
-    figma.ui.postMessage({
-      type: 'update-result',
-      success: false,
-      error: `노드를 찾을 수 없습니다: ${nodeId}`,
-    });
-    return;
+    throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
   }
 
   // 2. 유효한 컨테이너 타입인지 확인
   if (targetNode.type !== 'FRAME' && targetNode.type !== 'SECTION' && targetNode.type !== 'COMPONENT') {
-    figma.ui.postMessage({
-      type: 'update-result',
-      success: false,
-      error: `노드 타입이 FRAME, SECTION, COMPONENT 중 하나여야 합니다. 현재: ${targetNode.type}`,
-    });
-    return;
+    throw new Error(`노드 타입이 FRAME, SECTION, COMPONENT 중 하나여야 합니다. 현재: ${targetNode.type}`);
   }
 
   const frame = targetNode as FrameNode;
@@ -187,12 +178,7 @@ export async function updateExistingFrame(
   if (format === 'html') {
     const parsed = parseHTML(data as string);
     if (!parsed) {
-      figma.ui.postMessage({
-        type: 'update-result',
-        success: false,
-        error: 'HTML 파싱 실패',
-      });
-      return;
+      throw new Error('HTML 파싱 실패');
     }
     sourceNode = parsed;
   } else {
@@ -229,16 +215,12 @@ export async function updateExistingFrame(
     frame.name = name;
   }
 
-  // 9. 성공 응답
-  figma.ui.postMessage({
-    type: 'update-result',
-    success: true,
-    result: {
-      nodeId: frame.id,
-      name: frame.name,
-      childCount: frame.children.length,
-    },
-  });
+  // 9. 결과 반환
+  return {
+    nodeId: frame.id,
+    name: frame.name,
+    childCount: frame.children.length,
+  };
 }
 
 /**

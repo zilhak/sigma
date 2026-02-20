@@ -7,6 +7,7 @@
  * Playwright에서 inject하여 사용합니다.
  */
 import { extractElement } from '../extractor/core';
+import { SERVER_URL } from '../constants';
 import type { ExtractedNode } from '../types';
 
 // ============================================================
@@ -143,7 +144,7 @@ export async function extractAndSave(
     return { success: false, error: 'extraction failed' };
   }
 
-  const server = serverUrl || 'http://localhost:19832';
+  const server = serverUrl || SERVER_URL;
   try {
     const res = await fetch(`${server}/api/extracted`, {
       method: 'POST',
@@ -160,6 +161,34 @@ export async function extractAndSave(
   } catch (err) {
     return { success: false, error: String(err) };
   }
+}
+
+// ============================================================
+// Channel Event Helper
+// ============================================================
+
+/**
+ * Storybook Channel API에서 특정 이벤트를 대기
+ * @param channel - Storybook Channel 객체
+ * @param event - 대기할 이벤트 이름
+ * @param timeout - 최대 대기 시간 ms
+ * @returns true면 이벤트 수신, false면 타임아웃
+ */
+function waitForChannelEvent(channel: any, event: string, timeout: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => {
+      channel.off(event, onEvent);
+      resolve(false);
+    }, timeout);
+
+    const onEvent = () => {
+      clearTimeout(timer);
+      channel.off(event, onEvent);
+      resolve(true);
+    };
+
+    channel.on(event, onEvent);
+  });
 }
 
 // ============================================================
@@ -192,21 +221,14 @@ export async function navigateToStory(
     );
   }
 
-  return new Promise<boolean>((resolve) => {
-    const timer = setTimeout(() => {
-      channel.off('storyRendered', onRendered);
+  const result = waitForChannelEvent(channel, 'storyRendered', timeout);
+  channel.emit('setCurrentStory', { storyId });
+
+  return result.then((success) => {
+    if (!success) {
       console.warn(`[Sigma Storybook] navigateToStory timeout (${timeout}ms): ${storyId}`);
-      resolve(false);
-    }, timeout);
-
-    const onRendered = () => {
-      clearTimeout(timer);
-      channel.off('storyRendered', onRendered);
-      resolve(true);
-    };
-
-    channel.on('storyRendered', onRendered);
-    channel.emit('setCurrentStory', { storyId });
+    }
+    return success;
   });
 }
 
@@ -227,20 +249,7 @@ export function waitForStoryRendered(timeout = 10000): Promise<boolean> {
   // 메인 프레임: Channel API의 storyRendered 이벤트 사용
   const channel = (window as any).__STORYBOOK_ADDONS_CHANNEL__;
   if (channel) {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        channel.off('storyRendered', onRendered);
-        resolve(false);
-      }, timeout);
-
-      const onRendered = () => {
-        clearTimeout(timer);
-        channel.off('storyRendered', onRendered);
-        resolve(true);
-      };
-
-      channel.on('storyRendered', onRendered);
-    });
+    return waitForChannelEvent(channel, 'storyRendered', timeout);
   }
 
   // iframe 내부: DOM 폴링

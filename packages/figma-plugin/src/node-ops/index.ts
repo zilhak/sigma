@@ -1,4 +1,12 @@
 export { getStoredFileKey, saveFileKey, getEffectiveFileKey, getAllPages, getPageById, getTargetPage, sendFileInfo } from './page';
-export { getNodeFullPath, findNodesByPath, serializeTreeNode } from './tree';
+export { getNodeFullPath, findNodesByPath, serializeTreeNode, findNodeWithDetails, getTreeWithFilter } from './tree';
 export type { SerializeContext } from './tree';
 export { executeModifyNode } from './modify';
+export { getFrames, deleteFrame } from './frames';
+export type { FrameInfo } from './frames';
+export { createSection } from './section';
+export type { CreateSectionOptions, CreateSectionResult } from './section';
+export { moveNode, cloneNode } from './move';
+export type { MoveNodeResult, CloneNodeResult } from './move';
+export { exportImage } from './export';
+export type { ExportImageResult } from './export';

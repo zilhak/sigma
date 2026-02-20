@@ -16,15 +16,15 @@
  */
 import { extractElement } from './extractor/core';
 import type { ExtractedNode } from './types';
+import { compare } from './diff/core';
+import type { DiffResult } from './diff/core';
 import {
-  compare,
   saveSnapshot,
   compareWithSnapshot,
   listSnapshots,
   deleteSnapshot,
   clearSnapshots,
-} from './diff/core';
-import type { DiffResult, Difference } from './diff/core';
+} from './diff/snapshots';
 
 declare global {
   interface Window {

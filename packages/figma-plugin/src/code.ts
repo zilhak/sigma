@@ -1,14 +1,27 @@
-import type { ExtractedNode, TreeNode, TreeFilter, FindNodeResult, GetTreeResult } from '@sigma/shared';
+import type { ExtractedNode, TreeFilter } from '@sigma/shared';
 import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, setLastCreatedPosition } from './converter';
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
-import { getTargetPage, getPageById, getAllPages, sendFileInfo, getStoredFileKey, saveFileKey } from './node-ops';
-import { getNodeFullPath, findNodesByPath, serializeTreeNode } from './node-ops';
+import { getTargetPage, getAllPages, sendFileInfo, saveFileKey } from './node-ops';
+import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
+import { getFrames, deleteFrame } from './node-ops';
+import { createSection } from './node-ops';
+import { moveNode, cloneNode } from './node-ops';
+import { exportImage } from './node-ops';
 import { testRoundtripJSON, testRoundtripHTML } from './testing';
 
 // UI 표시
 figma.showUI(__html__, { width: 320, height: 400 });
+
+// --- postMessage 헬퍼 ---
+function sendResult(type: string, result: unknown) {
+  figma.ui.postMessage({ type, success: true, result });
+}
+
+function sendError(type: string, error: string) {
+  figma.ui.postMessage({ type, success: false, error });
+}
 
 // 초기 파일 정보 전달
 sendFileInfo();
@@ -42,11 +55,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const updatePageId = msg.pageId as string | undefined;
 
       if (!updateNodeId) {
-        figma.ui.postMessage({
-          type: 'update-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
+        sendError('update-result', 'nodeId가 필요합니다');
         break;
       }
 
@@ -60,11 +69,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         );
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'update-result',
-          success: false,
-          error: errMsg,
-        });
+        sendError('update-result', errMsg);
       }
       break;
     }
@@ -75,43 +80,25 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const modifyArgs = msg.args as Record<string, unknown>;
 
       if (!modifyNodeId) {
-        figma.ui.postMessage({
-          type: 'modify-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
+        sendError('modify-result', 'nodeId가 필요합니다');
         break;
       }
-
       if (!modifyMethod) {
-        figma.ui.postMessage({
-          type: 'modify-result',
-          success: false,
-          error: 'method가 필요합니다',
-        });
+        sendError('modify-result', 'method가 필요합니다');
         break;
       }
 
       try {
         const modifyResult = await executeModifyNode(modifyNodeId, modifyMethod, modifyArgs);
-        figma.ui.postMessage({
-          type: 'modify-result',
-          success: true,
-          result: modifyResult,
-        });
+        sendResult('modify-result', modifyResult);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'modify-result',
-          success: false,
-          error: errMsg,
-        });
+        sendError('modify-result', errMsg);
       }
       break;
     }
 
-    case 'get-pages':
-      // 파일 내 모든 페이지 목록 반환
+    case 'get-pages': {
       const pages = getAllPages();
       figma.ui.postMessage({
         type: 'pages-list',
@@ -119,80 +106,51 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         currentPageId: figma.currentPage.id,
       });
       break;
+    }
 
     case 'get-frames': {
-      // 지정된 페이지 또는 현재 페이지의 모든 최상위 프레임 정보 반환
-      const framesPageId = msg.pageId as string | undefined;
-      const targetPage = getTargetPage(framesPageId);
-      const frames = targetPage.children
-        .filter((node): node is FrameNode => node.type === 'FRAME')
-        .map((frame) => ({
-          id: frame.id,
-          name: frame.name,
-          x: frame.x,
-          y: frame.y,
-          width: frame.width,
-          height: frame.height,
-        }));
+      const result = getFrames(msg.pageId as string | undefined);
       figma.ui.postMessage({
         type: 'frames-list',
-        frames,
-        pageId: targetPage.id,
-        pageName: targetPage.name,
+        frames: result.frames,
+        pageId: result.pageId,
+        pageName: result.pageName,
       });
       break;
     }
 
-    case 'delete-frame':
-      const nodeId = msg.nodeId as string;
-      if (!nodeId) {
-        figma.ui.postMessage({
-          type: 'delete-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
-        break;
+    case 'delete-frame': {
+      try {
+        const result = deleteFrame(msg.nodeId as string);
+        sendResult('delete-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('delete-result', errMsg);
       }
-
-      const nodeToDelete = figma.getNodeById(nodeId);
-      if (!nodeToDelete) {
-        figma.ui.postMessage({
-          type: 'delete-result',
-          success: false,
-          error: `노드를 찾을 수 없습니다: ${nodeId}`,
-        });
-        break;
-      }
-
-      const deletedName = nodeToDelete.name;
-      nodeToDelete.remove();
-      figma.ui.postMessage({
-        type: 'delete-result',
-        success: true,
-        result: { nodeId, name: deletedName },
-      });
       break;
+    }
 
     case 'get-file-info':
       sendFileInfo();
       break;
 
-    case 'save-file-key':
+    case 'save-file-key': {
       const newFileKey = msg.fileKey as string;
       if (newFileKey && newFileKey.trim()) {
         saveFileKey(newFileKey.trim());
         figma.ui.postMessage({ type: 'success', message: 'File Key가 저장되었습니다.' });
-        // 저장 후 파일 정보 다시 전달
         sendFileInfo();
       } else {
         figma.ui.postMessage({ type: 'error', message: 'File Key를 입력해주세요.' });
       }
       break;
+    }
 
-    case 'resize':
+    case 'resize': {
       const { width, height } = msg.data as { width: number; height: number };
       figma.ui.resize(width, height);
       break;
+    }
 
     case 'reset-position':
       setLastCreatedPosition(null);
@@ -200,7 +158,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
 
     case 'extract-to-json': {
-      // 선택된 노드를 JSON으로 추출
       const selection = figma.currentPage.selection;
       if (selection.length === 0) {
         figma.ui.postMessage({
@@ -230,7 +187,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         break;
       }
 
-      // 단일 노드면 객체로, 여러 노드면 배열로
       const resultData = extractedNodes.length === 1 ? extractedNodes[0] : extractedNodes;
       figma.ui.postMessage({
         type: 'extract-result',
@@ -242,7 +198,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     }
 
     case 'extract-to-html': {
-      // 선택된 노드를 HTML로 추출
       const htmlSelection = figma.currentPage.selection;
       if (htmlSelection.length === 0) {
         figma.ui.postMessage({
@@ -282,7 +237,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     }
 
     case 'test-roundtrip-json': {
-      // JSON 라운드트립 테스트
       const jsonData = msg.data as ExtractedNode;
       const jsonName = msg.name as string | undefined;
 
@@ -306,7 +260,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     }
 
     case 'test-roundtrip-html': {
-      // HTML 라운드트립 테스트
       const htmlData = msg.data as string;
       const htmlName = msg.name as string | undefined;
 
@@ -331,174 +284,40 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
     case 'find-node': {
       const findPath = msg.path as string | string[];
-      const findTypeFilter = msg.typeFilter as string | undefined;
-
       if (!findPath) {
-        figma.ui.postMessage({
-          type: 'find-node-result',
-          success: false,
-          error: 'path가 필요합니다',
-        });
+        sendError('find-node-result', 'path가 필요합니다');
         break;
       }
 
-      const foundNodes = findNodesByPath(findPath, null);
-
-      // 타입 필터 적용
-      const filteredNodes = findTypeFilter
-        ? foundNodes.filter(n => n.type === findTypeFilter)
-        : foundNodes;
-
-      if (filteredNodes.length === 0) {
-        const pathStr = Array.isArray(findPath) ? findPath.join('/') : findPath;
-        figma.ui.postMessage({
-          type: 'find-node-result',
-          success: false,
-          error: `경로 "${pathStr}"에 해당하는 노드를 찾을 수 없습니다`,
-        });
-        break;
-      }
-
-      // 찾은 노드들을 직렬화 (자식은 포함하지 않음, depth=0)
-      const serializedNodes: TreeNode[] = [];
-      for (const node of filteredNodes) {
-        const serialized = serializeTreeNode(node, {
-          currentDepth: 0,
-          maxDepth: 0,  // 자식 포함 안 함
-          nodeCount: { value: 0 },
-          parentPath: '',
-        });
-        if (serialized) {
-          // 전체 경로 재계산 (루트부터)
-          serialized.fullPath = getNodeFullPath(node);
-          serializedNodes.push(serialized);
-        }
-      }
-
-      if (serializedNodes.length === 1) {
-        const result: FindNodeResult = { node: serializedNodes[0] };
-        figma.ui.postMessage({
-          type: 'find-node-result',
-          success: true,
-          result,
-        });
-      } else {
-        const result: FindNodeResult = {
-          matches: serializedNodes,
-          warning: `${serializedNodes.length}개의 노드가 발견되었습니다. 더 구체적인 경로를 사용하세요.`,
-        };
-        figma.ui.postMessage({
-          type: 'find-node-result',
-          success: true,
-          result,
-        });
+      try {
+        const result = findNodeWithDetails(findPath, msg.typeFilter as string | undefined, msg.pageId as string | undefined);
+        sendResult('find-node-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('find-node-result', errMsg);
       }
       break;
     }
 
     case 'get-tree': {
-      const treeNodeId = msg.nodeId as string | undefined;
-      const treePath = msg.path as string | string[] | undefined;
-      const requestedDepth = msg.depth as number | string | undefined;
-      const treeFilter = msg.filter as TreeFilter | undefined;
-      const treeLimit = msg.limit as number | undefined;
-      const treePageId = msg.pageId as string | undefined;
-
-      // maxDepth 결정 (-1 또는 "full"은 무한, 기본값 1)
-      let maxDepth = 1;
-      if (requestedDepth === 'full' || requestedDepth === -1) {
-        maxDepth = -1;
-      } else if (typeof requestedDepth === 'number') {
-        maxDepth = Math.min(requestedDepth, 50);  // 최대 50으로 제한
-      }
-
-      // 대상 페이지 결정
-      const targetPage = treePageId ? getPageById(treePageId) : figma.currentPage;
-      if (!targetPage) {
+      try {
+        const result = getTreeWithFilter({
+          nodeId: msg.nodeId as string | undefined,
+          path: msg.path as string | string[] | undefined,
+          depth: msg.depth as number | string | undefined,
+          filter: msg.filter as TreeFilter | undefined,
+          limit: msg.limit as number | undefined,
+          pageId: msg.pageId as string | undefined,
+        });
         figma.ui.postMessage({
           type: 'tree-result',
-          success: false,
-          error: `페이지를 찾을 수 없습니다: ${treePageId}`,
+          success: true,
+          result,
         });
-        break;
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('tree-result', errMsg);
       }
-
-      // 시작 노드 결정
-      let startNode: SceneNode | null = null;
-      let rootPath: string | undefined = undefined;
-
-      if (treeNodeId) {
-        const nodeById = figma.getNodeById(treeNodeId);
-        if (!nodeById || nodeById.type === 'DOCUMENT' || nodeById.type === 'PAGE') {
-          figma.ui.postMessage({
-            type: 'tree-result',
-            success: false,
-            error: `노드를 찾을 수 없습니다: ${treeNodeId}`,
-          });
-          break;
-        }
-        startNode = nodeById as SceneNode;
-        rootPath = getNodeFullPath(startNode);
-      } else if (treePath) {
-        const found = findNodesByPath(treePath, null);
-        if (found.length === 0) {
-          const pathStr = Array.isArray(treePath) ? treePath.join('/') : treePath;
-          figma.ui.postMessage({
-            type: 'tree-result',
-            success: false,
-            error: `경로에 해당하는 노드를 찾을 수 없습니다: ${pathStr}`,
-          });
-          break;
-        }
-        startNode = found[0];  // 첫 번째 매칭 사용
-        rootPath = Array.isArray(treePath) ? treePath.join('/') : treePath;
-        if (found.length > 1) {
-          console.warn(`[get-tree] 다중 매칭: ${found.length}개 중 첫 번째 사용`);
-        }
-      }
-
-      // 탐색 및 직렬화
-      const nodeCount = { value: 0 };
-      const children: TreeNode[] = [];
-      const effectiveLimit = treeLimit !== undefined ? treeLimit : 1000;  // 기본 limit 1000
-
-      // 탐색 대상 결정
-      const targetChildren: readonly SceneNode[] = startNode && 'children' in startNode
-        ? (startNode as FrameNode).children
-        : targetPage.children;
-
-      for (const child of targetChildren) {
-        if (nodeCount.value >= effectiveLimit) break;
-
-        const serialized = serializeTreeNode(child, {
-          currentDepth: 0,
-          maxDepth,
-          filter: treeFilter,
-          limit: effectiveLimit,
-          nodeCount,
-          parentPath: rootPath || '',
-        });
-
-        if (serialized) {
-          children.push(serialized);
-        }
-      }
-
-      const treeResult: GetTreeResult = {
-        pageId: targetPage.id,
-        pageName: targetPage.name,
-        rootNodeId: startNode ? startNode.id : null,
-        rootNodePath: rootPath,
-        children,
-        truncated: nodeCount.value >= effectiveLimit,
-        totalCount: nodeCount.value,
-      };
-
-      figma.ui.postMessage({
-        type: 'tree-result',
-        success: true,
-        result: treeResult,
-      });
       break;
     }
 
@@ -506,41 +325,25 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const extractNodeId = msg.nodeId as string;
 
       if (!extractNodeId) {
-        figma.ui.postMessage({
-          type: 'extract-node-json-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
+        sendError('extract-node-json-result', 'nodeId가 필요합니다');
         break;
       }
 
       const targetNode = figma.getNodeById(extractNodeId);
       if (!targetNode) {
-        figma.ui.postMessage({
-          type: 'extract-node-json-result',
-          success: false,
-          error: `노드를 찾을 수 없습니다: ${extractNodeId}`,
-        });
+        sendError('extract-node-json-result', `노드를 찾을 수 없습니다: ${extractNodeId}`);
         break;
       }
 
       if (targetNode.type === 'DOCUMENT' || targetNode.type === 'PAGE') {
-        figma.ui.postMessage({
-          type: 'extract-node-json-result',
-          success: false,
-          error: `이 노드 타입은 추출할 수 없습니다: ${targetNode.type}`,
-        });
+        sendError('extract-node-json-result', `이 노드 타입은 추출할 수 없습니다: ${targetNode.type}`);
         break;
       }
 
       try {
         const extracted = extractNodeToJSON(targetNode as SceneNode);
         if (!extracted) {
-          figma.ui.postMessage({
-            type: 'extract-node-json-result',
-            success: false,
-            error: '추출 가능한 데이터가 없습니다',
-          });
+          sendError('extract-node-json-result', '추출 가능한 데이터가 없습니다');
           break;
         }
 
@@ -556,352 +359,71 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         });
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'extract-node-json-result',
-          success: false,
-          error: `추출 실패: ${errMsg}`,
-        });
+        sendError('extract-node-json-result', `추출 실패: ${errMsg}`);
       }
       break;
     }
 
     case 'create-section': {
-      const sectionName = msg.name as string || 'Section';
-      const sectionPageId = msg.pageId as string | undefined;
-      const sectionPosition = msg.position as { x: number; y: number } | undefined;
-      const sectionSize = msg.size as { width: number; height: number } | undefined;
-      const childrenIds = msg.children as string[] | undefined;
-      const sectionFills = msg.fills as Paint[] | undefined;
-
       try {
-        const section = figma.createSection();
-        section.name = sectionName;
-
-        if (sectionPosition) {
-          section.x = sectionPosition.x;
-          section.y = sectionPosition.y;
-        }
-
-        if (sectionSize) {
-          section.resizeWithoutConstraints(
-            Math.max(sectionSize.width, 1),
-            Math.max(sectionSize.height, 1)
-          );
-        }
-
-        if (sectionFills) {
-          section.fills = sectionFills;
-        }
-
-        // 특정 페이지에 생성해야 하는 경우
-        if (sectionPageId) {
-          const targetPage = getPageById(sectionPageId);
-          if (targetPage && targetPage.id !== figma.currentPage.id) {
-            targetPage.appendChild(section);
-          }
-        }
-
-        // 자식 노드 이동
-        if (childrenIds && childrenIds.length > 0) {
-          for (const childId of childrenIds) {
-            const child = figma.getNodeById(childId);
-            if (child && child.type !== 'DOCUMENT' && child.type !== 'PAGE') {
-              section.appendChild(child as SceneNode);
-            }
-          }
-        }
-
-        figma.ui.postMessage({
-          type: 'create-section-result',
-          success: true,
-          result: {
-            nodeId: section.id,
-            name: section.name,
-            x: section.x,
-            y: section.y,
-            width: section.width,
-            height: section.height,
-            childCount: section.children.length,
-          },
+        const result = createSection({
+          name: msg.name as string | undefined,
+          pageId: msg.pageId as string | undefined,
+          position: msg.position as { x: number; y: number } | undefined,
+          size: msg.size as { width: number; height: number } | undefined,
+          children: msg.children as string[] | undefined,
+          fills: msg.fills as Paint[] | undefined,
         });
+        sendResult('create-section-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'create-section-result',
-          success: false,
-          error: `Section 생성 실패: ${errMsg}`,
-        });
+        sendError('create-section-result', `Section 생성 실패: ${errMsg}`);
       }
       break;
     }
 
     case 'move-node': {
-      const moveNodeId = msg.nodeId as string;
-      const targetParentId = msg.parentId as string;
-      const insertIndex = msg.index as number | undefined;
-
-      if (!moveNodeId) {
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
-        break;
-      }
-
-      if (!targetParentId) {
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: false,
-          error: 'parentId가 필요합니다',
-        });
-        break;
-      }
-
-      const moveNode = figma.getNodeById(moveNodeId);
-      if (!moveNode) {
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: false,
-          error: `노드를 찾을 수 없습니다: ${moveNodeId}`,
-        });
-        break;
-      }
-
-      const targetParent = figma.getNodeById(targetParentId);
-      if (!targetParent) {
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: false,
-          error: `대상 부모 노드를 찾을 수 없습니다: ${targetParentId}`,
-        });
-        break;
-      }
-
-      if (!('appendChild' in targetParent)) {
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: false,
-          error: `대상 노드(${targetParent.type})는 자식을 가질 수 없습니다`,
-        });
-        break;
-      }
-
       try {
-        const oldParentId = moveNode.parent ? moveNode.parent.id : null;
-        const oldParentName = moveNode.parent ? moveNode.parent.name : null;
-
-        if (insertIndex !== undefined) {
-          (targetParent as ChildrenMixin).insertChild(insertIndex, moveNode as SceneNode);
-        } else {
-          (targetParent as ChildrenMixin).appendChild(moveNode as SceneNode);
-        }
-
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: true,
-          result: {
-            nodeId: moveNode.id,
-            nodeName: moveNode.name,
-            nodeType: moveNode.type,
-            oldParentId,
-            oldParentName,
-            newParentId: targetParent.id,
-            newParentName: targetParent.name,
-            newParentType: targetParent.type,
-            index: insertIndex,
-          },
-        });
+        const result = moveNode(
+          msg.nodeId as string,
+          msg.parentId as string,
+          msg.index as number | undefined
+        );
+        sendResult('move-node-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'move-node-result',
-          success: false,
-          error: `노드 이동 실패: ${errMsg}`,
-        });
+        sendError('move-node-result', `노드 이동 실패: ${errMsg}`);
       }
       break;
     }
 
     case 'clone-node': {
-      const cloneNodeId = msg.nodeId as string;
-      const cloneParentId = msg.parentId as string | undefined;
-      const clonePosition = msg.position as { x: number; y: number } | undefined;
-      const cloneName = msg.name as string | undefined;
-
-      if (!cloneNodeId) {
-        figma.ui.postMessage({
-          type: 'clone-node-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
-        break;
-      }
-
-      const sourceNode = figma.getNodeById(cloneNodeId);
-      if (!sourceNode) {
-        figma.ui.postMessage({
-          type: 'clone-node-result',
-          success: false,
-          error: `노드를 찾을 수 없습니다: ${cloneNodeId}`,
-        });
-        break;
-      }
-
-      if (sourceNode.type === 'DOCUMENT' || sourceNode.type === 'PAGE') {
-        figma.ui.postMessage({
-          type: 'clone-node-result',
-          success: false,
-          error: `Document 또는 Page는 복제할 수 없습니다`,
-        });
-        break;
-      }
-
       try {
-        const cloned = (sourceNode as SceneNode).clone();
-
-        // 이름 변경
-        if (cloneName) {
-          cloned.name = cloneName;
-        }
-
-        // 다른 부모로 이동
-        if (cloneParentId) {
-          const newParent = figma.getNodeById(cloneParentId);
-          if (!newParent) {
-            // 복제는 이미 됐으므로 제거하고 에러 반환
-            cloned.remove();
-            figma.ui.postMessage({
-              type: 'clone-node-result',
-              success: false,
-              error: `대상 부모 노드를 찾을 수 없습니다: ${cloneParentId}`,
-            });
-            break;
-          }
-          if (!('appendChild' in newParent)) {
-            cloned.remove();
-            figma.ui.postMessage({
-              type: 'clone-node-result',
-              success: false,
-              error: `대상 노드(${newParent.type})는 자식을 가질 수 없습니다`,
-            });
-            break;
-          }
-          (newParent as ChildrenMixin).appendChild(cloned);
-        }
-
-        // 위치 설정
-        if (clonePosition) {
-          cloned.x = clonePosition.x;
-          cloned.y = clonePosition.y;
-        }
-
-        const width = 'width' in cloned ? (cloned as any).width : 0;
-        const height = 'height' in cloned ? (cloned as any).height : 0;
-
-        figma.ui.postMessage({
-          type: 'clone-node-result',
-          success: true,
-          result: {
-            nodeId: cloned.id,
-            name: cloned.name,
-            type: cloned.type,
-            x: cloned.x,
-            y: cloned.y,
-            width: Math.round(width),
-            height: Math.round(height),
-            parentId: cloned.parent ? cloned.parent.id : null,
-            parentName: cloned.parent ? cloned.parent.name : null,
-            sourceNodeId: cloneNodeId,
-          },
-        });
+        const result = cloneNode(
+          msg.nodeId as string,
+          msg.parentId as string | undefined,
+          msg.position as { x: number; y: number } | undefined,
+          msg.name as string | undefined
+        );
+        sendResult('clone-node-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'clone-node-result',
-          success: false,
-          error: `노드 복제 실패: ${errMsg}`,
-        });
+        sendError('clone-node-result', `노드 복제 실패: ${errMsg}`);
       }
       break;
     }
 
     case 'export-image': {
-      const exportNodeId = msg.nodeId as string;
-      const exportFormat = (msg.format as string || 'PNG').toUpperCase();
-      const exportScale = msg.scale as number || 2;
-
-      if (!exportNodeId) {
-        figma.ui.postMessage({
-          type: 'export-image-result',
-          success: false,
-          error: 'nodeId가 필요합니다',
-        });
-        break;
-      }
-
-      const exportNode = figma.getNodeById(exportNodeId);
-      if (!exportNode) {
-        figma.ui.postMessage({
-          type: 'export-image-result',
-          success: false,
-          error: `노드를 찾을 수 없습니다: ${exportNodeId}`,
-        });
-        break;
-      }
-
-      // exportAsync is available on SceneNode (not DOCUMENT or PAGE)
-      if (exportNode.type === 'DOCUMENT' || exportNode.type === 'PAGE') {
-        figma.ui.postMessage({
-          type: 'export-image-result',
-          success: false,
-          error: `이 노드 타입은 export할 수 없습니다: ${exportNode.type}`,
-        });
-        break;
-      }
-
       try {
-        const sceneNode = exportNode as SceneNode;
-
-        // Determine export settings
-        const validFormats = ['PNG', 'SVG', 'JPG', 'PDF'];
-        const finalFormat = validFormats.includes(exportFormat) ? exportFormat : 'PNG';
-
-        const exportSettings: ExportSettings = finalFormat === 'SVG'
-          ? { format: 'SVG' }
-          : finalFormat === 'PDF'
-            ? { format: 'PDF' }
-            : {
-                format: finalFormat as 'PNG' | 'JPG',
-                constraint: { type: 'SCALE', value: exportScale },
-              };
-
-        const bytes = await sceneNode.exportAsync(exportSettings);
-        const base64 = figma.base64Encode(bytes);
-
-        // Get dimensions
-        const width = 'width' in sceneNode ? (sceneNode as any).width : 0;
-        const height = 'height' in sceneNode ? (sceneNode as any).height : 0;
-
-        figma.ui.postMessage({
-          type: 'export-image-result',
-          success: true,
-          result: {
-            base64,
-            format: finalFormat,
-            nodeId: exportNodeId,
-            nodeName: sceneNode.name,
-            width: Math.round(width),
-            height: Math.round(height),
-          },
-        });
+        const result = await exportImage(
+          msg.nodeId as string,
+          msg.format as string | undefined,
+          msg.scale as number | undefined
+        );
+        sendResult('export-image-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
-        figma.ui.postMessage({
-          type: 'export-image-result',
-          success: false,
-          error: `export 실패: ${errMsg}`,
-        });
+        sendError('export-image-result', `export 실패: ${errMsg}`);
       }
       break;
     }

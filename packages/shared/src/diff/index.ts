@@ -1,10 +1,13 @@
+// 비교 로직
+export { compare } from './core';
+export type { Difference, DiffResult } from './core';
+
+// 스냅샷 관리
 export {
-  compare,
   saveSnapshot,
   compareWithSnapshot,
   listSnapshots,
   deleteSnapshot,
   clearSnapshots,
-} from './core';
-
-export type { Difference, DiffResult, Snapshot } from './core';
+} from './snapshots';
+export type { Snapshot } from './snapshots';

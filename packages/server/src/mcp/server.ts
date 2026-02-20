@@ -6,7 +6,9 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { toolDefinitions, handleTool, type ToolContext } from './tools.js';
+import { toolDefinitions } from './tool-definitions.js';
+import { handleTool } from './tool-handler.js';
+import type { ToolContext } from './helpers.js';
 
 export function createMcpServer(context: ToolContext) {
   const server = new Server(

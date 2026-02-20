@@ -22,10 +22,6 @@ export const WS_PORT = PORTS.WEBSOCKET;
 export const SERVER_URL = `http://localhost:${PORTS.HTTP}`;
 export const WEBSOCKET_URL = `ws://localhost:${PORTS.WEBSOCKET}`;
 
-// Shorthand URL exports
-export const HTTP_URL = SERVER_URL;
-export const WS_URL = WEBSOCKET_URL;
-
 /**
  * API 엔드포인트
  */

@@ -1,5 +1,6 @@
-import type { RGBA, ComputedStyles, ExtractedNode } from '@sigma/shared';
-import { createSolidPaint, parseColorFromCSS } from '../utils';
+import type { RGBA, ComputedStyles } from '@sigma/shared';
+import { parseColor } from '@sigma/shared';
+import { createSolidPaint } from '../utils';
 
 /**
  * 패딩 적용
@@ -28,63 +29,6 @@ export function applyBackground(frame: FrameNode, styles: ComputedStyles, isRoot
   } else {
     // 자식 프레임의 투명 배경 → 빈 fills (부모 배경 비침)
     frame.fills = [];
-  }
-}
-
-/**
- * 자식 요소의 CSS margin을 부모 Auto Layout의 itemSpacing/padding으로 변환
- * CSS margin collapsing: 인접 마진 중 큰 값 사용
- */
-export function applyChildMargins(frame: FrameNode, children: ExtractedNode[]) {
-  if (frame.layoutMode === 'NONE' || children.length === 0) return;
-
-  const isVertical = frame.layoutMode === 'VERTICAL';
-  const leadingProp = isVertical ? 'marginTop' : 'marginLeft';
-  const trailingProp = isVertical ? 'marginBottom' : 'marginRight';
-
-  // 첫 자식의 leading margin → 부모 padding 시작 방향에 추가
-  const firstStyles = children[0].styles;
-  if (firstStyles) {
-    const firstLeading = (firstStyles as any)[leadingProp] || 0;
-    if (firstLeading > 0) {
-      if (isVertical) {
-        frame.paddingTop = (frame.paddingTop || 0) + firstLeading;
-      } else {
-        frame.paddingLeft = (frame.paddingLeft || 0) + firstLeading;
-      }
-    }
-  }
-
-  // 마지막 자식의 trailing margin → 부모 padding 끝 방향에 추가
-  const lastStyles = children[children.length - 1].styles;
-  if (lastStyles) {
-    const lastTrailing = (lastStyles as any)[trailingProp] || 0;
-    if (lastTrailing > 0) {
-      if (isVertical) {
-        frame.paddingBottom = (frame.paddingBottom || 0) + lastTrailing;
-      } else {
-        frame.paddingRight = (frame.paddingRight || 0) + lastTrailing;
-      }
-    }
-  }
-
-  // 인접 자식 간 margin → itemSpacing (gap이 이미 설정되지 않은 경우만)
-  if (children.length > 1 && (frame.itemSpacing === 0 || frame.itemSpacing === undefined)) {
-    let maxSpacing = 0;
-    for (let i = 0; i < children.length - 1; i++) {
-      const currentStyles = children[i].styles;
-      const nextStyles = children[i + 1].styles;
-      const currentTrailing = currentStyles ? ((currentStyles as any)[trailingProp] || 0) : 0;
-      const nextLeading = nextStyles ? ((nextStyles as any)[leadingProp] || 0) : 0;
-      // CSS margin collapsing: 인접 마진 중 큰 값
-      const collapsed = Math.max(currentTrailing, nextLeading);
-      if (collapsed > maxSpacing) {
-        maxSpacing = collapsed;
-      }
-    }
-    if (maxSpacing > 0) {
-      frame.itemSpacing = maxSpacing;
-    }
   }
 }
 
@@ -368,7 +312,7 @@ export function parseSingleShadow(shadowStr: string): DropShadowEffect | null {
   if (!colorMatch) return null;
 
   const colorStr = colorMatch[0];
-  const color = parseColorFromCSS(colorStr);
+  const color = parseColor(colorStr);
   if (!color) return null;
 
   // 색상 제거 후 숫자만 추출

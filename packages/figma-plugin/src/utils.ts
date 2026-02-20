@@ -12,63 +12,6 @@ export function createSolidPaint(color: RGBA): SolidPaint {
 }
 
 /**
- * CSS 색상 문자열 파싱
- */
-export function parseColorFromCSS(colorStr: string): RGBA | null {
-  const rgbaMatch = colorStr.match(
-    /rgba?\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+))?\s*\)/
-  );
-
-  if (rgbaMatch) {
-    return {
-      r: parseFloat(rgbaMatch[1]) / 255,
-      g: parseFloat(rgbaMatch[2]) / 255,
-      b: parseFloat(rgbaMatch[3]) / 255,
-      a: rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1,
-    };
-  }
-
-  return null;
-}
-
-/**
- * CSS spacing 값 파싱 (padding, margin, border-radius)
- */
-export function parseSpacing(value: string): [number, number, number, number] {
-  const parts = value.split(/\s+/).map((v) => parseFloat(v) || 0);
-
-  switch (parts.length) {
-    case 1:
-      return [parts[0], parts[0], parts[0], parts[0]];
-    case 2:
-      return [parts[0], parts[1], parts[0], parts[1]];
-    case 3:
-      return [parts[0], parts[1], parts[2], parts[1]];
-    case 4:
-      return [parts[0], parts[1], parts[2], parts[3]];
-    default:
-      return [0, 0, 0, 0];
-  }
-}
-
-/**
- * style 속성에서 width/height 추출
- */
-export function extractBoundingFromStyle(attrsString: string): { x: number; y: number; width: number; height: number } {
-  const result = { x: 0, y: 0, width: 0, height: 0 };
-  const styleMatch = attrsString.match(/style\s*=\s*["']([^"']*)["']/i);
-
-  if (styleMatch) {
-    const widthMatch = styleMatch[1].match(/width\s*:\s*([\d.]+)/);
-    const heightMatch = styleMatch[1].match(/height\s*:\s*([\d.]+)/);
-    if (widthMatch) result.width = parseFloat(widthMatch[1]);
-    if (heightMatch) result.height = parseFloat(heightMatch[1]);
-  }
-
-  return result;
-}
-
-/**
  * 기본 스타일 생성
  */
 export function createDefaultStyles(): ComputedStyles {

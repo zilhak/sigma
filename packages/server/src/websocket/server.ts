@@ -178,181 +178,19 @@ export class FigmaWebSocketServer {
         break;
 
       case 'RESULT':
-        // Handle command result
-        const commandId = message.commandId as string;
-        const pending = this.pendingCommands.get(commandId);
-        if (pending) {
-          clearTimeout(pending.timeout);
-          this.pendingCommands.delete(commandId);
-          if (message.success) {
-            pending.resolve(message.result);
-          } else {
-            pending.reject(new Error(message.error as string || 'Unknown error'));
-          }
-        }
-        break;
-
       case 'FRAMES_LIST':
-        // Handle frames list response
-        const framesCommandId = message.commandId as string;
-        const framesPending = this.pendingCommands.get(framesCommandId);
-        if (framesPending) {
-          clearTimeout(framesPending.timeout);
-          this.pendingCommands.delete(framesCommandId);
-          framesPending.resolve(message.frames);
-        }
-        break;
-
       case 'DELETE_RESULT':
-        // Handle delete result
-        const deleteCommandId = message.commandId as string;
-        const deletePending = this.pendingCommands.get(deleteCommandId);
-        if (deletePending) {
-          clearTimeout(deletePending.timeout);
-          this.pendingCommands.delete(deleteCommandId);
-          if (message.success) {
-            const result = message.result as { nodeId: string; name: string } | undefined;
-            deletePending.resolve({ deleted: true, name: result?.name });
-          } else {
-            deletePending.reject(new Error(message.error as string || 'Delete failed'));
-          }
-        }
+      case 'UPDATE_RESULT':
+      case 'MODIFY_RESULT':
+      case 'FIND_NODE_RESULT':
+      case 'TREE_RESULT':
+      case 'EXPORT_IMAGE_RESULT':
+      case 'EXTRACT_NODE_JSON_RESULT':
+      case 'CREATE_SECTION_RESULT':
+      case 'MOVE_NODE_RESULT':
+      case 'CLONE_NODE_RESULT':
+        this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
         break;
-
-      case 'UPDATE_RESULT': {
-        const updateCommandId = message.commandId as string;
-        const updatePending = this.pendingCommands.get(updateCommandId);
-        if (updatePending) {
-          clearTimeout(updatePending.timeout);
-          this.pendingCommands.delete(updateCommandId);
-          if (message.success) {
-            updatePending.resolve(message.result);
-          } else {
-            updatePending.reject(new Error(message.error as string || 'Update failed'));
-          }
-        }
-        break;
-      }
-
-      case 'MODIFY_RESULT': {
-        const modifyCommandId = message.commandId as string;
-        const modifyPending = this.pendingCommands.get(modifyCommandId);
-        if (modifyPending) {
-          clearTimeout(modifyPending.timeout);
-          this.pendingCommands.delete(modifyCommandId);
-          if (message.success) {
-            modifyPending.resolve(message.result);
-          } else {
-            modifyPending.reject(new Error(message.error as string || 'Modify failed'));
-          }
-        }
-        break;
-      }
-
-      case 'FIND_NODE_RESULT': {
-        const findCommandId = message.commandId as string;
-        const findPending = this.pendingCommands.get(findCommandId);
-        if (findPending) {
-          clearTimeout(findPending.timeout);
-          this.pendingCommands.delete(findCommandId);
-          if (message.success) {
-            findPending.resolve(message.result);
-          } else {
-            findPending.reject(new Error(message.error as string || 'Find node failed'));
-          }
-        }
-        break;
-      }
-
-      case 'TREE_RESULT': {
-        const treeCommandId = message.commandId as string;
-        const treePending = this.pendingCommands.get(treeCommandId);
-        if (treePending) {
-          clearTimeout(treePending.timeout);
-          this.pendingCommands.delete(treeCommandId);
-          if (message.success) {
-            treePending.resolve(message.result);
-          } else {
-            treePending.reject(new Error(message.error as string || 'Get tree failed'));
-          }
-        }
-        break;
-      }
-
-      case 'EXPORT_IMAGE_RESULT': {
-        const exportCommandId = message.commandId as string;
-        const exportPending = this.pendingCommands.get(exportCommandId);
-        if (exportPending) {
-          clearTimeout(exportPending.timeout);
-          this.pendingCommands.delete(exportCommandId);
-          if (message.success) {
-            exportPending.resolve(message.result);
-          } else {
-            exportPending.reject(new Error(message.error as string || 'Export image failed'));
-          }
-        }
-        break;
-      }
-
-      case 'EXTRACT_NODE_JSON_RESULT': {
-        const extractCommandId = message.commandId as string;
-        const extractPending = this.pendingCommands.get(extractCommandId);
-        if (extractPending) {
-          clearTimeout(extractPending.timeout);
-          this.pendingCommands.delete(extractCommandId);
-          if (message.success) {
-            extractPending.resolve(message.result);
-          } else {
-            extractPending.reject(new Error(message.error as string || 'Extract node failed'));
-          }
-        }
-        break;
-      }
-
-      case 'CREATE_SECTION_RESULT': {
-        const createSectionCommandId = message.commandId as string;
-        const createSectionPending = this.pendingCommands.get(createSectionCommandId);
-        if (createSectionPending) {
-          clearTimeout(createSectionPending.timeout);
-          this.pendingCommands.delete(createSectionCommandId);
-          if (message.success) {
-            createSectionPending.resolve(message.result);
-          } else {
-            createSectionPending.reject(new Error(message.error as string || 'Create section failed'));
-          }
-        }
-        break;
-      }
-
-      case 'MOVE_NODE_RESULT': {
-        const moveNodeCommandId = message.commandId as string;
-        const moveNodePending = this.pendingCommands.get(moveNodeCommandId);
-        if (moveNodePending) {
-          clearTimeout(moveNodePending.timeout);
-          this.pendingCommands.delete(moveNodeCommandId);
-          if (message.success) {
-            moveNodePending.resolve(message.result);
-          } else {
-            moveNodePending.reject(new Error(message.error as string || 'Move node failed'));
-          }
-        }
-        break;
-      }
-
-      case 'CLONE_NODE_RESULT': {
-        const cloneNodeCommandId = message.commandId as string;
-        const cloneNodePending = this.pendingCommands.get(cloneNodeCommandId);
-        if (cloneNodePending) {
-          clearTimeout(cloneNodePending.timeout);
-          this.pendingCommands.delete(cloneNodeCommandId);
-          if (message.success) {
-            cloneNodePending.resolve(message.result);
-          } else {
-            cloneNodePending.reject(new Error(message.error as string || 'Clone node failed'));
-          }
-        }
-        break;
-      }
     }
   }
 
@@ -438,6 +276,99 @@ export class FigmaWebSocketServer {
   }
 
   /**
+   * 공통 커맨드 전송 헬퍼
+   * resolveTarget → commandId 생성 → Promise + timeout → ws.send 패턴을 통합
+   */
+  private sendCommand<T>(
+    commandType: string,
+    payload: Record<string, unknown>,
+    options?: {
+      pluginId?: string;
+      timeoutMs?: number;
+      logSuffix?: string;
+    }
+  ): Promise<T> {
+    const targetPlugin = this.resolveTargetPlugin(options?.pluginId);
+    if (!targetPlugin) {
+      if (options?.pluginId) {
+        throw new Error(`지정된 플러그인(${options.pluginId})이 연결되어 있지 않습니다`);
+      }
+      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+    }
+
+    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const timeoutMs = options?.timeoutMs ?? 30000;
+
+    return new Promise<T>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingCommands.delete(commandId);
+        reject(new Error('Figma Plugin 응답 시간 초과'));
+      }, timeoutMs);
+
+      this.pendingCommands.set(commandId, {
+        id: commandId,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+        timeout,
+      });
+
+      const message = JSON.stringify({
+        type: commandType,
+        commandId,
+        ...payload,
+      });
+
+      const suffix = options?.logSuffix ?? '';
+      console.log(`[WebSocket] Sending ${commandType} to ${targetPlugin.id}${suffix}`);
+      targetPlugin.ws.send(message);
+    });
+  }
+
+  /**
+   * 커맨드 결과 메시지 공통 처리
+   * commandId로 pendingCommand를 찾아 resolve/reject 수행
+   */
+  private resolveCommandResult(
+    message: { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown; [key: string]: unknown },
+  ): void {
+    const commandId = message.commandId as string;
+    const pending = this.pendingCommands.get(commandId);
+    if (!pending) return;
+
+    clearTimeout(pending.timeout);
+    this.pendingCommands.delete(commandId);
+
+    // FRAMES_LIST는 message.frames를 사용
+    if (message.type === 'FRAMES_LIST') {
+      pending.resolve(message.frames);
+      return;
+    }
+
+    // DELETE_RESULT는 성공 시 변환된 형태로 반환
+    if (message.type === 'DELETE_RESULT') {
+      if (message.success) {
+        const result = message.result as { nodeId: string; name: string } | undefined;
+        pending.resolve({ deleted: true, name: result?.name });
+      } else {
+        pending.reject(new Error(message.error as string || 'Delete failed'));
+      }
+      return;
+    }
+
+    // 일반 결과 처리 (RESULT, UPDATE_RESULT, MODIFY_RESULT, 기타 *_RESULT)
+    if (message.success !== false) {
+      pending.resolve(message.result);
+    } else {
+      // 타입에 맞는 기본 에러 메시지 생성
+      const errorPrefix = message.type
+        .replace('_RESULT', '')
+        .replace(/_/g, ' ')
+        .toLowerCase();
+      pending.reject(new Error(message.error as string || `${errorPrefix} failed`));
+    }
+  }
+
+  /**
    * 특정 플러그인의 페이지 정보 조회
    */
   getPluginPageInfo(pluginId: string, pageId: string): { fileName: string; pageName: string } | null {
@@ -466,6 +397,7 @@ export class FigmaWebSocketServer {
     pluginId?: string,
     pageId?: string
   ): Promise<void> {
+    // 청킹 검사를 위해 먼저 타겟 플러그인과 페이로드 확인
     const targetPlugin = this.resolveTargetPlugin(pluginId);
     if (!targetPlugin) {
       if (pluginId) {
@@ -488,35 +420,17 @@ export class FigmaWebSocketServer {
       return this.createFrameChunked(targetPlugin.ws, payload, name, position, format, pageId);
     }
 
-    // 1MB 이하: 기존 방식
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: () => resolve(),
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'CREATE_FRAME',
-        commandId,
-        format,
-        data: format === 'json' ? data : undefined,
-        html: format === 'html' ? html : undefined,
-        name,
-        position,
-        pageId,  // 대상 페이지 (undefined면 현재 페이지)
-      });
-
-      console.log(`[WebSocket] Sending CREATE_FRAME to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
-      targetPlugin.ws.send(message);
+    // 1MB 이하: sendCommand 사용
+    return this.sendCommand<void>('CREATE_FRAME', {
+      format,
+      data: format === 'json' ? data : undefined,
+      html: format === 'html' ? html : undefined,
+      name,
+      position,
+      pageId,
+    }, {
+      pluginId,
+      logSuffix: pageId ? ` (page: ${pageId})` : '',
     });
   }
 
@@ -587,37 +501,9 @@ export class FigmaWebSocketServer {
   // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
   // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
   async getFrames(pluginId?: string, pageId?: string): Promise<Array<{ id: string; name: string; x: number; y: number; width: number; height: number }>> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'GET_FRAMES',
-        commandId,
-        pageId,  // 대상 페이지 (undefined면 현재 페이지)
-      });
-
-      console.log(`[WebSocket] Sending GET_FRAMES to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('GET_FRAMES', { pageId }, {
+      pluginId,
+      logSuffix: pageId ? ` (page: ${pageId})` : '',
     });
   }
 
@@ -625,38 +511,9 @@ export class FigmaWebSocketServer {
   // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
   // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
   async deleteFrame(nodeId: string, pluginId?: string, pageId?: string): Promise<{ deleted: boolean; name?: string }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'DELETE_FRAME',
-        commandId,
-        nodeId,
-        pageId,  // 대상 페이지 (undefined면 현재 페이지)
-      });
-
-      console.log(`[WebSocket] Sending DELETE_FRAME to ${targetPlugin.id}${pageId ? ` (page: ${pageId})` : ''}`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('DELETE_FRAME', { nodeId, pageId }, {
+      pluginId,
+      logSuffix: pageId ? ` (page: ${pageId})` : '',
     });
   }
 
@@ -672,6 +529,7 @@ export class FigmaWebSocketServer {
     pluginId?: string,
     pageId?: string
   ): Promise<{ nodeId: string; name: string; childCount: number }> {
+    // 청킹 검사를 위해 먼저 타겟 플러그인과 페이로드 확인
     const targetPlugin = this.resolveTargetPlugin(pluginId);
     if (!targetPlugin) {
       if (pluginId) {
@@ -680,7 +538,7 @@ export class FigmaWebSocketServer {
       throw new Error('Figma Plugin이 연결되어 있지 않습니다');
     }
 
-    // Determine payload
+    // 페이로드 결정
     const payload = format === 'html' ? html : JSON.stringify(data);
     if (!payload) {
       throw new Error(format === 'html' ? 'HTML 데이터가 필요합니다' : 'JSON 데이터가 필요합니다');
@@ -688,41 +546,23 @@ export class FigmaWebSocketServer {
 
     const dataSize = Buffer.byteLength(payload, 'utf-8');
 
-    // Use chunked transfer for >1MB
+    // 1MB 초과 시 청킹 사용
     if (dataSize > CHUNK_THRESHOLD) {
       console.log(`[WebSocket] Large update data detected (${(dataSize / 1024 / 1024).toFixed(2)}MB), using chunked transfer to ${targetPlugin.id}`);
       return this.updateFrameChunked(targetPlugin.ws, nodeId, payload, name, format, pageId);
     }
 
-    // Normal transfer
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'UPDATE_FRAME',
-        commandId,
-        nodeId,
-        format,
-        data: format === 'json' ? data : undefined,
-        html: format === 'html' ? html : undefined,
-        name,
-        pageId,
-      });
-
-      console.log(`[WebSocket] Sending UPDATE_FRAME to ${targetPlugin.id} (node: ${nodeId})`);
-      targetPlugin.ws.send(message);
+    // 1MB 이하: sendCommand 사용
+    return this.sendCommand('UPDATE_FRAME', {
+      nodeId,
+      format,
+      data: format === 'json' ? data : undefined,
+      html: format === 'html' ? html : undefined,
+      name,
+      pageId,
+    }, {
+      pluginId,
+      logSuffix: ` (node: ${nodeId})`,
     });
   }
 
@@ -798,39 +638,9 @@ export class FigmaWebSocketServer {
     args: Record<string, unknown>,
     pluginId?: string
   ): Promise<unknown> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'MODIFY_NODE',
-        commandId,
-        nodeId,
-        method,
-        args,
-      });
-
-      console.log(`[WebSocket] Sending MODIFY_NODE to ${targetPlugin.id} (node: ${nodeId}, method: ${method})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('MODIFY_NODE', { nodeId, method, args }, {
+      pluginId,
+      logSuffix: ` (node: ${nodeId}, method: ${method})`,
     });
   }
 
@@ -840,40 +650,11 @@ export class FigmaWebSocketServer {
   async findNode(
     path: string | string[],
     typeFilter?: string,
-    pluginId?: string
+    pluginId?: string,
+    pageId?: string
   ): Promise<{ node?: unknown; matches?: unknown[]; warning?: string }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'FIND_NODE',
-        commandId,
-        path,
-        typeFilter,
-      });
-
-      console.log(`[WebSocket] Sending FIND_NODE to ${targetPlugin.id}`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('FIND_NODE', { path, typeFilter, pageId }, {
+      pluginId,
     });
   }
 
@@ -899,42 +680,17 @@ export class FigmaWebSocketServer {
     truncated?: boolean;
     totalCount?: number;
   }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
-      }, 60000);  // 60초 (트리가 클 수 있음)
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'GET_TREE',
-        commandId,
-        nodeId: options.nodeId,
-        path: options.path,
-        depth: options.depth,
-        filter: options.filter,
-        limit: options.limit,
-        pageId: options.pageId,
-      });
-
-      console.log(`[WebSocket] Sending GET_TREE to ${targetPlugin.id} (depth: ${options.depth || 1})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('GET_TREE', {
+      nodeId: options.nodeId,
+      path: options.path,
+      depth: options.depth,
+      filter: options.filter,
+      limit: options.limit,
+      pageId: options.pageId,
+    }, {
+      pluginId,
+      timeoutMs: 60000,  // 60초 (트리가 클 수 있음)
+      logSuffix: ` (depth: ${options.depth || 1})`,
     });
   }
 
@@ -946,42 +702,13 @@ export class FigmaWebSocketServer {
     options?: { format?: 'PNG' | 'SVG' | 'JPG' | 'PDF'; scale?: number },
     pluginId?: string
   ): Promise<{ base64: string; format: string; nodeId: string; nodeName: string; width: number; height: number }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
+    const format = options?.format || 'PNG';
+    const scale = options?.scale || 2;
 
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과 (export image)'));
-      }, 60000);  // 60초 (이미지 export는 대용량 가능)
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const format = options?.format || 'PNG';
-      const scale = options?.scale || 2;
-
-      const message = JSON.stringify({
-        type: 'EXPORT_IMAGE',
-        commandId,
-        nodeId,
-        format,
-        scale,
-      });
-
-      console.log(`[WebSocket] Sending EXPORT_IMAGE to ${targetPlugin.id} (node: ${nodeId}, format: ${format}, scale: ${scale})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('EXPORT_IMAGE', { nodeId, format, scale }, {
+      pluginId,
+      timeoutMs: 60000,  // 60초 (이미지 export는 대용량 가능)
+      logSuffix: ` (node: ${nodeId}, format: ${format}, scale: ${scale})`,
     });
   }
 
@@ -992,37 +719,9 @@ export class FigmaWebSocketServer {
     nodeId: string,
     pluginId?: string
   ): Promise<{ nodeId: string; nodeName: string; nodeType: string; data: unknown }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과 (extract node)'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'EXTRACT_NODE_JSON',
-        commandId,
-        nodeId,
-      });
-
-      console.log(`[WebSocket] Sending EXTRACT_NODE_JSON to ${targetPlugin.id} (node: ${nodeId})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('EXTRACT_NODE_JSON', { nodeId }, {
+      pluginId,
+      logSuffix: ` (node: ${nodeId})`,
     });
   }
 
@@ -1040,42 +739,16 @@ export class FigmaWebSocketServer {
     },
     pluginId?: string
   ): Promise<{ nodeId: string; name: string; x: number; y: number; width: number; height: number; childCount: number }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과 (create section)'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'CREATE_SECTION',
-        commandId,
-        name,
-        position: options?.position,
-        size: options?.size,
-        children: options?.children,
-        fills: options?.fills,
-        pageId: options?.pageId,
-      });
-
-      console.log(`[WebSocket] Sending CREATE_SECTION to ${targetPlugin.id} (name: ${name})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('CREATE_SECTION', {
+      name,
+      position: options?.position,
+      size: options?.size,
+      children: options?.children,
+      fills: options?.fills,
+      pageId: options?.pageId,
+    }, {
+      pluginId,
+      logSuffix: ` (name: ${name})`,
     });
   }
 
@@ -1088,39 +761,9 @@ export class FigmaWebSocketServer {
     index?: number,
     pluginId?: string
   ): Promise<{ nodeId: string; nodeName: string; nodeType: string; oldParentId: string | null; oldParentName: string | null; newParentId: string; newParentName: string; newParentType: string }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과 (move node)'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'MOVE_NODE',
-        commandId,
-        nodeId,
-        parentId,
-        index,
-      });
-
-      console.log(`[WebSocket] Sending MOVE_NODE to ${targetPlugin.id} (node: ${nodeId} → parent: ${parentId})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('MOVE_NODE', { nodeId, parentId, index }, {
+      pluginId,
+      logSuffix: ` (node: ${nodeId} → parent: ${parentId})`,
     });
   }
 
@@ -1136,40 +779,14 @@ export class FigmaWebSocketServer {
     },
     pluginId?: string
   ): Promise<{ nodeId: string; name: string; type: string; x: number; y: number; width: number; height: number; parentId: string | null; parentName: string | null; sourceNodeId: string }> {
-    const targetPlugin = this.resolveTargetPlugin(pluginId);
-    if (!targetPlugin) {
-      if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
-      }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
-    }
-
-    const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과 (clone node)'));
-      }, 30000);
-
-      this.pendingCommands.set(commandId, {
-        id: commandId,
-        resolve: resolve as (result: unknown) => void,
-        reject,
-        timeout,
-      });
-
-      const message = JSON.stringify({
-        type: 'CLONE_NODE',
-        commandId,
-        nodeId,
-        parentId: options?.parentId,
-        position: options?.position,
-        name: options?.name,
-      });
-
-      console.log(`[WebSocket] Sending CLONE_NODE to ${targetPlugin.id} (source: ${nodeId})`);
-      targetPlugin.ws.send(message);
+    return this.sendCommand('CLONE_NODE', {
+      nodeId,
+      parentId: options?.parentId,
+      position: options?.position,
+      name: options?.name,
+    }, {
+      pluginId,
+      logSuffix: ` (source: ${nodeId})`,
     });
   }
 

@@ -8,6 +8,13 @@ export {
   // Main extraction
   extractElement,
 
+  // Bulk & viewport extraction
+  extractAll,
+  extractVisible,
+
+  // Design tokens
+  getDesignTokens,
+
   // Style extraction
   extractStyles,
 
@@ -24,12 +31,14 @@ export {
   parseAutoSize,
   generateId,
 
-  // SVG handling
-  serializeSvgWithComputedStyles,
-  applySvgComputedStyles,
-  parseComputedLength,
-
   // Pseudo-elements
   extractPseudoElements,
   extractPseudoElement,
 } from './core';
+
+export {
+  // SVG handling
+  serializeSvgWithComputedStyles,
+  applySvgComputedStyles,
+  parseComputedLength,
+} from './svg';

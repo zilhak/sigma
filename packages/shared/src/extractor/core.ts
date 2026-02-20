@@ -6,6 +6,7 @@
  */
 import type { ExtractedNode, ComputedStyles } from '../types';
 import { parseColor } from '../colors';
+import { serializeSvgWithComputedStyles } from './svg';
 
 // ============================================================
 // Utility Functions
@@ -257,141 +258,6 @@ export function extractStyles(style: CSSStyleDeclaration): ComputedStyles {
 }
 
 // ============================================================
-// SVG Handling
-// ============================================================
-
-/**
- * computed length 값을 SVG 속성 값으로 변환
- * "10px" -> "10"
- */
-export function parseComputedLength(value: string): string {
-  if (!value || value === 'auto' || value === 'none') {
-    return '0';
-  }
-  const num = parseFloat(value);
-  if (isNaN(num)) {
-    return '0';
-  }
-  return String(num);
-}
-
-/**
- * 개별 SVG 요소에 computed styles 적용
- */
-export function applySvgComputedStyles(original: SVGElement, clone: SVGElement): void {
-  const computed = window.getComputedStyle(original);
-
-  // 색상 관련 속성
-  const fill = computed.fill;
-  if (fill && fill !== 'none' && fill !== '') {
-    clone.setAttribute('fill', fill);
-  }
-
-  const stroke = computed.stroke;
-  if (stroke && stroke !== 'none' && stroke !== '') {
-    clone.setAttribute('stroke', stroke);
-  }
-
-  const strokeWidth = computed.strokeWidth;
-  if (strokeWidth && strokeWidth !== '0' && strokeWidth !== '0px') {
-    clone.setAttribute('stroke-width', strokeWidth);
-  }
-
-  // 불투명도
-  const opacity = computed.opacity;
-  if (opacity && opacity !== '1') {
-    clone.setAttribute('opacity', opacity);
-  }
-
-  const fillOpacity = computed.fillOpacity;
-  if (fillOpacity && fillOpacity !== '1') {
-    clone.setAttribute('fill-opacity', fillOpacity);
-  }
-
-  const strokeOpacity = computed.strokeOpacity;
-  if (strokeOpacity && strokeOpacity !== '1') {
-    clone.setAttribute('stroke-opacity', strokeOpacity);
-  }
-
-  // 기하학적 속성
-  const tagName = original.tagName.toLowerCase();
-
-  if (tagName === 'circle') {
-    if (computed.cx) clone.setAttribute('cx', parseComputedLength(computed.cx));
-    if (computed.cy) clone.setAttribute('cy', parseComputedLength(computed.cy));
-    if (computed.r) clone.setAttribute('r', parseComputedLength(computed.r));
-  }
-
-  if (tagName === 'ellipse') {
-    if (computed.cx) clone.setAttribute('cx', parseComputedLength(computed.cx));
-    if (computed.cy) clone.setAttribute('cy', parseComputedLength(computed.cy));
-    if (computed.rx) clone.setAttribute('rx', parseComputedLength(computed.rx));
-    if (computed.ry) clone.setAttribute('ry', parseComputedLength(computed.ry));
-  }
-
-  if (tagName === 'rect') {
-    if (computed.x) clone.setAttribute('x', parseComputedLength(computed.x));
-    if (computed.y) clone.setAttribute('y', parseComputedLength(computed.y));
-    if (computed.width && computed.width !== 'auto') clone.setAttribute('width', parseComputedLength(computed.width));
-    if (computed.height && computed.height !== 'auto') clone.setAttribute('height', parseComputedLength(computed.height));
-    if (computed.rx) clone.setAttribute('rx', parseComputedLength(computed.rx));
-    if (computed.ry) clone.setAttribute('ry', parseComputedLength(computed.ry));
-  }
-
-  // transform 속성
-  const transform = computed.transform;
-  if (transform && transform !== 'none') {
-    clone.setAttribute('transform', transform);
-  }
-
-  // visibility
-  if (computed.visibility === 'hidden') {
-    clone.setAttribute('visibility', 'hidden');
-  }
-
-  // display (none인 경우 visibility로 처리)
-  if (computed.display === 'none') {
-    clone.setAttribute('visibility', 'hidden');
-  }
-}
-
-/**
- * SVG 요소의 computed styles를 인라인 속성으로 적용하여 직렬화
- */
-export function serializeSvgWithComputedStyles(svg: SVGSVGElement): string {
-  const clone = svg.cloneNode(true) as SVGSVGElement;
-  const originalElements = svg.querySelectorAll('*');
-  const cloneElements = clone.querySelectorAll('*');
-
-  // viewBox / width / height가 없는 SVG 보정
-  // ReactFlow 등 CSS로만 크기를 지정하는 SVG는 이 속성이 없어
-  // Figma createNodeFromSvg()가 좌표계를 잘못 해석함
-  const rect = svg.getBoundingClientRect();
-  if (!clone.getAttribute('viewBox') && rect.width > 0 && rect.height > 0) {
-    clone.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
-  }
-  if (!clone.getAttribute('width') && rect.width > 0) {
-    clone.setAttribute('width', String(rect.width));
-  }
-  if (!clone.getAttribute('height') && rect.height > 0) {
-    clone.setAttribute('height', String(rect.height));
-  }
-
-  // 루트 SVG 요소에도 스타일 적용
-  applySvgComputedStyles(svg, clone);
-
-  // 모든 자식 요소에 스타일 적용
-  cloneElements.forEach((cloneEl, index) => {
-    const originalEl = originalElements[index];
-    if (originalEl && cloneEl) {
-      applySvgComputedStyles(originalEl as SVGElement, cloneEl as SVGElement);
-    }
-  });
-
-  return clone.outerHTML;
-}
-
-// ============================================================
 // Pseudo-element Extraction
 // ============================================================
 
@@ -628,4 +494,164 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
     },
     children: allChildren,
   };
+}
+
+// ============================================================
+// Bulk & Viewport Extraction
+// ============================================================
+
+/**
+ * 셀렉터에 매칭되는 모든 요소를 일괄 추출
+ */
+export function extractAll(selector: string): ExtractedNode[] {
+  const elements = document.querySelectorAll(selector);
+  const results: ExtractedNode[] = [];
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement;
+    const node = extractElement(el);
+    if (node) results.push(node);
+  }
+  return results;
+}
+
+/**
+ * 뷰포트 내 보이는 컴포넌트를 자동 추출
+ * 시맨틱 요소, role 속성, 일정 크기 이상인 요소를 컴포넌트로 간주
+ */
+export function extractVisible(options?: { minWidth?: number; minHeight?: number }): ExtractedNode[] {
+  const minW = options?.minWidth ?? 20;
+  const minH = options?.minHeight ?? 20;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const componentSelectors = [
+    'button',
+    'input',
+    'select',
+    'textarea',
+    'a[href]',
+    'nav',
+    'header',
+    'footer',
+    'aside',
+    'section > *',
+    'article',
+    '[role="button"]',
+    '[role="navigation"]',
+    '[role="dialog"]',
+    '[role="tablist"]',
+    '[role="alert"]',
+    '[class*="card"]',
+    '[class*="badge"]',
+    '[class*="chip"]',
+    '[class*="avatar"]',
+    '[class*="modal"]',
+    '[class*="dropdown"]',
+    '[class*="tooltip"]',
+    '[class*="tab"]',
+  ];
+
+  const seen = new Set<Element>();
+  const results: ExtractedNode[] = [];
+
+  for (const sel of componentSelectors) {
+    try {
+      const elements = document.querySelectorAll(sel);
+      for (let i = 0; i < elements.length; i++) {
+        const el = elements[i] as HTMLElement;
+        if (seen.has(el)) continue;
+        seen.add(el);
+
+        const rect = el.getBoundingClientRect();
+        if (
+          rect.width >= minW &&
+          rect.height >= minH &&
+          rect.right > 0 &&
+          rect.bottom > 0 &&
+          rect.left < vw &&
+          rect.top < vh
+        ) {
+          const node = extractElement(el);
+          if (node) results.push(node);
+        }
+      }
+    } catch {
+      // 유효하지 않은 셀렉터 무시
+    }
+  }
+
+  return results;
+}
+
+// ============================================================
+// Design Tokens Extraction
+// ============================================================
+
+/**
+ * CSS 커스텀 프로퍼티(변수)를 추출
+ * 선택자 미지정 시 :root의 변수를 추출
+ */
+export function getDesignTokens(selectorOrElement?: string | Element): Record<string, string> {
+  let element: Element;
+
+  if (!selectorOrElement) {
+    element = document.documentElement;
+  } else if (typeof selectorOrElement === 'string') {
+    element = document.querySelector(selectorOrElement) || document.documentElement;
+  } else {
+    element = selectorOrElement;
+  }
+
+  const tokens: Record<string, string> = {};
+
+  // 1. 인라인 style에서 CSS 변수 수집
+  if (element instanceof HTMLElement && element.style.cssText) {
+    const matches = element.style.cssText.matchAll(/(--[\w-]+)\s*:\s*([^;]+)/g);
+    for (const m of matches) {
+      tokens[m[1]] = m[2].trim();
+    }
+  }
+
+  // 2. 스타일시트에서 해당 요소에 적용된 CSS 변수 수집
+  for (let i = 0; i < document.styleSheets.length; i++) {
+    try {
+      const sheet = document.styleSheets[i];
+      const rules = sheet.cssRules;
+      for (let j = 0; j < rules.length; j++) {
+        const rule = rules[j];
+        if (rule instanceof CSSStyleRule) {
+          // :root나 해당 요소에 매칭되는 규칙
+          let matches = false;
+          try {
+            matches = element.matches(rule.selectorText);
+          } catch {
+            // invalid selector
+          }
+
+          if (matches || rule.selectorText === ':root' || rule.selectorText === 'html') {
+            const style = rule.style;
+            for (let k = 0; k < style.length; k++) {
+              const prop = style[k];
+              if (prop.startsWith('--')) {
+                tokens[prop] = style.getPropertyValue(prop).trim();
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // CORS 제한으로 외부 스타일시트 접근 불가
+    }
+  }
+
+  // 3. computed style에서 해결된 값으로 덮어쓰기
+  const computed = window.getComputedStyle(element);
+  for (const name of Object.keys(tokens)) {
+    const resolved = computed.getPropertyValue(name).trim();
+    if (resolved) {
+      tokens[name] = resolved;
+    }
+  }
+
+  return tokens;
 }
