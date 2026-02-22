@@ -244,6 +244,13 @@ export class FigmaWebSocketServer {
       case 'SET_VIEWPORT_RESULT':
         this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
         break;
+
+      default:
+        // 자동 결과 패스스루: _RESULT로 끝나고 commandId가 있는 메시지는 자동으로 resolve
+        if (message.type?.endsWith('_RESULT') && message.commandId) {
+          this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
+        }
+        break;
     }
   }
 
@@ -365,10 +372,12 @@ export class FigmaWebSocketServer {
         timeout,
       });
 
+      // payload에서 예약 필드(type, commandId) 제거 — 덮어쓰기 방지
+      const { type: _t, commandId: _c, ...safePayload } = payload as Record<string, unknown>;
       const message = JSON.stringify({
         type: commandType,
         commandId,
-        ...payload,
+        ...safePayload,
       });
 
       const suffix = options?.logSuffix ?? '';
@@ -1126,6 +1135,132 @@ export class FigmaWebSocketServer {
 
   async removeReactions(nodeId: string, triggerType?: string, pluginId?: string): Promise<unknown> {
     return this.sendCommand('REMOVE_REACTIONS', { nodeId, triggerType }, { pluginId });
+  }
+
+  // === Component System (New) ===
+
+  async createComponent(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_COMPONENT', args, { pluginId });
+  }
+
+  async convertToComponent(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CONVERT_TO_COMPONENT', { nodeId }, { pluginId });
+  }
+
+  async createComponentSet(componentIds: string[], name?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_COMPONENT_SET', { componentIds, name }, { pluginId });
+  }
+
+  async addComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('ADD_COMPONENT_PROPERTY', args, { pluginId });
+  }
+
+  async editComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('EDIT_COMPONENT_PROPERTY', args, { pluginId });
+  }
+
+  async deleteComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('DELETE_COMPONENT_PROPERTY', args, { pluginId });
+  }
+
+  async getComponentProperties(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_COMPONENT_PROPERTIES', { nodeId }, { pluginId });
+  }
+
+  async detachInstance(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('DETACH_INSTANCE', { nodeId }, { pluginId });
+  }
+
+  async swapComponent(nodeId: string, newComponentKey: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SWAP_COMPONENT', { nodeId, newComponentKey }, { pluginId });
+  }
+
+  // === Creation (New) ===
+
+  async createNodeFromSvg(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_NODE_FROM_SVG', args, { pluginId });
+  }
+
+  // === Query (New) ===
+
+  async listAvailableFonts(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('LIST_FONTS', {}, { pluginId });
+  }
+
+  async getNodeCSS(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_CSS', { nodeId }, { pluginId });
+  }
+
+  // === Variables Advanced (New) ===
+
+  async setVariableScopes(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_VARIABLE_SCOPES', args, { pluginId });
+  }
+
+  async setVariableAlias(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_VARIABLE_ALIAS', args, { pluginId });
+  }
+
+  async setVariableCodeSyntax(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_VARIABLE_CODE_SYNTAX', args, { pluginId });
+  }
+
+  // === Team Library (New) ===
+
+  async getAvailableLibraries(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_LIBRARIES', {}, { pluginId, timeoutMs: 30000 });
+  }
+
+  async getLibraryComponents(libraryKey: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_LIBRARY_COMPONENTS', { libraryKey }, { pluginId, timeoutMs: 30000 });
+  }
+
+  async getLibraryVariables(collectionKey: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_LIBRARY_VARIABLES', { collectionKey }, { pluginId, timeoutMs: 30000 });
+  }
+
+  async importLibraryComponent(key: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('IMPORT_LIBRARY_COMPONENT', { key }, { pluginId });
+  }
+
+  async importLibraryStyle(key: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('IMPORT_LIBRARY_STYLE', { key }, { pluginId });
+  }
+
+  // === Utilities (New) ===
+
+  async notifyUser(message: string, options?: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('NOTIFY', { message, options }, { pluginId });
+  }
+
+  async commitUndo(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('COMMIT_UNDO', {}, { pluginId });
+  }
+
+  async triggerUndo(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('TRIGGER_UNDO', {}, { pluginId });
+  }
+
+  async saveVersion(title: string, description?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SAVE_VERSION', { title, description }, { pluginId, timeoutMs: 30000 });
+  }
+
+  async setExportSettings(nodeId: string, settings: unknown[], pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_EXPORT_SETTINGS', { nodeId, settings }, { pluginId });
+  }
+
+  async getExportSettings(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_EXPORT_SETTINGS', { nodeId }, { pluginId });
+  }
+
+  // === FigJam (New) ===
+
+  async createSticky(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_STICKY', args, { pluginId });
+  }
+
+  async createConnector(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_CONNECTOR', args, { pluginId });
   }
 
   // Broadcast to all Figma plugins

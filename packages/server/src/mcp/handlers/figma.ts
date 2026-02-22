@@ -144,7 +144,8 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const { pluginId } = access;
     const modifyNodeId = args.nodeId as string;
     const modifyMethod = args.method as string;
-    const modifyArgs = (args.args as Record<string, unknown>) || {};
+    const rawArgs = args.args;
+    const modifyArgs: Record<string, unknown> = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : (rawArgs as Record<string, unknown>) || {};
 
     try {
       const modifyResult = await wsServer.modifyNode(modifyNodeId, modifyMethod, modifyArgs, pluginId);
@@ -875,7 +876,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const { pluginId } = access;
     try {
       const result = await wsServer.getVariables({
-        type: args.type as string | undefined,
+        variableType: args.type as string | undefined,
       }, pluginId);
       return jsonResponse(result as object);
     } catch (error) {
@@ -1505,6 +1506,504 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         error: errorMessage,
         nodeId: cloneNodeId,
       });
+    }
+  },
+
+  // === Group B: Component System ===
+
+  async sigma_create_component(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.createComponent({
+        x: args.x as number,
+        y: args.y as number,
+        width: args.width as number,
+        height: args.height as number,
+        name: args.name as string | undefined,
+        parentId: args.parentId as string | undefined,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '컴포넌트가 생성되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_convert_to_component(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.convertToComponent(args.nodeId as string, pluginId);
+      return jsonResponse({ success: true, message: '노드가 컴포넌트로 변환되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_create_component_set(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.createComponentSet(
+        args.componentIds as string[],
+        args.name as string | undefined,
+        pluginId
+      );
+      return jsonResponse({ success: true, message: '컴포넌트 세트가 생성되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_add_component_property(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.addComponentProperty({
+        nodeId: args.nodeId as string,
+        propertyName: args.propertyName as string,
+        propertyType: args.propertyType as string,
+        defaultValue: args.defaultValue,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '컴포넌트 속성이 추가되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_edit_component_property(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.editComponentProperty({
+        nodeId: args.nodeId as string,
+        propertyName: args.propertyName as string,
+        newValues: args.newValues as Record<string, unknown>,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '컴포넌트 속성이 수정되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_delete_component_property(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.deleteComponentProperty({
+        nodeId: args.nodeId as string,
+        propertyName: args.propertyName as string,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '컴포넌트 속성이 삭제되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_get_component_properties(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.getComponentProperties(args.nodeId as string, pluginId);
+      return jsonResponse({ success: true, message: '컴포넌트 속성을 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_detach_instance(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.detachInstance(args.nodeId as string, pluginId);
+      return jsonResponse({ success: true, message: '인스턴스가 분리되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_swap_component(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.swapComponent(
+        args.nodeId as string,
+        args.newComponentKey as string,
+        pluginId
+      );
+      return jsonResponse({ success: true, message: '컴포넌트가 교체되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  // === Group C: Creation & Query ===
+
+  async sigma_create_node_from_svg(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.createNodeFromSvg({
+        svgString: args.svgString as string,
+        x: args.x as number,
+        y: args.y as number,
+        name: args.name as string | undefined,
+        parentId: args.parentId as string | undefined,
+      }, pluginId);
+      return jsonResponse({ success: true, message: 'SVG 노드가 생성되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_list_fonts(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.listAvailableFonts(pluginId);
+      return jsonResponse({ success: true, message: '사용 가능한 폰트 목록을 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_get_css(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.getNodeCSS(args.nodeId as string, pluginId);
+      return jsonResponse({ success: true, message: '노드의 CSS를 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  // === Group D: Variable Advanced ===
+
+  async sigma_set_variable_scopes(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.setVariableScopes({
+        variableId: args.variableId as string,
+        scopes: args.scopes as string[],
+      }, pluginId);
+      return jsonResponse({ success: true, message: '변수 스코프가 설정되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_set_variable_alias(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.setVariableAlias({
+        variableId: args.variableId as string,
+        modeId: args.modeId as string,
+        aliasTargetId: args.aliasTargetId as string,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '변수 alias가 설정되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_set_variable_code_syntax(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.setVariableCodeSyntax({
+        variableId: args.variableId as string,
+        platform: args.platform as string,
+        syntax: args.syntax as string,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '변수 코드 구문이 설정되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  // === Group E: Team Library ===
+
+  async sigma_get_libraries(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.getAvailableLibraries(pluginId);
+      return jsonResponse({ success: true, message: '사용 가능한 라이브러리 목록을 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_get_library_components(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.getLibraryComponents(args.libraryKey as string, pluginId);
+      return jsonResponse({ success: true, message: '라이브러리 컴포넌트를 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_get_library_variables(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.getLibraryVariables(args.collectionKey as string, pluginId);
+      return jsonResponse({ success: true, message: '라이브러리 변수를 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_import_library_component(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.importLibraryComponent(args.key as string, pluginId);
+      return jsonResponse({ success: true, message: '라이브러리 컴포넌트를 가져왔습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_import_library_style(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.importLibraryStyle(args.key as string, pluginId);
+      return jsonResponse({ success: true, message: '라이브러리 스타일을 가져왔습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  // === Group F: Utilities ===
+
+  async sigma_notify(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.notifyUser(
+        args.message as string,
+        args.options as Record<string, unknown> | undefined,
+        pluginId
+      );
+      return jsonResponse({ success: true, message: '알림을 전송했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_commit_undo(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.commitUndo(pluginId);
+      return jsonResponse({ success: true, message: 'Undo 스택에 커밋했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_trigger_undo(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.triggerUndo(pluginId);
+      return jsonResponse({ success: true, message: 'Undo를 실행했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_save_version(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.saveVersion(
+        args.title as string,
+        args.description as string | undefined,
+        pluginId
+      );
+      return jsonResponse({ success: true, message: '버전을 저장했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_set_export_settings(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.setExportSettings(
+        args.nodeId as string,
+        args.settings as Record<string, unknown>,
+        pluginId
+      );
+      return jsonResponse({ success: true, message: 'Export 설정을 적용했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_get_export_settings(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.getExportSettings(args.nodeId as string, pluginId);
+      return jsonResponse({ success: true, message: 'Export 설정을 조회했습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  // === Group G: FigJam ===
+
+  async sigma_create_sticky(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.createSticky({
+        text: args.text as string,
+        x: args.x as number,
+        y: args.y as number,
+        parentId: args.parentId as string | undefined,
+      }, pluginId);
+      return jsonResponse({ success: true, message: 'Sticky 노트가 생성되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_create_connector(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.createConnector({
+        startNodeId: args.startNodeId as string,
+        endNodeId: args.endNodeId as string,
+        strokeColor: args.strokeColor as any,
+        strokeWeight: args.strokeWeight as number | undefined,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '연결선이 생성되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
     }
   },
 };

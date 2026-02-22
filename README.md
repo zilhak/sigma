@@ -4,6 +4,8 @@
 
 ## 개요
 
+**목표: Figma Plugin API의 모든 기능을 MCP 도구로 노출하여, AI Agent가 Figma를 완전히 제어할 수 있게 한다.**
+
 ```
 Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
                                    ↑
@@ -11,6 +13,8 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 ```
 
 **핵심 철학:** 서로 연동하면 최고의 효율, 따로따로도 사용 가능
+
+Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 84개의 MCP 도구가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
 ## 모듈 구성
 
@@ -64,6 +68,30 @@ Playwright로 브라우저를 조작할 때는 **Sigma 임베드 스크립트**(
 ```
 
 `packages/shared/dist/extractor.standalone.js`가 빌드된 추출 스크립트입니다. Extension 설치 없이 자동화 가능합니다.
+
+### 임베드 스크립트 (3종)
+
+Playwright `addScriptTag()`으로 inject하여 사용하는 자체 완결형 JS 번들:
+
+| 스크립트 | 전역 객체 | 용도 |
+|----------|----------|------|
+| `extractor.standalone.js` | `window.__sigma__` | DOM → ExtractedNode 추출, 요소 탐색 (Discovery API) |
+| `storybook.standalone.js` | `window.__sigma_storybook__` | Story 목록 조회, SPA 전환, 추출+서버 저장 |
+| `diff.standalone.js` | `window.__sigma_diff__` | ExtractedNode 비교, 스냅샷 관리 |
+
+**추출 스크립트 주요 API:**
+- `extract(selector)` / `extractAll(selector)` / `extractVisible()` — 요소 추출
+- `findByText(text)` / `findByAlt(alt)` / `findForm()` / `findContainer()` — 요소 탐색 (Discovery)
+- `getPageStructure()` / `getDesignTokens()` — 페이지 구조/디자인 토큰
+
+**Storybook 스크립트 주요 API:**
+- `getStories()` — story 목록 조회
+- `navigateToStory(storyId)` — SPA story 전환 (page.goto 대신 사용 필수)
+- `extractAndSave(name)` — 추출 + 서버 저장 (ID 반환)
+
+**Diff 스크립트 주요 API:**
+- `compare(nodeA, nodeB)` — 두 ExtractedNode 비교
+- `snapshot(selector)` / `compareWithSnapshot(id, selector)` — 스냅샷 기반 비교
 
 ## 기술 스택
 
@@ -141,21 +169,20 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**주요 MCP 도구 (56개):**
+**MCP 도구 (84개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
-| 인증 | `sigma_login` | 토큰 발급 |
-| | `sigma_bind` | 토큰을 플러그인+페이지에 바인딩 |
-| | `sigma_status` | 토큰 및 바인딩 상태 확인 |
-| 정보 | `sigma_list_plugins` | 연결된 Figma Plugin 목록 |
-| | `sigma_list_pages` | 플러그인의 페이지 목록 |
+| 인증 | `sigma_login` / `sigma_logout` | 토큰 발급 / 삭제 |
+| | `sigma_bind` / `sigma_status` | 플러그인+페이지 바인딩 / 상태 확인 |
+| 정보 | `sigma_list_plugins` / `sigma_list_pages` | 플러그인 / 페이지 목록 |
 | 생성 | `sigma_create_frame` | JSON/HTML 데이터로 프레임 생성 |
 | | `sigma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
-| | `sigma_create_rectangle` | 사각형 생성 |
-| | `sigma_create_text` | 텍스트 노드 생성 |
-| | `sigma_create_empty_frame` | 빈 프레임 생성 (Auto Layout) |
-| | `sigma_create_section` | Section 생성 |
+| | `sigma_create_rectangle` / `sigma_create_text` | 사각형 / 텍스트 노드 생성 |
+| | `sigma_create_empty_frame` / `sigma_create_section` | 빈 프레임 (Auto Layout) / Section 생성 |
+| | `sigma_create_ellipse` / `sigma_create_polygon` | 타원 / 다각형 생성 |
+| | `sigma_create_star` / `sigma_create_line` | 별 / 선 생성 |
+| | `sigma_create_vector` / `sigma_create_image` | 벡터 (SVG path) / 이미지 (base64) 생성 |
 | | `sigma_create_component_instance` | 컴포넌트 인스턴스 생성 |
 | 조작 | `sigma_modify_node` | 노드 속성 변경 (53개 메서드) |
 | | `sigma_batch_modify` | 여러 노드에 modify 일괄 실행 |
@@ -163,11 +190,14 @@ AI Agent:
 | | `sigma_delete_frame` / `sigma_batch_delete` | 프레임 삭제 / 일괄 삭제 |
 | | `sigma_move_node` / `sigma_clone_node` | 노드 이동 / 복제 |
 | | `sigma_set_multiple_text_contents` | 여러 텍스트 노드 일괄 변경 |
+| | `sigma_group_nodes` / `sigma_ungroup` | 그룹 묶기 / 해제 |
+| | `sigma_flatten` / `sigma_boolean_operation` | 벡터 평탄화 / Boolean 연산 |
 | 조회 | `sigma_find_node` / `sigma_get_tree` | 노드 검색 / 계층 탐색 |
 | | `sigma_get_node_info` / `sigma_get_nodes_info` | 노드 상세 정보 (단일/배치) |
 | | `sigma_get_frames` / `sigma_get_document_info` | 프레임 목록 / 문서 정보 |
 | | `sigma_get_styles` / `sigma_get_selection` | 스타일 / 선택 노드 조회 |
 | | `sigma_set_selection` / `sigma_read_my_design` | 노드 선택 / 선택 노드 상세 |
+| | `sigma_get_viewport` / `sigma_set_viewport` | 뷰포트 조회 / 설정 |
 | | `sigma_scan_text_nodes` / `sigma_scan_nodes_by_types` | 텍스트/타입별 노드 스캔 |
 | 컴포넌트 | `sigma_get_local_components` | 로컬 컴포넌트 목록 |
 | | `sigma_get_instance_overrides` / `sigma_set_instance_overrides` | 인스턴스 오버라이드 |
@@ -175,6 +205,14 @@ AI Agent:
 | | `sigma_set_multiple_annotations` | 주석 일괄 추가 |
 | 프로토타입 | `sigma_get_reactions` / `sigma_add_reaction` | 인터랙션 조회/추가 |
 | | `sigma_remove_reactions` | 인터랙션 제거 |
+| 페이지 | `sigma_create_page` / `sigma_rename_page` | 페이지 생성 / 이름 변경 |
+| | `sigma_switch_page` / `sigma_delete_page` | 페이지 전환 / 삭제 |
+| 스타일 | `sigma_create_paint_style` / `sigma_create_text_style` | Paint / Text 스타일 생성 |
+| | `sigma_create_effect_style` / `sigma_create_grid_style` | Effect / Grid 스타일 생성 |
+| | `sigma_apply_style` / `sigma_delete_style` | 스타일 적용 / 삭제 |
+| 변수 | `sigma_create_variable_collection` / `sigma_create_variable` | 변수 컬렉션 / 변수 생성 |
+| | `sigma_get_variables` / `sigma_set_variable_value` | 변수 조회 / 값 설정 |
+| | `sigma_bind_variable` / `sigma_add_variable_mode` | 변수 바인딩 / 모드 추가 |
 | 이미지 | `sigma_screenshot` / `sigma_extract_node` | 캡처 / JSON·HTML 추출 |
 | | `sigma_test_roundtrip` | 추출→재생성 라운드트립 테스트 |
 | 데이터 | `save_extracted` / `load_extracted` | 추출 데이터 저장/로드 |
@@ -182,7 +220,7 @@ AI Agent:
 | | `save_and_import` | 저장 + 즉시 Figma 임포트 |
 | 스크립트 | `get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
 | 관리 | `server_status` / `sigma_storage_stats` | 서버 상태 / 스토리지 현황 |
-| | `sigma_cleanup` / `list_screenshots` | 스토리지 정리 / 스크린샷 목록 |
+| | `sigma_cleanup` / `list_screenshots` / `delete_screenshot` | 스토리지 정리 / 스크린샷 관리 |
 
 전체 도구 목록 및 파라미터 상세는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 

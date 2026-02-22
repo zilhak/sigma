@@ -5,8 +5,9 @@
   "main": "code.js",
   "ui": "ui.html",
   "capabilities": [],
+  "permissions": ["teamlibrary"],
   "enableProposedApi": false,
-  "editorType": ["figma"],
+  "editorType": ["figma", "figjam"],
   "networkAccess": {
     "allowedDomains": ["http://localhost:19832", "ws://localhost:19831"],
     "reasoning": "로컬 Sigma 서버와 통신하여 추출된 컴포넌트 데이터를 수신합니다."

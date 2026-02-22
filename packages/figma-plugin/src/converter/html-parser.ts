@@ -413,19 +413,45 @@ function applyStyleProperty(styles: ComputedStyles, prop: string, value: string)
       styles.borderBottomRightRadius = radii[2];
       styles.borderBottomLeftRadius = radii[3];
       break;
-    case 'borderWidth':
-      const bw = numValue || 0;
-      styles.borderTopWidth = bw;
-      styles.borderRightWidth = bw;
-      styles.borderBottomWidth = bw;
-      styles.borderLeftWidth = bw;
+    case 'borderWidth': {
+      const bws = parseSpacing(value);
+      styles.borderTopWidth = bws[0];
+      styles.borderRightWidth = bws[1];
+      styles.borderBottomWidth = bws[2];
+      styles.borderLeftWidth = bws[3];
       break;
-    case 'borderColor':
+    }
+    case 'borderTopWidth':
+      styles.borderTopWidth = numValue || 0;
+      break;
+    case 'borderRightWidth':
+      styles.borderRightWidth = numValue || 0;
+      break;
+    case 'borderBottomWidth':
+      styles.borderBottomWidth = numValue || 0;
+      break;
+    case 'borderLeftWidth':
+      styles.borderLeftWidth = numValue || 0;
+      break;
+    case 'borderColor': {
       const bc = parseCSSColor(value);
       styles.borderTopColor = bc;
       styles.borderRightColor = bc;
       styles.borderBottomColor = bc;
       styles.borderLeftColor = bc;
+      break;
+    }
+    case 'borderTopColor':
+      styles.borderTopColor = parseCSSColor(value);
+      break;
+    case 'borderRightColor':
+      styles.borderRightColor = parseCSSColor(value);
+      break;
+    case 'borderBottomColor':
+      styles.borderBottomColor = parseCSSColor(value);
+      break;
+    case 'borderLeftColor':
+      styles.borderLeftColor = parseCSSColor(value);
       break;
     case 'opacity':
       styles.opacity = numValue || 1;

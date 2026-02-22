@@ -106,6 +106,7 @@ export function createEffectStyle(options: CreateEffectStyleOptions): CreateEffe
       type: e.type,
       radius: e.radius,
       visible: e.visible !== undefined ? e.visible : true,
+      blendMode: 'NORMAL' as const,
     };
     if (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') {
       base.color = e.color !== undefined ? e.color : { r: 0, g: 0, b: 0, a: 0.25 };

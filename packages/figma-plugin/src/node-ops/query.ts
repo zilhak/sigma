@@ -217,3 +217,36 @@ export async function getStyles(): Promise<StylesInfo> {
     gridStyles: grids.map(s => ({ id: s.id, name: s.name, key: s.key })),
   };
 }
+
+// === Font List ===
+
+export interface ListFontsResult {
+  fonts: Array<{ family: string; style: string }>;
+  count: number;
+}
+
+export async function listAvailableFonts(): Promise<ListFontsResult> {
+  const fonts = await figma.listAvailableFontsAsync();
+  return {
+    fonts: fonts.map(f => ({ family: f.fontName.family, style: f.fontName.style })),
+    count: fonts.length,
+  };
+}
+
+// === CSS Export ===
+
+export interface GetCSSResult {
+  nodeId: string;
+  css: Record<string, string>;
+}
+
+export async function getNodeCSS(nodeId: string): Promise<GetCSSResult> {
+  if (!nodeId) throw new Error('nodeId가 필요합니다');
+  const node = figma.getNodeById(nodeId);
+  if (!node) throw new Error('노드를 찾을 수 없습니다: ' + nodeId);
+  if (node.type === 'DOCUMENT' || node.type === 'PAGE') throw new Error('DOCUMENT/PAGE 노드는 CSS를 지원하지 않습니다');
+  const sceneNode = node as SceneNode;
+  if (!('getCSSAsync' in sceneNode)) throw new Error('이 노드는 CSS 추출을 지원하지 않습니다');
+  const css = await (sceneNode as any).getCSSAsync();
+  return { nodeId, css };
+}

@@ -35,9 +35,21 @@ export function convertExtractedNodeToHTML(node: ExtractedNode, parentIsAbsolute
   // 스타일 속성
   const styleAttr = styleStr ? ` style="${escapeHTMLAttrForExport(styleStr)}"` : '';
 
+  // data-* 속성 (Figma 고유 메타데이터 보존)
+  let dataAttrs = '';
+  if (node.attributes) {
+    for (const [key, val] of Object.entries(node.attributes)) {
+      if (key.startsWith('data-')) {
+        dataAttrs += ` ${key}="${escapeHTMLAttrForExport(val)}"`;
+      }
+    }
+  }
+
+  const attrs = `${classAttr}${styleAttr}${dataAttrs}`;
+
   // 자식이 없고 텍스트만 있는 경우
   if ((!children || children.length === 0) && textContent) {
-    return `<${tagName}${classAttr}${styleAttr}>${escapeHTMLContentForExport(textContent)}</${tagName}>`;
+    return `<${tagName}${attrs}>${escapeHTMLContentForExport(textContent)}</${tagName}>`;
   }
 
   // 자식 노드 재귀 처리 (절대 좌표 여부 전달)
@@ -49,7 +61,7 @@ export function convertExtractedNodeToHTML(node: ExtractedNode, parentIsAbsolute
   // 텍스트 + 자식 모두 있는 경우
   const content = textContent ? escapeHTMLContentForExport(textContent) + '\n' + childrenHTML : childrenHTML;
 
-  return `<${tagName}${classAttr}${styleAttr}>${content ? '\n' + content + '\n' : ''}</${tagName}>`;
+  return `<${tagName}${attrs}>${content ? '\n' + content + '\n' : ''}</${tagName}>`;
 }
 
 /**
@@ -113,13 +125,39 @@ export function buildStyleString(styles: ComputedStyles): string {
     parts.push(`background-color: ${rgbaToCSS(styles.backgroundColor)}`);
   }
 
-  // 테두리
-  const borderWidth = styles.borderTopWidth || 0;
-  if (borderWidth > 0) {
-    parts.push(`border-width: ${borderWidth}px`);
-    parts.push(`border-style: solid`);
-    if (styles.borderTopColor) {
-      parts.push(`border-color: ${rgbaToCSS(styles.borderTopColor)}`);
+  // 테두리 (면별 두께/색상 보존)
+  const bTop = styles.borderTopWidth || 0;
+  const bRight = styles.borderRightWidth || 0;
+  const bBottom = styles.borderBottomWidth || 0;
+  const bLeft = styles.borderLeftWidth || 0;
+  const hasBorder = bTop > 0 || bRight > 0 || bBottom > 0 || bLeft > 0;
+
+  if (hasBorder) {
+    parts.push('border-style: solid');
+
+    // 두께: 4면 동일이면 단축, 아니면 4-value shorthand
+    if (bTop === bRight && bRight === bBottom && bBottom === bLeft) {
+      parts.push(`border-width: ${bTop}px`);
+    } else {
+      parts.push(`border-width: ${bTop}px ${bRight}px ${bBottom}px ${bLeft}px`);
+    }
+
+    // 색상: 4면 동일이면 단축, 아니면 개별
+    const cTop = styles.borderTopColor;
+    const cRight = styles.borderRightColor;
+    const cBottom = styles.borderBottomColor;
+    const cLeft = styles.borderLeftColor;
+
+    const allSameColor = cTop && cRight && cBottom && cLeft &&
+      rgbaEqual(cTop, cRight) && rgbaEqual(cRight, cBottom) && rgbaEqual(cBottom, cLeft);
+
+    if (allSameColor && cTop) {
+      parts.push(`border-color: ${rgbaToCSS(cTop)}`);
+    } else {
+      if (cTop && cTop.a > 0) parts.push(`border-top-color: ${rgbaToCSS(cTop)}`);
+      if (cRight && cRight.a > 0) parts.push(`border-right-color: ${rgbaToCSS(cRight)}`);
+      if (cBottom && cBottom.a > 0) parts.push(`border-bottom-color: ${rgbaToCSS(cBottom)}`);
+      if (cLeft && cLeft.a > 0) parts.push(`border-left-color: ${rgbaToCSS(cLeft)}`);
     }
   }
 
@@ -171,6 +209,14 @@ export function buildStyleString(styles: ComputedStyles): string {
   }
 
   return parts.join('; ');
+}
+
+/**
+ * RGBA 색상 비교
+ */
+function rgbaEqual(a: RGBA, b: RGBA): boolean {
+  return Math.abs(a.r - b.r) < 0.01 && Math.abs(a.g - b.g) < 0.01
+      && Math.abs(a.b - b.b) < 0.01 && Math.abs(a.a - b.a) < 0.01;
 }
 
 /**

@@ -18,7 +18,13 @@ import { getAnnotations, setAnnotation, setMultipleAnnotations } from './node-op
 import { getReactions, addReaction, removeReactions } from './node-ops';
 import { performBooleanOperation } from './node-ops';
 import { createPaintStyle, createTextStyle, createEffectStyle, createGridStyle, applyStyle, deleteStyle } from './node-ops';
-import { createVariableCollection, createVariable, getVariables, setVariableValue, bindVariable, addVariableMode } from './node-ops';
+import { createVariableCollection, createVariable, getVariables, setVariableValue, bindVariable, addVariableMode, setVariableScopes, setVariableAlias, setVariableCodeSyntax } from './node-ops';
+import { createNodeFromSvg } from './node-ops';
+import { listAvailableFonts, getNodeCSS } from './node-ops';
+import { createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './node-ops';
+import { getAvailableLibraries, getLibraryComponents, getLibraryVariables, importLibraryComponent, importLibraryStyle } from './node-ops';
+import { setExportSettings, getExportSettings } from './node-ops';
+import { createSticky, createConnector } from './node-ops';
 import { testRoundtripJSON, testRoundtripHTML } from './testing';
 
 /**
@@ -882,7 +888,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
     case 'get-variables': {
       try {
-        const result = getVariables(msg.type as string | undefined);
+        const result = getVariables(msg.variableType as string | undefined);
         sendResult('get-variables-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -1230,6 +1236,394 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('remove-reactions-result', errMsg);
+      }
+      break;
+    }
+
+    // === Component System (New) ===
+
+    case 'create-component': {
+      try {
+        const result = createComponent({
+          x: msg.x as number,
+          y: msg.y as number,
+          width: msg.width as number,
+          height: msg.height as number,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+        });
+        sendResult('create-component-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-component-result', errMsg);
+      }
+      break;
+    }
+
+    case 'convert-to-component': {
+      try {
+        const result = convertToComponent(msg.nodeId as string);
+        sendResult('convert-to-component-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('convert-to-component-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-component-set': {
+      try {
+        const result = createComponentSet(
+          msg.componentIds as string[],
+          msg.name as string | undefined
+        );
+        sendResult('create-component-set-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-component-set-result', errMsg);
+      }
+      break;
+    }
+
+    case 'add-component-property': {
+      try {
+        const result = addComponentProperty(
+          msg.nodeId as string,
+          msg.propertyName as string,
+          msg.propertyType as string,
+          msg.defaultValue
+        );
+        sendResult('add-component-property-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('add-component-property-result', errMsg);
+      }
+      break;
+    }
+
+    case 'edit-component-property': {
+      try {
+        const result = editComponentProperty(
+          msg.nodeId as string,
+          msg.propertyName as string,
+          msg.newValues as Record<string, unknown>
+        );
+        sendResult('edit-component-property-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('edit-component-property-result', errMsg);
+      }
+      break;
+    }
+
+    case 'delete-component-property': {
+      try {
+        const result = deleteComponentProperty(
+          msg.nodeId as string,
+          msg.propertyName as string
+        );
+        sendResult('delete-component-property-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('delete-component-property-result', errMsg);
+      }
+      break;
+    }
+
+    case 'get-component-properties': {
+      try {
+        const result = getComponentPropertyDefinitions(msg.nodeId as string);
+        sendResult('get-component-properties-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-component-properties-result', errMsg);
+      }
+      break;
+    }
+
+    case 'detach-instance': {
+      try {
+        const result = detachInstance(msg.nodeId as string);
+        sendResult('detach-instance-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('detach-instance-result', errMsg);
+      }
+      break;
+    }
+
+    case 'swap-component': {
+      try {
+        const result = await swapComponent(
+          msg.nodeId as string,
+          msg.newComponentKey as string
+        );
+        sendResult('swap-component-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('swap-component-result', errMsg);
+      }
+      break;
+    }
+
+    // === Creation (New) ===
+
+    case 'create-node-from-svg': {
+      try {
+        const result = createNodeFromSvg({
+          svgString: msg.svgString as string,
+          x: msg.x as number | undefined,
+          y: msg.y as number | undefined,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+        });
+        sendResult('create-node-from-svg-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-node-from-svg-result', errMsg);
+      }
+      break;
+    }
+
+    // === Query (New) ===
+
+    case 'list-fonts': {
+      try {
+        const result = await listAvailableFonts();
+        sendResult('list-fonts-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('list-fonts-result', errMsg);
+      }
+      break;
+    }
+
+    case 'get-css': {
+      try {
+        const result = await getNodeCSS(msg.nodeId as string);
+        sendResult('get-css-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-css-result', errMsg);
+      }
+      break;
+    }
+
+    // === Variables Advanced (New) ===
+
+    case 'set-variable-scopes': {
+      try {
+        const result = setVariableScopes(
+          msg.variableId as string,
+          msg.scopes as string[]
+        );
+        sendResult('set-variable-scopes-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-variable-scopes-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-variable-alias': {
+      try {
+        const result = setVariableAlias(
+          msg.variableId as string,
+          msg.modeId as string,
+          msg.aliasTargetId as string
+        );
+        sendResult('set-variable-alias-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-variable-alias-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-variable-code-syntax': {
+      try {
+        const result = setVariableCodeSyntax(
+          msg.variableId as string,
+          msg.platform as string,
+          msg.syntax as string
+        );
+        sendResult('set-variable-code-syntax-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-variable-code-syntax-result', errMsg);
+      }
+      break;
+    }
+
+    // === Team Library (New) ===
+
+    case 'get-libraries': {
+      try {
+        const result = await getAvailableLibraries();
+        sendResult('get-libraries-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-libraries-result', errMsg);
+      }
+      break;
+    }
+
+    case 'get-library-components': {
+      try {
+        const result = await getLibraryComponents(msg.libraryKey as string);
+        sendResult('get-library-components-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-library-components-result', errMsg);
+      }
+      break;
+    }
+
+    case 'get-library-variables': {
+      try {
+        const result = await getLibraryVariables(msg.collectionKey as string);
+        sendResult('get-library-variables-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-library-variables-result', errMsg);
+      }
+      break;
+    }
+
+    case 'import-library-component': {
+      try {
+        const result = await importLibraryComponent(msg.key as string);
+        sendResult('import-library-component-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('import-library-component-result', errMsg);
+      }
+      break;
+    }
+
+    case 'import-library-style': {
+      try {
+        const result = await importLibraryStyle(msg.key as string);
+        sendResult('import-library-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('import-library-style-result', errMsg);
+      }
+      break;
+    }
+
+    // === Utilities (New) ===
+
+    case 'notify': {
+      try {
+        const message = msg.message as string;
+        if (!message) {
+          sendError('notify-result', 'message가 필요합니다');
+          break;
+        }
+        const options = msg.options as { timeout?: number; error?: boolean } | undefined;
+        figma.notify(message, options);
+        sendResult('notify-result', { notified: true, message });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('notify-result', errMsg);
+      }
+      break;
+    }
+
+    case 'commit-undo': {
+      try {
+        figma.commitUndo();
+        sendResult('commit-undo-result', { committed: true });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('commit-undo-result', errMsg);
+      }
+      break;
+    }
+
+    case 'trigger-undo': {
+      try {
+        figma.triggerUndo();
+        sendResult('trigger-undo-result', { undone: true });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('trigger-undo-result', errMsg);
+      }
+      break;
+    }
+
+    case 'save-version': {
+      try {
+        const title = msg.title as string;
+        if (!title) {
+          sendError('save-version-result', 'title이 필요합니다');
+          break;
+        }
+        await figma.saveVersionHistoryAsync(title, msg.description as string | undefined);
+        sendResult('save-version-result', { saved: true, title });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('save-version-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-export-settings': {
+      try {
+        const result = setExportSettings(
+          msg.nodeId as string,
+          msg.settings as ExportSettings[]
+        );
+        sendResult('set-export-settings-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-export-settings-result', errMsg);
+      }
+      break;
+    }
+
+    case 'get-export-settings': {
+      try {
+        const result = getExportSettings(msg.nodeId as string);
+        sendResult('get-export-settings-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-export-settings-result', errMsg);
+      }
+      break;
+    }
+
+    // === FigJam (New) ===
+
+    case 'create-sticky': {
+      try {
+        const result = await createSticky({
+          text: msg.text as string | undefined,
+          x: msg.x as number | undefined,
+          y: msg.y as number | undefined,
+          parentId: msg.parentId as string | undefined,
+        });
+        sendResult('create-sticky-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-sticky-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-connector': {
+      try {
+        const result = createConnector({
+          startNodeId: msg.startNodeId as string,
+          endNodeId: msg.endNodeId as string,
+          strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeWeight: msg.strokeWeight as number | undefined,
+        });
+        sendResult('create-connector-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-connector-result', errMsg);
       }
       break;
     }

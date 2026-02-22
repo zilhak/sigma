@@ -14,6 +14,8 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight',
     'setCornerSmoothing', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin', 'setIndividualStrokeWeights',
+    'setOverflowDirection', 'setGradientFill', 'setImageFill',
   ]),
   // COMPONENT: FRAME과 동일
   COMPONENT: new Set([
@@ -26,6 +28,8 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight',
     'setCornerSmoothing', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin', 'setIndividualStrokeWeights',
+    'setOverflowDirection', 'setGradientFill', 'setImageFill',
   ]),
   // SECTION: 제한적 (Auto Layout 미지원, stroke/cornerRadius 미지원)
   SECTION: new Set([
@@ -50,6 +54,7 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRangeFontSize', 'setRangeFontName', 'setRangeFills', 'setRangeTextDecoration', 'setRangeLineHeight', 'setRangeLetterSpacing',
     'setRangeHyperlink', 'setRangeListOptions', 'setRangeIndentation',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setParagraphSpacing', 'setParagraphIndent', 'setTextCase', 'setTextTruncation', 'setMaxLines',
   ]),
   // INSTANCE: 제한적 (컴포넌트 인스턴스)
   INSTANCE: new Set([
@@ -66,6 +71,8 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setCornerSmoothing', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin', 'setIndividualStrokeWeights',
+    'setGradientFill', 'setImageFill',
   ]),
   ELLIPSE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
@@ -73,11 +80,15 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin',
+    'setGradientFill', 'setImageFill',
   ]),
   VECTOR: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin',
+    'setGradientFill', 'setImageFill',
     'setConstraints', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
@@ -87,6 +98,7 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin',
   ]),
   POLYGON: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
@@ -94,6 +106,8 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin',
+    'setGradientFill', 'setImageFill',
   ]),
   STAR: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
@@ -101,6 +115,8 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+    'setStrokeAlign', 'setStrokeCap', 'setStrokeJoin',
+    'setGradientFill', 'setImageFill',
   ]),
   // DEFAULT: 알 수 없는 타입에 대한 기본값 (가장 기본적인 메서드만)
   DEFAULT: new Set([
@@ -886,6 +902,167 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
       await loadAllFonts(node as TextNode);
       (node as TextNode).setRangeIndentation(start, end, value);
       return { start, end, indentation: value };
+    },
+  },
+
+  // === Stroke 고급 속성 ===
+
+  setStrokeAlign: {
+    description: 'Stroke 정렬 설정. args: { align: "INSIDE"|"OUTSIDE"|"CENTER" }',
+    handler: (node, args) => {
+      if (!('strokeAlign' in node)) throw new Error('이 노드는 strokeAlign을 지원하지 않습니다');
+      const align = args.align as string;
+      if (!align) throw new Error('align이 필요합니다');
+      (node as any).strokeAlign = align;
+      return { strokeAlign: (node as any).strokeAlign };
+    },
+  },
+  setStrokeCap: {
+    description: 'Stroke 끝 모양 설정. args: { cap: "NONE"|"ROUND"|"SQUARE"|"ARROW_LINES"|"ARROW_EQUILATERAL" }',
+    handler: (node, args) => {
+      if (!('strokeCap' in node)) throw new Error('이 노드는 strokeCap을 지원하지 않습니다');
+      const cap = args.cap as string;
+      if (!cap) throw new Error('cap이 필요합니다');
+      (node as any).strokeCap = cap;
+      return { strokeCap: (node as any).strokeCap };
+    },
+  },
+  setStrokeJoin: {
+    description: 'Stroke 연결 모양 설정. args: { join: "MITER"|"BEVEL"|"ROUND" }',
+    handler: (node, args) => {
+      if (!('strokeJoin' in node)) throw new Error('이 노드는 strokeJoin을 지원하지 않습니다');
+      const join = args.join as string;
+      if (!join) throw new Error('join이 필요합니다');
+      (node as any).strokeJoin = join;
+      return { strokeJoin: (node as any).strokeJoin };
+    },
+  },
+  setIndividualStrokeWeights: {
+    description: '모서리별 개별 stroke 두께 설정. args: { top: number, right: number, bottom: number, left: number }',
+    handler: (node, args) => {
+      if (!('strokeTopWeight' in node)) throw new Error('이 노드는 individualStrokeWeights를 지원하지 않습니다');
+      const f = node as any;
+      if (args.top !== undefined) f.strokeTopWeight = args.top as number;
+      if (args.right !== undefined) f.strokeRightWeight = args.right as number;
+      if (args.bottom !== undefined) f.strokeBottomWeight = args.bottom as number;
+      if (args.left !== undefined) f.strokeLeftWeight = args.left as number;
+      return {
+        strokeTopWeight: f.strokeTopWeight,
+        strokeRightWeight: f.strokeRightWeight,
+        strokeBottomWeight: f.strokeBottomWeight,
+        strokeLeftWeight: f.strokeLeftWeight,
+      };
+    },
+  },
+
+  // === 텍스트 고급 속성 ===
+
+  setParagraphSpacing: {
+    description: '문단 간격 설정. args: { value: number }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const value = args.value as number;
+      if (value === undefined) throw new Error('value가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).paragraphSpacing = value;
+      return { paragraphSpacing: (node as TextNode).paragraphSpacing };
+    },
+  },
+  setParagraphIndent: {
+    description: '문단 들여쓰기 설정. args: { value: number }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const value = args.value as number;
+      if (value === undefined) throw new Error('value가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).paragraphIndent = value;
+      return { paragraphIndent: (node as TextNode).paragraphIndent };
+    },
+  },
+  setTextCase: {
+    description: '텍스트 대소문자 변환 설정. args: { textCase: "ORIGINAL"|"UPPER"|"LOWER"|"TITLE"|"SMALL_CAPS"|"SMALL_CAPS_FORCED" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const textCase = args.textCase as string;
+      if (!textCase) throw new Error('textCase가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).textCase = textCase as TextCase;
+      return { textCase: (node as TextNode).textCase };
+    },
+  },
+  setTextTruncation: {
+    description: '텍스트 말줄임 설정. args: { truncation: "DISABLED"|"ENDING" }',
+    handler: (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const truncation = args.truncation as string;
+      if (!truncation) throw new Error('truncation이 필요합니다');
+      (node as TextNode).textTruncation = truncation as 'DISABLED' | 'ENDING';
+      return { textTruncation: (node as TextNode).textTruncation };
+    },
+  },
+  setMaxLines: {
+    description: '최대 줄 수 설정 (textTruncation과 함께 사용). args: { maxLines: number }',
+    handler: (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const maxLines = args.maxLines as number;
+      if (maxLines === undefined) throw new Error('maxLines가 필요합니다');
+      (node as TextNode).maxLines = maxLines;
+      return { maxLines: (node as TextNode).maxLines };
+    },
+  },
+
+  // === Auto Layout 고급 ===
+
+  setOverflowDirection: {
+    description: '스크롤/오버플로 방향 설정 (Auto Layout 프레임). args: { direction: "NONE"|"HORIZONTAL"|"VERTICAL"|"BOTH" }',
+    handler: (node, args) => {
+      if (!('overflowDirection' in node)) throw new Error('이 노드는 overflowDirection을 지원하지 않습니다');
+      const direction = args.direction as string;
+      if (!direction) throw new Error('direction이 필요합니다');
+      (node as any).overflowDirection = direction;
+      return { overflowDirection: (node as any).overflowDirection };
+    },
+  },
+
+  // === Fill 고급 ===
+
+  setGradientFill: {
+    description: '그라디언트 채우기 설정. args: { type: "GRADIENT_LINEAR"|"GRADIENT_RADIAL"|"GRADIENT_ANGULAR"|"GRADIENT_DIAMOND", gradientStops: [{position: 0~1, color: {r,g,b,a}}], gradientTransform?: [[number,number,number],[number,number,number]] }',
+    handler: (node, args) => {
+      if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
+      const type = args.type as string;
+      const gradientStops = args.gradientStops as Array<{ position: number; color: { r: number; g: number; b: number; a?: number } }>;
+      if (!type) throw new Error('type이 필요합니다');
+      if (!gradientStops || !Array.isArray(gradientStops)) throw new Error('gradientStops 배열이 필요합니다');
+      const stops = gradientStops.map(s => ({
+        position: s.position,
+        color: { r: s.color.r, g: s.color.g, b: s.color.b, a: s.color.a !== undefined ? s.color.a : 1 },
+      }));
+      const gradientTransform = args.gradientTransform as Transform | undefined;
+      const paint: any = {
+        type,
+        gradientStops: stops,
+        gradientTransform: gradientTransform !== undefined ? gradientTransform : [[1, 0, 0], [0, 1, 0]],
+      };
+      (node as GeometryMixin & SceneNode).fills = [paint];
+      return { fills: (node as GeometryMixin & SceneNode).fills };
+    },
+  },
+  setImageFill: {
+    description: '이미지 채우기 설정. args: { imageData: string(base64), scaleMode?: "FILL"|"FIT"|"CROP"|"TILE" }',
+    handler: (node, args) => {
+      if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
+      const imageData = args.imageData as string;
+      if (!imageData) throw new Error('imageData(base64)가 필요합니다');
+      const bytes = figma.base64Decode(imageData);
+      const image = figma.createImage(bytes);
+      const scaleMode = args.scaleMode !== undefined ? args.scaleMode as string : 'FILL';
+      (node as GeometryMixin & SceneNode).fills = [{
+        type: 'IMAGE',
+        imageHash: image.hash,
+        scaleMode: scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE',
+      }];
+      return { imageHash: image.hash, scaleMode };
     },
   },
 };

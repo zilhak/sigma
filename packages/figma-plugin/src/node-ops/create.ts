@@ -734,3 +734,41 @@ export function createImageNode(options: CreateImageNodeOptions): CreateImageNod
     imageHash: image.hash,
   };
 }
+
+// === SVG → Figma Node ===
+
+export interface CreateNodeFromSvgOptions {
+  svgString: string;
+  x?: number;
+  y?: number;
+  name?: string;
+  parentId?: string;
+}
+
+export interface CreateNodeFromSvgResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  childCount: number;
+}
+
+export function createNodeFromSvg(options: CreateNodeFromSvgOptions): CreateNodeFromSvgResult {
+  if (!options.svgString) throw new Error('svgString이 필요합니다');
+  const node = figma.createNodeFromSvg(options.svgString);
+  if (options.x !== undefined) node.x = options.x;
+  if (options.y !== undefined) node.y = options.y;
+  if (options.name) node.name = options.name;
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (parent && 'appendChild' in parent) {
+      (parent as ChildrenMixin).appendChild(node);
+    }
+  }
+  return {
+    nodeId: node.id, name: node.name, x: node.x, y: node.y,
+    width: node.width, height: node.height, childCount: node.children.length,
+  };
+}

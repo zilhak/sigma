@@ -74,23 +74,29 @@ export function getVariables(type?: string): GetVariablesResult {
       collectionId: c.id,
       name: c.name,
       modes: c.modes.map(m => ({ modeId: m.modeId, name: m.name })),
-      variableIds: c.variableIds,
+      variableIds: Array.from(c.variableIds),
     })),
-    variables: variables.map(v => ({
-      variableId: v.id,
-      name: v.name,
-      resolvedType: v.resolvedType,
-      collectionId: v.variableCollectionId,
-      valuesByMode: Object.fromEntries(
-        Object.entries(v.valuesByMode).map(([modeId, val]) => {
-          // VariableAlias인지 확인
-          if (val && typeof val === 'object' && 'type' in val && (val as any).type === 'VARIABLE_ALIAS') {
-            return [modeId, { type: 'VARIABLE_ALIAS', id: (val as any).id }];
-          }
-          return [modeId, val];
-        })
-      ),
-    })),
+    variables: variables.map(v => {
+      const safeValues: Record<string, unknown> = {};
+      for (const [modeId, val] of Object.entries(v.valuesByMode)) {
+        // VariableAlias인지 확인
+        if (val && typeof val === 'object' && 'type' in val && (val as any).type === 'VARIABLE_ALIAS') {
+          safeValues[modeId] = { type: 'VARIABLE_ALIAS', id: (val as any).id };
+        } else if (val && typeof val === 'object') {
+          // RGB/RGBA 등 객체를 plain object로 변환
+          safeValues[modeId] = { ...(val as Record<string, unknown>) };
+        } else {
+          safeValues[modeId] = val;
+        }
+      }
+      return {
+        variableId: v.id,
+        name: v.name,
+        resolvedType: v.resolvedType,
+        collectionId: v.variableCollectionId,
+        valuesByMode: safeValues,
+      };
+    }),
   };
 }
 
@@ -166,4 +172,58 @@ export function addVariableMode(collectionId: string, name: string): AddVariable
     name,
     allModes: collection.modes.map(m => ({ modeId: m.modeId, name: m.name })),
   };
+}
+
+// === Variable Scopes ===
+
+export interface SetVariableScopesResult {
+  variableId: string;
+  scopes: string[];
+}
+
+export function setVariableScopes(variableId: string, scopes: string[]): SetVariableScopesResult {
+  if (!variableId) throw new Error('variableId가 필요합니다');
+  if (!scopes || !Array.isArray(scopes)) throw new Error('scopes 배열이 필요합니다');
+  const variable = figma.variables.getVariableById(variableId);
+  if (!variable) throw new Error('변수를 찾을 수 없습니다: ' + variableId);
+  variable.scopes = scopes as VariableScope[];
+  return { variableId, scopes: Array.from(variable.scopes) };
+}
+
+// === Variable Alias ===
+
+export interface SetVariableAliasResult {
+  variableId: string;
+  modeId: string;
+  aliasTargetId: string;
+}
+
+export function setVariableAlias(variableId: string, modeId: string, aliasTargetId: string): SetVariableAliasResult {
+  if (!variableId) throw new Error('variableId가 필요합니다');
+  if (!modeId) throw new Error('modeId가 필요합니다');
+  if (!aliasTargetId) throw new Error('aliasTargetId가 필요합니다');
+  const variable = figma.variables.getVariableById(variableId);
+  if (!variable) throw new Error('변수를 찾을 수 없습니다: ' + variableId);
+  const aliasTarget = figma.variables.getVariableById(aliasTargetId);
+  if (!aliasTarget) throw new Error('별칭 대상 변수를 찾을 수 없습니다: ' + aliasTargetId);
+  variable.setValueForMode(modeId, figma.variables.createVariableAlias(aliasTarget));
+  return { variableId, modeId, aliasTargetId };
+}
+
+// === Variable Code Syntax ===
+
+export interface SetVariableCodeSyntaxResult {
+  variableId: string;
+  platform: string;
+  syntax: string;
+}
+
+export function setVariableCodeSyntax(variableId: string, platform: string, syntax: string): SetVariableCodeSyntaxResult {
+  if (!variableId) throw new Error('variableId가 필요합니다');
+  if (!platform) throw new Error('platform이 필요합니다');
+  if (!syntax) throw new Error('syntax가 필요합니다');
+  const variable = figma.variables.getVariableById(variableId);
+  if (!variable) throw new Error('변수를 찾을 수 없습니다: ' + variableId);
+  variable.setVariableCodeSyntax(platform as CodeSyntaxPlatform, syntax);
+  return { variableId, platform, syntax };
 }

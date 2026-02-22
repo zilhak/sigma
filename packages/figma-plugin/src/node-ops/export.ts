@@ -64,3 +64,33 @@ export async function exportImage(
     height: Math.round(height),
   };
 }
+
+// === Export Settings ===
+
+export interface SetExportSettingsResult {
+  nodeId: string;
+  settingsCount: number;
+}
+
+export function setExportSettings(nodeId: string, settings: ExportSettings[]): SetExportSettingsResult {
+  if (!nodeId) throw new Error('nodeId가 필요합니다');
+  if (!settings) throw new Error('settings가 필요합니다');
+  const node = figma.getNodeById(nodeId);
+  if (!node) throw new Error('노드를 찾을 수 없습니다: ' + nodeId);
+  if (node.type === 'DOCUMENT' || node.type === 'PAGE') throw new Error('DOCUMENT/PAGE 노드는 exportSettings를 지원하지 않습니다');
+  (node as SceneNode).exportSettings = settings;
+  return { nodeId, settingsCount: settings.length };
+}
+
+export interface GetExportSettingsResult {
+  nodeId: string;
+  settings: readonly ExportSettings[];
+}
+
+export function getExportSettings(nodeId: string): GetExportSettingsResult {
+  if (!nodeId) throw new Error('nodeId가 필요합니다');
+  const node = figma.getNodeById(nodeId);
+  if (!node) throw new Error('노드를 찾을 수 없습니다: ' + nodeId);
+  if (node.type === 'DOCUMENT' || node.type === 'PAGE') throw new Error('DOCUMENT/PAGE 노드는 exportSettings를 지원하지 않습니다');
+  return { nodeId, settings: (node as SceneNode).exportSettings };
+}

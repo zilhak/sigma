@@ -237,9 +237,10 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
   }
 
   // strokesIncludedInLayout: layoutMode가 HORIZONTAL/VERTICAL일 때만 설정 가능
-  // CSS box-model에서 border는 요소 크기에 포함되므로 Figma에서도 동일하게 적용
+  // 원본 Figma 값이 있으면 그대로 복원, 없으면 CSS box-model 기본값(true) 사용
   if (frame.layoutMode !== 'NONE' && frame.strokes.length > 0) {
-    frame.strokesIncludedInLayout = true;
+    const strokesAttr = node.attributes && node.attributes['data-figma-strokes-in-layout'];
+    frame.strokesIncludedInLayout = strokesAttr !== undefined ? strokesAttr === 'true' : true;
   }
 
   // 면별 다른 border 색상 처리 (Auto Layout + 자식 추가 후에 overlay 추가)

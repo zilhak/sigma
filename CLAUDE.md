@@ -1,7 +1,11 @@
 # Sigma - Modular Design-to-Code Bridge
 
+**목표: Figma Plugin API의 모든 기능을 MCP 도구로 노출하여, AI Agent가 Figma를 완전히 제어할 수 있게 한다.**
+
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
+
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 112개 도구(sigma_* 103 + 유틸리티 9)와 65개 modify 메서드가 구현되어 있으며, 미구현 기능은 `.claude/UNIMPLEMENTED_FEATURES.md`에서 추적한다.
 
 ---
 
@@ -131,6 +135,8 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_create_line` | 선 생성 | `token`, `x`, `y`, `length` | `name`, `strokeColor`, `strokeWeight`, `rotation`, `parentId` |
 | `sigma_create_vector` | 벡터 노드 생성 (SVG path) | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `vectorPaths`, `parentId` |
 | `sigma_create_image` | 이미지 노드 생성 (base64) | `token`, `x`, `y`, `width`, `height`, `imageData` | `name`, `parentId`, `scaleMode`, `cornerRadius` |
+| `sigma_create_node_from_svg` | SVG 문자열을 Figma 노드로 변환 | `token`, `svgString` | `x`, `y`, `name`, `parentId` |
+| `sigma_create_component` | 새 컴포넌트 노드 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `parentId` |
 
 ### 노드 조작 (토큰 필수)
 
@@ -151,12 +157,13 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 
 **`sigma_modify_node` 지원 메서드:**
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove
-- **Visual**: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode, setCornerSmoothing, setDashPattern, setMask
+- **Visual**: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode, setCornerSmoothing, setDashPattern, setMask, setGradientFill, setImageFill
+- **Stroke Advanced**: setStrokeAlign, setStrokeCap, setStrokeJoin, setIndividualStrokeWeights
 - **Transform**: setRotation
-- **Layout (Frame)**: setLayoutMode, setPadding, setItemSpacing, setClipsContent, setPrimaryAxisSizingMode, setCounterAxisSizingMode, setPrimaryAxisAlignItems, setCounterAxisAlignItems, setLayoutWrap, setCounterAxisSpacing, setLayoutSizing
+- **Layout (Frame)**: setLayoutMode, setPadding, setItemSpacing, setClipsContent, setPrimaryAxisSizingMode, setCounterAxisSizingMode, setPrimaryAxisAlignItems, setCounterAxisAlignItems, setLayoutWrap, setCounterAxisSpacing, setLayoutSizing, setOverflowDirection
 - **Layout (Child)**: setLayoutAlign, setLayoutGrow, setLayoutPositioning
 - **Constraints**: setConstraints, setMinWidth, setMaxWidth, setMinHeight, setMaxHeight
-- **Text**: setCharacters, setFontSize, setTextAlignHorizontal, setTextAlignVertical, setFontFamily, setFontWeight, setTextAutoResize, setLineHeight, setLetterSpacing
+- **Text**: setCharacters, setFontSize, setTextAlignHorizontal, setTextAlignVertical, setFontFamily, setFontWeight, setTextAutoResize, setLineHeight, setLetterSpacing, setParagraphSpacing, setParagraphIndent, setTextCase, setTextTruncation, setMaxLines
 - **Rich Text (Range)**: setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing, setRangeHyperlink, setRangeListOptions, setRangeIndentation
 - **Plugin Data**: setPluginData, getPluginData, getPluginDataKeys, setSharedPluginData, getSharedPluginData
 
@@ -178,6 +185,8 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_read_my_design` | 현재 선택된 노드의 상세 정보 조회 | `token` | — |
 | `sigma_scan_text_nodes` | 하위 모든 텍스트 노드 스캔 | `token`, `nodeId` | — |
 | `sigma_scan_nodes_by_types` | 하위에서 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
+| `sigma_list_fonts` | 사용 가능한 폰트 목록 조회 | `token` | — |
+| `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
 
 ### 컴포넌트 (토큰 필수)
 
@@ -186,6 +195,14 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_get_local_components` | 로컬 컴포넌트 목록 (key, name, 크기) | `token` | — |
 | `sigma_get_instance_overrides` | 인스턴스의 오버라이드 속성 조회 | `token` | `nodeId` |
 | `sigma_set_instance_overrides` | 인스턴스 오버라이드 설정 | `token`, `nodeId`, `overrides` | — |
+| `sigma_convert_to_component` | 프레임을 컴포넌트로 변환 | `token`, `nodeId` | — |
+| `sigma_create_component_set` | 컴포넌트들을 Variants 세트로 결합 | `token`, `componentIds` | `name` |
+| `sigma_add_component_property` | 컴포넌트에 속성 추가 | `token`, `nodeId`, `propertyName`, `propertyType`, `defaultValue` | — |
+| `sigma_edit_component_property` | 컴포넌트 속성 수정 | `token`, `nodeId`, `propertyName`, `newValues` | — |
+| `sigma_delete_component_property` | 컴포넌트 속성 삭제 | `token`, `nodeId`, `propertyName` | — |
+| `sigma_get_component_properties` | 컴포넌트 속성 정의 조회 | `token`, `nodeId` | — |
+| `sigma_detach_instance` | 인스턴스를 일반 프레임으로 분리 | `token`, `nodeId` | — |
+| `sigma_swap_component` | 인스턴스의 컴포넌트 교체 | `token`, `nodeId`, `newComponentKey` | — |
 
 ### 주석 (토큰 필수)
 
@@ -244,6 +261,37 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_set_variable_value` | 변수 모드별 값 설정 | `token`, `variableId`, `modeId`, `value` | — |
 | `sigma_bind_variable` | 노드 속성에 변수 바인딩 | `token`, `nodeId`, `field`, `variableId` | — |
 | `sigma_add_variable_mode` | 컬렉션에 모드 추가 (Light/Dark 등) | `token`, `collectionId`, `name` | — |
+| `sigma_set_variable_scopes` | 변수 사용 범위 설정 | `token`, `variableId`, `scopes` | — |
+| `sigma_set_variable_alias` | 변수 alias 설정 (다른 변수 참조) | `token`, `variableId`, `modeId`, `aliasTargetId` | — |
+| `sigma_set_variable_code_syntax` | 변수 코드 구문 설정 | `token`, `variableId`, `platform`, `syntax` | — |
+
+### Team Library (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_get_libraries` | 사용 가능한 Team Library 목록 조회 | `token` | — |
+| `sigma_get_library_components` | 라이브러리 컴포넌트 목록 조회 | `token`, `libraryKey` | — |
+| `sigma_get_library_variables` | 라이브러리 변수 컬렉션 목록 조회 | `token`, `collectionKey` | — |
+| `sigma_import_library_component` | 라이브러리 컴포넌트 임포트 | `token`, `key` | — |
+| `sigma_import_library_style` | 라이브러리 스타일 임포트 | `token`, `key` | — |
+
+### 유틸리티 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_notify` | Figma UI에 알림 메시지 표시 | `token`, `message` | `options` |
+| `sigma_commit_undo` | Undo 체크포인트 생성 | `token` | — |
+| `sigma_trigger_undo` | Undo 실행 (마지막 작업 되돌리기) | `token` | — |
+| `sigma_save_version` | 현재 상태를 버전 히스토리에 저장 | `token`, `title` | `description` |
+| `sigma_set_export_settings` | 노드의 Export 설정 지정 | `token`, `nodeId`, `settings` | — |
+| `sigma_get_export_settings` | 노드의 Export 설정 조회 | `token`, `nodeId` | — |
+
+### FigJam (토큰 필수, FigJam 파일에서만 사용)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_create_sticky` | 스티키 노트 생성 | `token` | `text`, `x`, `y`, `parentId` |
+| `sigma_create_connector` | 노드 간 연결선 생성 | `token`, `startNodeId`, `endNodeId` | `strokeColor`, `strokeWeight` |
 
 ### 데이터 저장/관리 (토큰 불필요)
 
@@ -410,20 +458,25 @@ packages/
 │       ├── node-ops/          # Figma 노드 조작
 │       │   ├── index.ts       # Barrel export
 │       │   ├── modify.ts      # 노드 속성 수정 (53개 메서드)
-│       │   ├── create.ts      # 사각형/텍스트/빈 프레임 생성
+│       │   ├── create.ts      # 사각형/텍스트/빈 프레임/타원/다각형/별/선/벡터/이미지 생성
 │       │   ├── query.ts       # 노드 정보 조회 (단일/배치/문서/스타일)
 │       │   ├── batch.ts       # 배치 작업 (스캔/일괄수정/일괄삭제)
-│       │   ├── selection.ts   # 선택 관리 (get/set)
+│       │   ├── selection.ts   # 선택 관리 (get/set) + 뷰포트
 │       │   ├── components.ts  # 컴포넌트/인스턴스 관리
 │       │   ├── annotations.ts # 주석 관리
 │       │   ├── prototyping.ts # 프로토타이핑/인터랙션
 │       │   ├── frames.ts      # 프레임 목록/삭제
 │       │   ├── section.ts     # Section 생성
-│       │   ├── move.ts        # 이동/복제
+│       │   ├── move.ts        # 이동/복제/그룹/언그룹/평탄화
+│       │   ├── boolean.ts     # Boolean 연산 (Union/Subtract/Intersect/Exclude)
+│       │   ├── styles.ts      # 스타일 CRUD (Paint/Text/Effect/Grid)
+│       │   ├── variables.ts   # 변수/컬렉션 관리
 │       │   ├── export.ts      # 이미지 export
 │       │   ├── tree.ts        # 트리 탐색/검색
 │       │   └── page.ts        # 페이지 관리
-│       ├── extractor/         # Figma → JSON 역추출
+│       ├── extractor/         # Figma → JSON/HTML 역추출
+│       │   ├── extract.ts     # Figma 노드 → ExtractedNode JSON
+│       │   └── html-export.ts # ExtractedNode → HTML 변환
 │       └── utils.ts           # createSolidPaint, createDefaultStyles
 │
 ├── server/                    # Local Server
@@ -456,6 +509,9 @@ packages/
     │   ├── extractor/         # 추출 로직 (Single Source of Truth)
     │   │   ├── core.ts        # extractElement + 고수준 함수
     │   │   ├── svg.ts         # SVG 처리
+    │   │   └── index.ts
+    │   ├── discovery/         # 요소 탐색 API
+    │   │   ├── core.ts        # findByText, findByAlt, findForm, findContainer, getPageStructure
     │   │   └── index.ts
     │   ├── storybook/         # Storybook 자동화
     │   │   ├── core.ts        # getStories, navigateToStory 등

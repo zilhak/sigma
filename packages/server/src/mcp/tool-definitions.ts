@@ -333,7 +333,8 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
 - Text: setCharacters, setFontSize, setTextAlignHorizontal, setTextAlignVertical, setFontFamily, setFontWeight, setTextAutoResize, setLineHeight, setLetterSpacing
 - Rich Text (Range): setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing
 - Rich Text (Advanced): setRangeHyperlink, setRangeListOptions, setRangeIndentation
-- Plugin Data: setPluginData, getPluginData, getPluginDataKeys, setSharedPluginData, getSharedPluginData`,
+- Plugin Data: setPluginData, getPluginData, getPluginDataKeys, setSharedPluginData, getSharedPluginData
+- Advanced Visual: setStrokeAlign, setStrokeCap, setStrokeJoin, setIndividualStrokeWeights, setParagraphSpacing, setParagraphIndent, setTextCase, setTextTruncation, setMaxLines, setOverflowDirection, setGradientFill, setImageFill`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -2111,6 +2112,381 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         },
       },
       required: ['token', 'nodeId'],
+    },
+  },
+
+  // === Component System ===
+  {
+    name: 'sigma_create_component',
+    description: '새 컴포넌트 노드 생성',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        width: { type: 'number', description: '너비' },
+        height: { type: 'number', description: '높이' },
+        name: { type: 'string', description: '컴포넌트 이름' },
+        parentId: { type: 'string', description: '부모 노드 ID' },
+      },
+      required: ['token', 'x', 'y', 'width', 'height'],
+    },
+  },
+  {
+    name: 'sigma_convert_to_component',
+    description: '기존 프레임/노드를 컴포넌트로 변환',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: '변환할 노드 ID' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+  {
+    name: 'sigma_create_component_set',
+    description: '여러 컴포넌트를 Variants 세트로 결합',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        componentIds: { type: 'array', items: { type: 'string' }, description: '결합할 컴포넌트 ID 배열 (최소 2개)' },
+        name: { type: 'string', description: 'ComponentSet 이름' },
+      },
+      required: ['token', 'componentIds'],
+    },
+  },
+  {
+    name: 'sigma_add_component_property',
+    description: '컴포넌트에 프로퍼티 추가 (Boolean, Text, Instance Swap, Variant)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: 'COMPONENT 또는 COMPONENT_SET 노드 ID' },
+        propertyName: { type: 'string', description: '프로퍼티 이름' },
+        propertyType: { type: 'string', description: '타입: BOOLEAN, TEXT, INSTANCE_SWAP, VARIANT' },
+        defaultValue: { description: '기본값' },
+      },
+      required: ['token', 'nodeId', 'propertyName', 'propertyType', 'defaultValue'],
+    },
+  },
+  {
+    name: 'sigma_edit_component_property',
+    description: '컴포넌트 프로퍼티 수정',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: 'COMPONENT 또는 COMPONENT_SET 노드 ID' },
+        propertyName: { type: 'string', description: '프로퍼티 이름' },
+        newValues: { type: 'object', description: '수정할 값 객체 (defaultValue, preferredValues 등)' },
+      },
+      required: ['token', 'nodeId', 'propertyName', 'newValues'],
+    },
+  },
+  {
+    name: 'sigma_delete_component_property',
+    description: '컴포넌트 프로퍼티 삭제',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: 'COMPONENT 또는 COMPONENT_SET 노드 ID' },
+        propertyName: { type: 'string', description: '삭제할 프로퍼티 이름' },
+      },
+      required: ['token', 'nodeId', 'propertyName'],
+    },
+  },
+  {
+    name: 'sigma_get_component_properties',
+    description: '컴포넌트 프로퍼티 정의 조회',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: 'COMPONENT 또는 COMPONENT_SET 노드 ID' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+  {
+    name: 'sigma_detach_instance',
+    description: '인스턴스를 일반 프레임으로 분리 (detach)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: 'INSTANCE 노드 ID' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+  {
+    name: 'sigma_swap_component',
+    description: '인스턴스의 메인 컴포넌트를 다른 컴포넌트로 교체',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: 'INSTANCE 노드 ID' },
+        newComponentKey: { type: 'string', description: '새 컴포넌트의 key' },
+      },
+      required: ['token', 'nodeId', 'newComponentKey'],
+    },
+  },
+
+  // === Creation & Query ===
+  {
+    name: 'sigma_create_node_from_svg',
+    description: 'SVG 문자열을 Figma 노드로 변환하여 생성',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        svgString: { type: 'string', description: 'SVG 마크업 문자열' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        name: { type: 'string', description: '노드 이름' },
+        parentId: { type: 'string', description: '부모 노드 ID' },
+      },
+      required: ['token', 'svgString'],
+    },
+  },
+  {
+    name: 'sigma_list_fonts',
+    description: 'Figma에서 사용 가능한 폰트 목록 조회',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_get_css',
+    description: '노드의 CSS 스타일 추출',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: '노드 ID' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+
+  // === Variable Advanced ===
+  {
+    name: 'sigma_set_variable_scopes',
+    description: '변수의 사용 범위(scope) 설정',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        variableId: { type: 'string', description: '변수 ID' },
+        scopes: { type: 'array', items: { type: 'string' }, description: 'scope 배열 (ALL_SCOPES, TEXT_CONTENT, CORNER_RADIUS, WIDTH_HEIGHT, GAP, ALL_FILLS, FRAME_FILL, SHAPE_FILL, TEXT_FILL, STROKE_COLOR, STROKE_FLOAT, EFFECT_FLOAT, EFFECT_COLOR, OPACITY, FONT_FAMILY, FONT_STYLE, FONT_WEIGHT, FONT_SIZE, LINE_HEIGHT, LETTER_SPACING, PARAGRAPH_SPACING, PARAGRAPH_INDENT)' },
+      },
+      required: ['token', 'variableId', 'scopes'],
+    },
+  },
+  {
+    name: 'sigma_set_variable_alias',
+    description: '변수에 다른 변수를 별칭(alias)으로 설정',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        variableId: { type: 'string', description: '대상 변수 ID' },
+        modeId: { type: 'string', description: '모드 ID' },
+        aliasTargetId: { type: 'string', description: '별칭으로 참조할 변수 ID' },
+      },
+      required: ['token', 'variableId', 'modeId', 'aliasTargetId'],
+    },
+  },
+  {
+    name: 'sigma_set_variable_code_syntax',
+    description: '변수의 코드 생성 구문 설정 (개발자용)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        variableId: { type: 'string', description: '변수 ID' },
+        platform: { type: 'string', description: '플랫폼: WEB, ANDROID, iOS' },
+        syntax: { type: 'string', description: '코드 구문 문자열 (예: var(--color-primary))' },
+      },
+      required: ['token', 'variableId', 'platform', 'syntax'],
+    },
+  },
+
+  // === Team Library ===
+  {
+    name: 'sigma_get_libraries',
+    description: '사용 가능한 Team Library 목록 조회',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_get_library_components',
+    description: '라이브러리의 컴포넌트 목록 조회',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        libraryKey: { type: 'string', description: '라이브러리 key' },
+      },
+      required: ['token', 'libraryKey'],
+    },
+  },
+  {
+    name: 'sigma_get_library_variables',
+    description: '라이브러리 변수 컬렉션의 변수 목록 조회',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        collectionKey: { type: 'string', description: '변수 컬렉션 key' },
+      },
+      required: ['token', 'collectionKey'],
+    },
+  },
+  {
+    name: 'sigma_import_library_component',
+    description: '라이브러리 컴포넌트를 현재 파일로 임포트',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        key: { type: 'string', description: '컴포넌트 key' },
+      },
+      required: ['token', 'key'],
+    },
+  },
+  {
+    name: 'sigma_import_library_style',
+    description: '라이브러리 스타일을 현재 파일로 임포트',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        key: { type: 'string', description: '스타일 key' },
+      },
+      required: ['token', 'key'],
+    },
+  },
+
+  // === Utilities ===
+  {
+    name: 'sigma_notify',
+    description: 'Figma UI에 알림 메시지 표시',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        message: { type: 'string', description: '알림 메시지' },
+        options: { type: 'object', properties: { timeout: { type: 'number' }, error: { type: 'boolean' } }, description: '옵션 (timeout: ms, error: 에러 스타일)' },
+      },
+      required: ['token', 'message'],
+    },
+  },
+  {
+    name: 'sigma_commit_undo',
+    description: 'Undo 체크포인트 생성 (현재 상태를 undo 히스토리에 기록)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_trigger_undo',
+    description: 'Undo 실행 (마지막 작업 되돌리기)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_save_version',
+    description: '현재 상태를 버전 히스토리에 저장',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        title: { type: 'string', description: '버전 제목' },
+        description: { type: 'string', description: '버전 설명' },
+      },
+      required: ['token', 'title'],
+    },
+  },
+  {
+    name: 'sigma_set_export_settings',
+    description: '노드의 export 설정 지정 (PNG 2x, SVG 등)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: '노드 ID' },
+        settings: { type: 'array', items: { type: 'object' }, description: 'ExportSettings 배열 (format: PNG|SVG|JPG|PDF, constraint?: {type,value})' },
+      },
+      required: ['token', 'nodeId', 'settings'],
+    },
+  },
+  {
+    name: 'sigma_get_export_settings',
+    description: '노드의 현재 export 설정 조회',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: '노드 ID' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+
+  // === FigJam ===
+  {
+    name: 'sigma_create_sticky',
+    description: 'FigJam 스티키 노트 생성 (FigJam 환경에서만 사용 가능)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        text: { type: 'string', description: '스티키 노트 텍스트' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        parentId: { type: 'string', description: '부모 노드 ID' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_create_connector',
+    description: 'FigJam 커넥터 생성 — 두 노드를 연결 (FigJam 환경에서만 사용 가능)',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        startNodeId: { type: 'string', description: '시작 노드 ID' },
+        endNodeId: { type: 'string', description: '끝 노드 ID' },
+        strokeColor: { type: 'object', properties: { r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' } }, description: 'stroke 색상' },
+        strokeWeight: { type: 'number', description: 'stroke 두께' },
+      },
+      required: ['token', 'startNodeId', 'endNodeId'],
     },
   },
 

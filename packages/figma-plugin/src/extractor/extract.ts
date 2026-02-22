@@ -59,6 +59,10 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
     // 레이아웃 스타일 추출
     if ('layoutMode' in node) {
       extractLayoutStyles(node as FrameNode, extracted.styles);
+      // strokesIncludedInLayout 보존 (HTML 라운드트립용)
+      if ('strokesIncludedInLayout' in node) {
+        extracted.attributes['data-figma-strokes-in-layout'] = String((node as FrameNode).strokesIncludedInLayout);
+      }
     }
 
     // 배경/테두리/효과 추출
