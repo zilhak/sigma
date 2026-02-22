@@ -2,21 +2,51 @@ import type { ExtractedNode, TreeFilter } from '@sigma/shared';
 import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, setLastCreatedPosition } from './converter';
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
-import { getTargetPage, getAllPages, sendFileInfo, saveFileKey } from './node-ops';
+import { getTargetPage, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage } from './node-ops';
 import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
 import { getFrames, deleteFrame } from './node-ops';
 import { createSection } from './node-ops';
-import { moveNode, cloneNode } from './node-ops';
+import { groupNodes, ungroupNodes, flattenNodes, moveNode, cloneNode } from './node-ops';
 import { exportImage } from './node-ops';
-import { createRectangle, createText, createEmptyFrame } from './node-ops';
-import { getSelection, setSelection } from './node-ops';
+import { createRectangle, createText, createEmptyFrame, createEllipse, createPolygon, createStar, createLine, createVector, createImageNode } from './node-ops';
+import { getSelection, setSelection, getViewport, setViewport } from './node-ops';
 import { getLocalComponents, createComponentInstance, getInstanceOverrides, setInstanceOverrides } from './node-ops';
 import { getNodeInfo, getDocumentInfo, getStyles, getNodesInfo, readMyDesign } from './node-ops';
 import { scanTextNodes, scanNodesByTypes, batchModify, batchDelete, setMultipleTextContents } from './node-ops';
 import { getAnnotations, setAnnotation, setMultipleAnnotations } from './node-ops';
 import { getReactions, addReaction, removeReactions } from './node-ops';
+import { performBooleanOperation } from './node-ops';
+import { createPaintStyle, createTextStyle, createEffectStyle, createGridStyle, applyStyle, deleteStyle } from './node-ops';
+import { createVariableCollection, createVariable, getVariables, setVariableValue, bindVariable, addVariableMode } from './node-ops';
 import { testRoundtripJSON, testRoundtripHTML } from './testing';
+
+/**
+ * ExtractedNode 트리에서 svgString이 없는 SVG 노드를 찾아
+ * exportAsync로 SVG 데이터를 비동기 보충
+ */
+async function enrichSvgData(extracted: ExtractedNode): Promise<void> {
+  // svgString이 없는 SVG 태그 → exportAsync로 보충
+  if (extracted.tagName === 'svg' && !extracted.svgString) {
+    const figmaNode = figma.getNodeById(extracted.id);
+    if (figmaNode && 'exportAsync' in figmaNode) {
+      try {
+        const svgBytes = await (figmaNode as SceneNode).exportAsync({ format: 'SVG' });
+        const chars: string[] = [];
+        for (let i = 0; i < svgBytes.length; i++) {
+          chars.push(String.fromCharCode(svgBytes[i]));
+        }
+        extracted.svgString = chars.join('');
+      } catch { /* export 실패 시 무시 */ }
+    }
+  }
+  // 자식 재귀
+  if (extracted.children) {
+    for (const child of extracted.children) {
+      await enrichSvgData(child);
+    }
+  }
+}
 
 // UI 표시
 figma.showUI(__html__, { width: 320, height: 400 });
@@ -355,6 +385,11 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           break;
         }
 
+        // HTML 포맷: SVG 데이터 비동기 보충 후 변환
+        if (extractFormat === 'html') {
+          await enrichSvgData(extracted);
+        }
+
         const resultData = extractFormat === 'html'
           ? convertExtractedNodeToHTML(extracted)
           : extracted;
@@ -421,6 +456,104 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('clone-node-result', `노드 복제 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'group-nodes': {
+      try {
+        const result = groupNodes(
+          msg.nodeIds as string[],
+          msg.name as string | undefined
+        );
+        sendResult('group-nodes-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('group-nodes-result', `그룹화 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'ungroup-nodes': {
+      try {
+        const result = ungroupNodes(msg.nodeId as string);
+        sendResult('ungroup-nodes-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('ungroup-nodes-result', `그룹 해제 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'flatten-nodes': {
+      try {
+        const result = flattenNodes(
+          msg.nodeIds as string[],
+          msg.name as string | undefined
+        );
+        sendResult('flatten-nodes-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('flatten-nodes-result', `Flatten 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'boolean-operation': {
+      try {
+        const result = performBooleanOperation(
+          msg.nodeIds as string[],
+          msg.operation as 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE',
+          msg.name as string | undefined
+        );
+        sendResult('boolean-operation-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('boolean-operation-result', `Boolean 연산 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'create-page': {
+      try {
+        const result = createPage(msg.name as string | undefined);
+        sendResult('create-page-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-page-result', `페이지 생성 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'rename-page': {
+      try {
+        const result = renamePage(msg.pageId as string, msg.name as string);
+        sendResult('rename-page-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('rename-page-result', `페이지 이름 변경 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'switch-page': {
+      try {
+        const result = switchPage(msg.pageId as string);
+        sendResult('switch-page-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('switch-page-result', `페이지 전환 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'delete-page': {
+      try {
+        const result = deletePage(msg.pageId as string);
+        sendResult('delete-page-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('delete-page-result', `페이지 삭제 실패: ${errMsg}`);
       }
       break;
     }
@@ -496,6 +629,309 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
+    case 'create-ellipse': {
+      try {
+        const result = createEllipse({
+          x: msg.x as number,
+          y: msg.y as number,
+          width: msg.width as number,
+          height: msg.height as number,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+          fillColor: msg.fillColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeWeight: msg.strokeWeight as number | undefined,
+          arcData: msg.arcData as { startingAngle: number; endingAngle: number; innerRadius: number } | undefined,
+        });
+        sendResult('create-ellipse-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-ellipse-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-polygon': {
+      try {
+        const result = createPolygon({
+          x: msg.x as number,
+          y: msg.y as number,
+          width: msg.width as number,
+          height: msg.height as number,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+          fillColor: msg.fillColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeWeight: msg.strokeWeight as number | undefined,
+          pointCount: msg.pointCount as number | undefined,
+        });
+        sendResult('create-polygon-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-polygon-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-star': {
+      try {
+        const result = createStar({
+          x: msg.x as number,
+          y: msg.y as number,
+          width: msg.width as number,
+          height: msg.height as number,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+          fillColor: msg.fillColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeWeight: msg.strokeWeight as number | undefined,
+          pointCount: msg.pointCount as number | undefined,
+          innerRadius: msg.innerRadius as number | undefined,
+        });
+        sendResult('create-star-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-star-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-line': {
+      try {
+        const result = createLine({
+          x: msg.x as number,
+          y: msg.y as number,
+          length: msg.length as number,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+          strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeWeight: msg.strokeWeight as number | undefined,
+          rotation: msg.rotation as number | undefined,
+          dashPattern: msg.dashPattern as number[] | undefined,
+        });
+        sendResult('create-line-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-line-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-vector': {
+      try {
+        const result = createVector({
+          x: msg.x as number,
+          y: msg.y as number,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+          fillColor: msg.fillColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,
+          strokeWeight: msg.strokeWeight as number | undefined,
+          vectorPaths: msg.vectorPaths as Array<{ windingRule: 'NONZERO' | 'EVENODD'; data: string }> | undefined,
+        });
+        sendResult('create-vector-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-vector-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-image-node': {
+      try {
+        const result = createImageNode({
+          x: msg.x as number,
+          y: msg.y as number,
+          width: msg.width as number,
+          height: msg.height as number,
+          imageData: msg.imageData as string,
+          name: msg.name as string | undefined,
+          parentId: msg.parentId as string | undefined,
+          scaleMode: msg.scaleMode as 'FILL' | 'FIT' | 'CROP' | 'TILE' | undefined,
+          cornerRadius: msg.cornerRadius as number | undefined,
+        });
+        sendResult('create-image-node-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-image-node-result', errMsg);
+      }
+      break;
+    }
+
+    // === Styles ===
+
+    case 'create-paint-style': {
+      try {
+        const result = createPaintStyle({
+          name: msg.name as string,
+          paints: msg.paints as any[],
+          description: msg.description as string | undefined,
+        });
+        sendResult('create-paint-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-paint-style-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-text-style': {
+      try {
+        const result = await createTextStyle({
+          name: msg.name as string,
+          fontSize: msg.fontSize as number | undefined,
+          fontFamily: msg.fontFamily as string | undefined,
+          fontWeight: msg.fontWeight as string | undefined,
+          lineHeight: msg.lineHeight as any,
+          letterSpacing: msg.letterSpacing as any,
+          textCase: msg.textCase as any,
+          textDecoration: msg.textDecoration as any,
+          description: msg.description as string | undefined,
+        });
+        sendResult('create-text-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-text-style-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-effect-style': {
+      try {
+        const result = createEffectStyle({
+          name: msg.name as string,
+          effects: msg.effects as any[],
+          description: msg.description as string | undefined,
+        });
+        sendResult('create-effect-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-effect-style-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-grid-style': {
+      try {
+        const result = createGridStyle({
+          name: msg.name as string,
+          grids: msg.grids as any[],
+          description: msg.description as string | undefined,
+        });
+        sendResult('create-grid-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-grid-style-result', errMsg);
+      }
+      break;
+    }
+
+    case 'apply-style': {
+      try {
+        const result = await applyStyle({
+          nodeId: msg.nodeId as string,
+          styleType: msg.styleType as 'fill' | 'stroke' | 'text' | 'effect' | 'grid',
+          styleId: msg.styleId as string,
+        });
+        sendResult('apply-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('apply-style-result', errMsg);
+      }
+      break;
+    }
+
+    case 'delete-style': {
+      try {
+        const result = deleteStyle(msg.styleId as string);
+        sendResult('delete-style-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('delete-style-result', errMsg);
+      }
+      break;
+    }
+
+    // === Variables ===
+
+    case 'create-variable-collection': {
+      try {
+        const result = createVariableCollection(msg.name as string);
+        sendResult('create-variable-collection-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-variable-collection-result', errMsg);
+      }
+      break;
+    }
+
+    case 'create-variable': {
+      try {
+        const result = createVariable({
+          name: msg.name as string,
+          collectionId: msg.collectionId as string,
+          resolvedType: msg.resolvedType as 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN',
+        });
+        sendResult('create-variable-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('create-variable-result', errMsg);
+      }
+      break;
+    }
+
+    case 'get-variables': {
+      try {
+        const result = getVariables(msg.type as string | undefined);
+        sendResult('get-variables-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-variables-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-variable-value': {
+      try {
+        const result = setVariableValue({
+          variableId: msg.variableId as string,
+          modeId: msg.modeId as string,
+          value: msg.value,
+        });
+        sendResult('set-variable-value-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-variable-value-result', errMsg);
+      }
+      break;
+    }
+
+    case 'bind-variable': {
+      try {
+        const result = await bindVariable({
+          nodeId: msg.nodeId as string,
+          field: msg.field as string,
+          variableId: msg.variableId as string,
+        });
+        sendResult('bind-variable-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('bind-variable-result', errMsg);
+      }
+      break;
+    }
+
+    case 'add-variable-mode': {
+      try {
+        const result = addVariableMode(msg.collectionId as string, msg.name as string);
+        sendResult('add-variable-mode-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('add-variable-mode-result', errMsg);
+      }
+      break;
+    }
+
     // === Selection ===
     case 'get-selection': {
       try {
@@ -518,6 +954,33 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('set-selection-result', errMsg);
+      }
+      break;
+    }
+
+    // === Viewport ===
+    case 'get-viewport': {
+      try {
+        const result = getViewport();
+        sendResult('get-viewport-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('get-viewport-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-viewport': {
+      try {
+        const result = setViewport({
+          center: msg.center as { x: number; y: number } | undefined,
+          zoom: msg.zoom as number | undefined,
+          nodeIds: msg.nodeIds as string[] | undefined,
+        });
+        sendResult('set-viewport-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-viewport-result', errMsg);
       }
       break;
     }

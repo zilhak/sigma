@@ -30,10 +30,14 @@ function extractBoundingFromStyle(attrsString: string): { x: number; y: number; 
   const styleMatch = attrsString.match(/style\s*=\s*["']([^"']*)["']/i);
 
   if (styleMatch) {
-    const widthMatch = styleMatch[1].match(/width\s*:\s*([\d.]+)/);
-    const heightMatch = styleMatch[1].match(/height\s*:\s*([\d.]+)/);
+    const widthMatch = styleMatch[1].match(/(?:^|;\s*)width\s*:\s*([\d.]+)/);
+    const heightMatch = styleMatch[1].match(/(?:^|;\s*)height\s*:\s*([\d.]+)/);
+    const leftMatch = styleMatch[1].match(/(?:^|;\s*)left\s*:\s*([\d.]+)/);
+    const topMatch = styleMatch[1].match(/(?:^|;\s*)top\s*:\s*([\d.]+)/);
     if (widthMatch) result.width = parseFloat(widthMatch[1]);
     if (heightMatch) result.height = parseFloat(heightMatch[1]);
+    if (leftMatch) result.x = parseFloat(leftMatch[1]);
+    if (topMatch) result.y = parseFloat(topMatch[1]);
   }
 
   return result;
@@ -154,6 +158,29 @@ function parseElement(html: string, startIndex: number): ParseResult {
   const tagName = tagMatch[1].toLowerCase();
   const attrsString = tagMatch[2];
   const afterOpenTag = startIndex + tagMatch[0].length;
+
+  // SVG 요소: 전체를 svgString으로 캡처
+  if (tagName === 'svg') {
+    const svgClosingTag = '</svg>';
+    const svgCloseIndex = html.toLowerCase().indexOf(svgClosingTag, afterOpenTag);
+    const svgEndIndex = svgCloseIndex === -1 ? html.length : svgCloseIndex + svgClosingTag.length;
+    const svgString = html.slice(startIndex, svgEndIndex);
+    const styles = parseInlineStyles(attrsString);
+    return {
+      node: {
+        id: generateNodeId(),
+        tagName: 'svg',
+        className: '',
+        textContent: '',
+        attributes: {},
+        styles,
+        boundingRect: extractBoundingFromStyle(attrsString),
+        children: [],
+        svgString,
+      },
+      endIndex: svgEndIndex,
+    };
+  }
 
   // 자기 종료 태그 체크 (br, img, input 등)
   const selfClosingTags = ['br', 'hr', 'img', 'input', 'meta', 'link'];
@@ -335,6 +362,30 @@ function applyStyleProperty(styles: ComputedStyles, prop: string, value: string)
       break;
     case 'gap':
       styles.gap = numValue || 0;
+      break;
+    case 'flexWrap':
+      styles.flexWrap = value;
+      break;
+    case 'flexGrow':
+      styles.flexGrow = numValue || 0;
+      break;
+    case 'flexShrink':
+      styles.flexShrink = numValue || 0;
+      break;
+    case 'alignSelf':
+      styles.alignSelf = value;
+      break;
+    case 'overflow':
+      styles.overflow = value;
+      break;
+    case 'position':
+      styles.position = value;
+      break;
+    case 'left':
+      // boundingRect.x로 매핑 (extractBoundingFromStyle에서 처리)
+      break;
+    case 'top':
+      // boundingRect.y로 매핑 (extractBoundingFromStyle에서 처리)
       break;
     case 'padding':
       const paddings = parseSpacing(value);

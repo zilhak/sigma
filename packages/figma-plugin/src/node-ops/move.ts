@@ -1,4 +1,142 @@
 /**
+ * Group 결과
+ */
+export interface GroupNodesResult {
+  groupId: string;
+  name: string;
+  childCount: number;
+  children: Array<{ id: string; name: string; type: string }>;
+}
+
+/**
+ * Ungroup 결과
+ */
+export interface UngroupResult {
+  parentId: string;
+  parentName: string;
+  releasedChildren: Array<{ id: string; name: string; type: string }>;
+}
+
+/**
+ * Flatten 결과
+ */
+export interface FlattenResult {
+  vectorId: string;
+  name: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * 여러 노드를 Group으로 묶기
+ */
+export function groupNodes(
+  nodeIds: string[],
+  name?: string
+): GroupNodesResult {
+  if (!nodeIds || nodeIds.length < 1) {
+    throw new Error('그룹화할 노드 ID가 최소 1개 필요합니다');
+  }
+
+  const nodes: SceneNode[] = [];
+  for (const id of nodeIds) {
+    const node = figma.getNodeById(id);
+    if (!node) {
+      throw new Error(`노드를 찾을 수 없습니다: ${id}`);
+    }
+    if (node.type === 'DOCUMENT' || node.type === 'PAGE') {
+      throw new Error(`Document 또는 Page는 그룹화할 수 없습니다: ${id}`);
+    }
+    nodes.push(node as SceneNode);
+  }
+
+  const parent = nodes[0].parent as BaseNode & ChildrenMixin;
+  if (!parent) {
+    throw new Error('노드의 부모를 찾을 수 없습니다');
+  }
+
+  const group = figma.group(nodes, parent);
+  if (name) group.name = name;
+
+  return {
+    groupId: group.id,
+    name: group.name,
+    childCount: group.children.length,
+    children: group.children.map(c => ({ id: c.id, name: c.name, type: c.type })),
+  };
+}
+
+/**
+ * Group 해제 (자식을 부모로 이동)
+ */
+export function ungroupNodes(nodeId: string): UngroupResult {
+  if (!nodeId) {
+    throw new Error('nodeId가 필요합니다');
+  }
+
+  const node = figma.getNodeById(nodeId);
+  if (!node) {
+    throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
+  }
+  if (node.type !== 'GROUP') {
+    throw new Error(`Group 노드가 아닙니다: ${nodeId} (${node.type})`);
+  }
+
+  const parent = node.parent;
+  if (!parent) {
+    throw new Error('Group의 부모를 찾을 수 없습니다');
+  }
+
+  const childrenInfo = (node as GroupNode).children.map(c => ({
+    id: c.id,
+    name: c.name,
+    type: c.type,
+  }));
+
+  figma.ungroup(node as GroupNode);
+
+  return {
+    parentId: parent.id,
+    parentName: parent.name,
+    releasedChildren: childrenInfo,
+  };
+}
+
+/**
+ * 여러 노드를 하나의 Vector로 병합
+ */
+export function flattenNodes(
+  nodeIds: string[],
+  name?: string
+): FlattenResult {
+  if (!nodeIds || nodeIds.length < 1) {
+    throw new Error('Flatten할 노드 ID가 최소 1개 필요합니다');
+  }
+
+  const nodes: SceneNode[] = [];
+  for (const id of nodeIds) {
+    const node = figma.getNodeById(id);
+    if (!node) {
+      throw new Error(`노드를 찾을 수 없습니다: ${id}`);
+    }
+    if (node.type === 'DOCUMENT' || node.type === 'PAGE') {
+      throw new Error(`Document 또는 Page는 Flatten할 수 없습니다: ${id}`);
+    }
+    nodes.push(node as SceneNode);
+  }
+
+  const vector = figma.flatten(nodes);
+  if (name) vector.name = name;
+
+  return {
+    vectorId: vector.id,
+    name: vector.name,
+    width: Math.round(vector.width),
+    height: Math.round(vector.height),
+  };
+}
+
+/**
  * 노드 이동 결과
  */
 export interface MoveNodeResult {

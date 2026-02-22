@@ -13,6 +13,7 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight',
     'setCornerSmoothing', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // COMPONENT: FRAME과 동일
   COMPONENT: new Set([
@@ -24,16 +25,19 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight',
     'setCornerSmoothing', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // SECTION: 제한적 (Auto Layout 미지원, stroke/cornerRadius 미지원)
   SECTION: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setEffects',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // GROUP: 가장 제한적 (크기는 자식에 의해 결정, fills 미지원)
   GROUP: new Set([
     'rename', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // TEXT: 텍스트 관련 메서드 + 기본 스타일
   TEXT: new Set([
@@ -44,6 +48,8 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setConstraints', 'setMask',
     'setTextAutoResize', 'setLineHeight', 'setLetterSpacing',
     'setRangeFontSize', 'setRangeFontName', 'setRangeFills', 'setRangeTextDecoration', 'setRangeLineHeight', 'setRangeLetterSpacing',
+    'setRangeHyperlink', 'setRangeListOptions', 'setRangeIndentation',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // INSTANCE: 제한적 (컴포넌트 인스턴스)
   INSTANCE: new Set([
@@ -51,6 +57,7 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setEffects', 'setBlendMode',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // RECTANGLE, ELLIPSE 등 Shape 노드
   RECTANGLE: new Set([
@@ -58,28 +65,47 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setCornerSmoothing', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   ELLIPSE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   VECTOR: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   LINE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
     'setConstraints', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+  ]),
+  POLYGON: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
+  ]),
+  STAR: new Set([
+    'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setDashPattern', 'setMask',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
   // DEFAULT: 알 수 없는 타입에 대한 기본값 (가장 기본적인 메서드만)
   DEFAULT: new Set([
     'rename', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
 };
 
@@ -761,6 +787,105 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
       const unit = (args.unit as string) || 'PIXELS';
       (node as TextNode).setRangeLetterSpacing(start, end, { value, unit: unit as 'PIXELS' | 'PERCENT' });
       return { start, end, letterSpacing: { value, unit } };
+    },
+  },
+
+  // === Plugin Data ===
+  setPluginData: {
+    description: '노드에 플러그인 데이터 저장. args: { key: string, value: string }',
+    handler: (node, args) => {
+      const key = args.key as string;
+      const value = args.value as string;
+      if (!key) throw new Error('key가 필요합니다');
+      if (value === undefined) throw new Error('value가 필요합니다');
+      node.setPluginData(key, value);
+      return { key, value, stored: true };
+    },
+  },
+  getPluginData: {
+    description: '노드에서 플러그인 데이터 조회. args: { key: string }',
+    handler: (node, args) => {
+      const key = args.key as string;
+      if (!key) throw new Error('key가 필요합니다');
+      const value = node.getPluginData(key);
+      return { key, value };
+    },
+  },
+  getPluginDataKeys: {
+    description: '노드의 모든 플러그인 데이터 키 조회. args: {}',
+    handler: (node) => {
+      const keys = node.getPluginDataKeys();
+      return { keys };
+    },
+  },
+  setSharedPluginData: {
+    description: '노드에 공유 플러그인 데이터 저장. args: { namespace: string, key: string, value: string }',
+    handler: (node, args) => {
+      const namespace = args.namespace as string;
+      const key = args.key as string;
+      const value = args.value as string;
+      if (!namespace) throw new Error('namespace가 필요합니다');
+      if (!key) throw new Error('key가 필요합니다');
+      if (value === undefined) throw new Error('value가 필요합니다');
+      node.setSharedPluginData(namespace, key, value);
+      return { namespace, key, value, stored: true };
+    },
+  },
+  getSharedPluginData: {
+    description: '노드에서 공유 플러그인 데이터 조회. args: { namespace: string, key: string }',
+    handler: (node, args) => {
+      const namespace = args.namespace as string;
+      const key = args.key as string;
+      if (!namespace) throw new Error('namespace가 필요합니다');
+      if (!key) throw new Error('key가 필요합니다');
+      const value = node.getSharedPluginData(namespace, key);
+      return { namespace, key, value };
+    },
+  },
+
+  // === Text Advanced ===
+  setRangeHyperlink: {
+    description: '텍스트 일부에 하이퍼링크 추가/제거. args: { start: number, end: number, url?: string } (url 미지정 시 링크 제거)',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      if (start === undefined || end === undefined) throw new Error('start, end가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      const url = args.url as string | undefined;
+      if (url) {
+        (node as TextNode).setRangeHyperlink(start, end, { type: 'URL', value: url });
+      } else {
+        (node as TextNode).setRangeHyperlink(start, end, null);
+      }
+      return { start, end, url: url !== undefined ? url : null };
+    },
+  },
+  setRangeListOptions: {
+    description: '텍스트 일부에 목록 형식 설정. args: { start: number, end: number, listType: "ORDERED"|"UNORDERED"|"NONE" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const listType = args.listType as string;
+      if (start === undefined || end === undefined) throw new Error('start, end가 필요합니다');
+      if (!listType) throw new Error('listType이 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).setRangeListOptions(start, end, { type: listType as 'ORDERED' | 'UNORDERED' | 'NONE' });
+      return { start, end, listType };
+    },
+  },
+  setRangeIndentation: {
+    description: '텍스트 일부에 들여쓰기 설정. args: { start: number, end: number, value: number }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const value = args.value as number;
+      if (start === undefined || end === undefined || value === undefined) throw new Error('start, end, value가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).setRangeIndentation(start, end, value);
+      return { start, end, indentation: value };
     },
   },
 };

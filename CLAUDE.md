@@ -15,6 +15,7 @@
 | **Sigma 임베드 스크립트** | `addScriptTag()`로 주입하는 자체 완결형 JS 번들. AI Agent/Playwright 자동화용 | `@sigma/shared` → `dist/` |
 | **추출 스크립트** | `window.__sigma__` API로 DOM → ExtractedNode JSON 추출 | `dist/extractor.standalone.js` |
 | **Storybook 스크립트** | `window.__sigma_storybook__` API로 story 목록 조회, SPA 전환, 추출+서버 저장 | `dist/storybook.standalone.js` |
+| **Diff 스크립트** | `window.__sigma_diff__` API로 ExtractedNode 비교, 스냅샷 관리 | `dist/diff.standalone.js` |
 
 ---
 
@@ -68,7 +69,7 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 │  └────────┬─────────┘              └────────┬─────────┘                 │
 └───────────│────────────────────────────────│────────────────────────────┘
             │                                │
-            │ 브라우저 직접 조종              │ stdio
+            │ 브라우저 직접 조종              │ stdio / HTTP
             ▼                                ▼
 ┌───────────────────────────┐    ┌────────────────────────────────────────┐
 │      Chrome Browser       │    │            Local Server                 │
@@ -91,7 +92,7 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 - **Extension → Server**: Extension이 서버로 데이터를 단방향 Push (POST)
 - **Playwright → Browser**: Playwright MCP가 브라우저를 직접 조종
 - **Server ↔ Figma Plugin**: WebSocket 양방향 통신 (명령 전달 + 결과 응답)
-- **Agent → Server**: MCP (stdio)로 도구 호출
+- **Agent → Server**: MCP (stdio 또는 Streamable HTTP)로 도구 호출
 
 ---
 
@@ -117,13 +118,19 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_create_frame` | ExtractedNode JSON/HTML로 프레임 생성 | `token` | `data`, `format`, `name`, `position` |
+| `sigma_create_frame` | ExtractedNode JSON/HTML로 프레임 생성 | `token` | `data`, `html`, `format`, `name`, `position` |
 | `sigma_import_file` | 서버에 저장된 데이터로 프레임 생성 | `token`, `id` | `name`, `position` |
 | `sigma_create_rectangle` | 사각형 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `cornerRadius`, `parentId` |
 | `sigma_create_text` | 텍스트 노드 생성 (폰트 자동 로드) | `token`, `x`, `y`, `text` | `name`, `fontSize`, `fontFamily`, `fontWeight`, `fontColor`, `textAlignHorizontal`, `parentId` |
 | `sigma_create_empty_frame` | 빈 프레임 생성 (Auto Layout 지원) | `token`, `x`, `y`, `width`, `height` | `name`, `layoutMode`, `padding*`, `itemSpacing`, `fillColor`, `cornerRadius`, `layoutWrap`, `counterAxisSpacing`, `layoutSizing*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `parentId` |
 | `sigma_create_section` | Section 생성 | `token`, `name` | `position`, `size`, `children`, `fills` |
 | `sigma_create_component_instance` | 컴포넌트 인스턴스 생성 (로컬/라이브러리) | `token`, `componentKey`, `x`, `y` | `parentId` |
+| `sigma_create_ellipse` | 타원/원 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `arcData`, `parentId` |
+| `sigma_create_polygon` | 다각형 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `pointCount`, `fillColor`, `strokeColor`, `strokeWeight`, `parentId` |
+| `sigma_create_star` | 별 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `pointCount`, `innerRadius`, `fillColor`, `strokeColor`, `strokeWeight`, `parentId` |
+| `sigma_create_line` | 선 생성 | `token`, `x`, `y`, `length` | `name`, `strokeColor`, `strokeWeight`, `rotation`, `parentId` |
+| `sigma_create_vector` | 벡터 노드 생성 (SVG path) | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `vectorPaths`, `parentId` |
+| `sigma_create_image` | 이미지 노드 생성 (base64) | `token`, `x`, `y`, `width`, `height`, `imageData` | `name`, `parentId`, `scaleMode`, `cornerRadius` |
 
 ### 노드 조작 (토큰 필수)
 
@@ -137,6 +144,10 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_move_node` | 노드를 다른 부모로 이동 (reparent) | `token`, `nodeId`, `parentId` | `index` |
 | `sigma_clone_node` | 노드 복제 | `token`, `nodeId` | `parentId`, `position`, `name` |
 | `sigma_set_multiple_text_contents` | 여러 텍스트 노드 내용 일괄 변경 | `token`, `items` | — |
+| `sigma_group_nodes` | 여러 노드를 그룹으로 묶기 | `token`, `nodeIds` | `name` |
+| `sigma_ungroup` | 그룹 해제 | `token`, `nodeId` | — |
+| `sigma_flatten` | 여러 노드를 하나의 벡터로 평탄화 | `token`, `nodeIds` | `name` |
+| `sigma_boolean_operation` | Boolean 연산 (Union, Subtract, Intersect, Exclude) | `token`, `nodeIds`, `operation` | `name` |
 
 **`sigma_modify_node` 지원 메서드:**
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove
@@ -146,7 +157,8 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 - **Layout (Child)**: setLayoutAlign, setLayoutGrow, setLayoutPositioning
 - **Constraints**: setConstraints, setMinWidth, setMaxWidth, setMinHeight, setMaxHeight
 - **Text**: setCharacters, setFontSize, setTextAlignHorizontal, setTextAlignVertical, setFontFamily, setFontWeight, setTextAutoResize, setLineHeight, setLetterSpacing
-- **Rich Text (Range)**: setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing
+- **Rich Text (Range)**: setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing, setRangeHyperlink, setRangeListOptions, setRangeIndentation
+- **Plugin Data**: setPluginData, getPluginData, getPluginDataKeys, setSharedPluginData, getSharedPluginData
 
 ### 조회/검색 (토큰 필수)
 
@@ -161,6 +173,8 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_get_styles` | 로컬 스타일 조회 (Paint, Text, Effect, Grid) | `token` | — |
 | `sigma_get_selection` | 현재 선택된 노드 목록 | `token` | — |
 | `sigma_set_selection` | 특정 노드 선택 + 뷰포트 이동 | `token`, `nodeIds` | `zoomToFit` |
+| `sigma_get_viewport` | 현재 뷰포트 정보 조회 (center, zoom, bounds) | `token` | — |
+| `sigma_set_viewport` | 뷰포트 직접 설정 (center+zoom 또는 nodeIds로 이동) | `token` | `center`, `zoom`, `nodeIds` |
 | `sigma_read_my_design` | 현재 선택된 노드의 상세 정보 조회 | `token` | — |
 | `sigma_scan_text_nodes` | 하위 모든 텍스트 노드 스캔 | `token`, `nodeId` | — |
 | `sigma_scan_nodes_by_types` | 하위에서 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
@@ -200,15 +214,46 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_extract_node` | Figma 노드를 지정 포맷(JSON/HTML)으로 추출 | `token`, `nodeId` | `format` |
 | `sigma_test_roundtrip` | 노드를 지정 포맷으로 추출 → 재생성 라운드트립 테스트 | `token`, `nodeId` | `format` |
 
+### 페이지 관리 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_create_page` | 새 페이지 생성 | `token`, `name` | — |
+| `sigma_rename_page` | 페이지 이름 변경 | `token`, `pageId`, `name` | — |
+| `sigma_switch_page` | 페이지 전환 | `token`, `pageId` | — |
+| `sigma_delete_page` | 페이지 삭제 (마지막 페이지 불가) | `token`, `pageId` | — |
+
+### 스타일 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_create_paint_style` | Paint(색상) 스타일 생성 | `token`, `name`, `paints` | `description` |
+| `sigma_create_text_style` | Text 스타일 생성 | `token`, `name` | `fontSize`, `fontFamily`, `fontWeight`, `lineHeight`, `letterSpacing`, `textCase`, `textDecoration`, `description` |
+| `sigma_create_effect_style` | Effect(그림자/블러) 스타일 생성 | `token`, `name`, `effects` | `description` |
+| `sigma_create_grid_style` | Grid 스타일 생성 | `token`, `name`, `grids` | `description` |
+| `sigma_apply_style` | 노드에 스타일 적용 | `token`, `nodeId`, `styleType`, `styleId` | — |
+| `sigma_delete_style` | 스타일 삭제 | `token`, `styleId` | — |
+
+### 변수 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_create_variable_collection` | 변수 컬렉션 생성 | `token`, `name` | — |
+| `sigma_create_variable` | 변수 생성 (COLOR/FLOAT/STRING/BOOLEAN) | `token`, `name`, `collectionId`, `resolvedType` | — |
+| `sigma_get_variables` | 로컬 변수/컬렉션 조회 | `token` | `type` |
+| `sigma_set_variable_value` | 변수 모드별 값 설정 | `token`, `variableId`, `modeId`, `value` | — |
+| `sigma_bind_variable` | 노드 속성에 변수 바인딩 | `token`, `nodeId`, `field`, `variableId` | — |
+| `sigma_add_variable_mode` | 컬렉션에 모드 추가 (Light/Dark 등) | `token`, `collectionId`, `name` | — |
+
 ### 데이터 저장/관리 (토큰 불필요)
 
-| 도구 | 설명 | 필수 인자 |
-|------|------|-----------|
-| `save_extracted` | 추출 데이터 저장 | `name`, `data` |
-| `list_saved` | 저장된 컴포넌트 목록 | — |
-| `load_extracted` | 저장된 컴포넌트 로드 | `id` 또는 `name` |
-| `delete_extracted` | 저장된 컴포넌트 삭제 | `id` |
-| `save_and_import` | 저장 + 즉시 Figma 임포트 (토큰 필수) | `token`, `name` |
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `save_extracted` | 추출 데이터 저장 | `name`, `data` | — |
+| `list_saved` | 저장된 컴포넌트 목록 | — | — |
+| `load_extracted` | 저장된 컴포넌트 로드 | `id` 또는 `name` | — |
+| `delete_extracted` | 저장된 컴포넌트 삭제 | `id` | — |
+| `save_and_import` | 저장 + 즉시 Figma 임포트 (토큰 필수) | `token`, `name` | `data`, `html`, `format` |
 
 ### 스크립트/스토리지/상태
 
@@ -234,17 +279,39 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 
 ### 임베드 스크립트 API
 
-**추출 스크립트 (`extractor.standalone.js`):**
-- `window.__sigma__.extract(selector)` — CSS 선택자로 요소 추출
-- `window.__sigma__.extractAt(x, y)` — 좌표로 요소 추출
-- `window.__sigma__.version` — 버전 문자열
+**추출 스크립트 (`extractor.standalone.js`) — `window.__sigma__`:**
+- `extract(selectorOrElement)` — CSS 선택자 또는 Element로 요소 추출
+- `extractAt(x, y)` — 좌표로 요소 추출
+- `extractAll(selector)` — 선택자에 매칭되는 모든 요소 추출
+- `extractVisible(options?)` — 화면에 보이는 요소 추출 (`minWidth`, `minHeight` 옵션)
+- `findByAlt(altText)` — alt 텍스트로 요소 검색
+- `findByText(text, tagName?)` — 텍스트 내용으로 요소 검색
+- `findForm(action?)` — 폼 요소 검색
+- `findContainer(options)` — 컨테이너 요소 검색
+- `getElementInfo(selector)` — 요소의 상세 정보 조회
+- `getPageStructure()` — 페이지 전체 구조 조회
+- `getDesignTokens(selectorOrElement?)` — CSS 변수 기반 디자인 토큰 추출
+- `version` — 버전 문자열
 
-**Storybook 스크립트 (`storybook.standalone.js`):**
+**Storybook 스크립트 (`storybook.standalone.js`) — `window.__sigma_storybook__`:**
 - `getStories(baseUrl?)` — story 목록 조회 (메인 프레임)
 - `navigateToStory(storyId, options?)` — SPA story 전환 + 렌더링 대기 (메인 프레임)
 - `waitForStoryRendered(timeout?)` — 렌더링 완료 대기
 - `extractStory(selector?)` — ExtractedNode 추출 (iframe)
 - `extractAndSave(name, serverUrl?, selector?)` — 추출 + 서버 저장, ID 반환 (iframe)
+- `getStoryRoot()` — story 루트 요소 반환
+- `getCurrentStoryId()` — 현재 표시 중인 story ID
+- `getStoryIframeUrl(storyId, baseUrl?)` — story iframe URL 생성
+- `version` — 버전 문자열
+
+**Diff 스크립트 (`diff.standalone.js`) — `window.__sigma_diff__`:**
+- `compare(nodeA, nodeB)` — 두 ExtractedNode 비교, 차이점 반환
+- `snapshot(selectorOrNode)` — 요소/노드의 스냅샷 저장
+- `compareWithSnapshot(snapshotId, selectorOrNode)` — 저장된 스냅샷과 현재 상태 비교
+- `listSnapshots()` — 저장된 스냅샷 목록 조회
+- `deleteSnapshot(id)` — 스냅샷 삭제
+- `clearSnapshots()` — 모든 스냅샷 삭제
+- `version` — 버전 문자열
 
 ### 추출 로직 직접 작성 금지
 
@@ -341,12 +408,20 @@ packages/
 │       │   ├── html-parser.ts # HTML → ExtractedNode 파싱
 │       │   └── index.ts       # Barrel export
 │       ├── node-ops/          # Figma 노드 조작
+│       │   ├── index.ts       # Barrel export
+│       │   ├── modify.ts      # 노드 속성 수정 (53개 메서드)
+│       │   ├── create.ts      # 사각형/텍스트/빈 프레임 생성
+│       │   ├── query.ts       # 노드 정보 조회 (단일/배치/문서/스타일)
+│       │   ├── batch.ts       # 배치 작업 (스캔/일괄수정/일괄삭제)
+│       │   ├── selection.ts   # 선택 관리 (get/set)
+│       │   ├── components.ts  # 컴포넌트/인스턴스 관리
+│       │   ├── annotations.ts # 주석 관리
+│       │   ├── prototyping.ts # 프로토타이핑/인터랙션
 │       │   ├── frames.ts      # 프레임 목록/삭제
 │       │   ├── section.ts     # Section 생성
 │       │   ├── move.ts        # 이동/복제
 │       │   ├── export.ts      # 이미지 export
 │       │   ├── tree.ts        # 트리 탐색/검색
-│       │   ├── modify.ts      # 노드 속성 수정
 │       │   └── page.ts        # 페이지 관리
 │       ├── extractor/         # Figma → JSON 역추출
 │       └── utils.ts           # createSolidPaint, createDefaultStyles
@@ -412,7 +487,7 @@ packages/
 |--------|------|----------|
 | HTTP Server | 19832 | HTTP |
 | WebSocket Server | 19831 | WebSocket |
-| MCP Server | — | stdio |
+| MCP Server | 19832 (`/api/mcp`) | stdio / Streamable HTTP |
 
 ## 개발 명령어
 

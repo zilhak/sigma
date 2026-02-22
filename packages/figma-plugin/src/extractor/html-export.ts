@@ -2,12 +2,32 @@ import type { ExtractedNode, ComputedStyles, RGBA } from '@sigma/shared';
 
 /**
  * ExtractedNode를 HTML 문자열로 변환
+ * parentIsAbsolute: 부모가 절대 좌표 배치(non-flex)인지 여부
  */
-export function convertExtractedNodeToHTML(node: ExtractedNode): string {
+export function convertExtractedNodeToHTML(node: ExtractedNode, parentIsAbsolute?: boolean): string {
   const { tagName, className, textContent, styles, children } = node;
 
+  // SVG 노드: svgString이 있으면 그대로 출력
+  if (node.svgString) {
+    return node.svgString;
+  }
+
   // 스타일 문자열 생성
-  const styleStr = buildStyleString(styles);
+  let styleStr = buildStyleString(styles);
+
+  // 부모가 절대 좌표 배치면 position/left/top 추가
+  if (parentIsAbsolute && node.boundingRect) {
+    const positionParts: string[] = [];
+    positionParts.push('position: absolute');
+    if (node.boundingRect.x !== 0) positionParts.push(`left: ${node.boundingRect.x}px`);
+    if (node.boundingRect.y !== 0) positionParts.push(`top: ${node.boundingRect.y}px`);
+    const posStr = positionParts.join('; ');
+    styleStr = posStr + (styleStr ? '; ' + styleStr : '');
+  }
+
+  // 이 노드의 자식이 절대 좌표인지 판단: display가 flex가 아니고 자식이 있으면 절대 좌표
+  const isAbsoluteContainer = children && children.length > 0 &&
+    styles.display !== 'flex';
 
   // 클래스 속성
   const classAttr = className ? ` class="${escapeHTMLAttrForExport(className)}"` : '';
@@ -20,10 +40,10 @@ export function convertExtractedNodeToHTML(node: ExtractedNode): string {
     return `<${tagName}${classAttr}${styleAttr}>${escapeHTMLContentForExport(textContent)}</${tagName}>`;
   }
 
-  // 자식 노드 재귀 처리
+  // 자식 노드 재귀 처리 (절대 좌표 여부 전달)
   let childrenHTML = '';
   if (children && children.length > 0) {
-    childrenHTML = children.map(child => convertExtractedNodeToHTML(child)).join('\n');
+    childrenHTML = children.map(child => convertExtractedNodeToHTML(child, isAbsoluteContainer)).join('\n');
   }
 
   // 텍스트 + 자식 모두 있는 경우
@@ -61,8 +81,20 @@ export function buildStyleString(styles: ComputedStyles): string {
       parts.push(`align-items: ${styles.alignItems}`);
     }
   }
+  // flex-wrap
+  if (styles.flexWrap && styles.flexWrap !== 'nowrap') {
+    parts.push(`flex-wrap: ${styles.flexWrap}`);
+  }
   if (styles.gap > 0) {
     parts.push(`gap: ${styles.gap}px`);
+  }
+
+  // Flex 아이템 속성
+  if (styles.flexGrow > 0) {
+    parts.push(`flex-grow: ${styles.flexGrow}`);
+  }
+  if (styles.alignSelf && styles.alignSelf !== 'auto') {
+    parts.push(`align-self: ${styles.alignSelf}`);
   }
 
   // 패딩
@@ -121,6 +153,11 @@ export function buildStyleString(styles: ComputedStyles): string {
   }
   if (styles.textAlign && styles.textAlign !== 'left') {
     parts.push(`text-align: ${styles.textAlign}`);
+  }
+
+  // overflow
+  if (styles.overflow && styles.overflow !== 'visible') {
+    parts.push(`overflow: ${styles.overflow}`);
   }
 
   // 불투명도

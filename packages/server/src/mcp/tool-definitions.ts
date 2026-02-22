@@ -331,7 +331,9 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
 - Layout (Child): setLayoutAlign, setLayoutGrow, setLayoutPositioning
 - Constraints: setConstraints, setMinWidth, setMaxWidth, setMinHeight, setMaxHeight
 - Text: setCharacters, setFontSize, setTextAlignHorizontal, setTextAlignVertical, setFontFamily, setFontWeight, setTextAutoResize, setLineHeight, setLetterSpacing
-- Rich Text (Range): setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing`,
+- Rich Text (Range): setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing
+- Rich Text (Advanced): setRangeHyperlink, setRangeListOptions, setRangeIndentation
+- Plugin Data: setPluginData, getPluginData, getPluginDataKeys, setSharedPluginData, getSharedPluginData`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -914,6 +916,754 @@ Auto Layout, 패딩, 정렬 등 모든 프레임 옵션을 지원합니다.`,
         cornerRadius: { type: 'number', description: '모서리 라운드' },
       },
       required: ['token', 'x', 'y', 'width', 'height'],
+    },
+  },
+
+  // === Viewport (토큰 필수) ===
+  {
+    name: 'sigma_get_viewport',
+    description: `현재 Figma 뷰포트 상태(중심점, 줌, 범위)를 조회합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_set_viewport',
+    description: `Figma 뷰포트 위치와 줌을 변경합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+**사용 방법 (택 1):**
+- center + zoom: 직접 위치/줌 설정
+- nodeIds: 지정된 노드들이 보이도록 자동 조정 (scrollAndZoomIntoView)
+
+nodeIds를 지정하면 center/zoom은 무시됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        center: {
+          type: 'object',
+          description: '뷰포트 중심점',
+          properties: {
+            x: { type: 'number' },
+            y: { type: 'number' },
+          },
+        },
+        zoom: { type: 'number', description: '줌 레벨 (0.01~256, 1=100%)' },
+        nodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '이 노드들이 보이도록 자동 조정 (center/zoom 대신 사용)',
+        },
+      },
+      required: ['token'],
+    },
+  },
+
+  // === Page Management (토큰 필수) ===
+  {
+    name: 'sigma_create_page',
+    description: `새 페이지를 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '페이지 이름 (선택, 미지정 시 기본 이름)' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_rename_page',
+    description: `페이지 이름을 변경합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+sigma_list_pages로 pageId를 먼저 확인하세요.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        pageId: { type: 'string', description: '대상 페이지 ID' },
+        name: { type: 'string', description: '새 페이지 이름' },
+      },
+      required: ['token', 'pageId', 'name'],
+    },
+  },
+  {
+    name: 'sigma_switch_page',
+    description: `현재 활성 페이지를 전환합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+sigma_list_pages로 pageId를 먼저 확인하세요.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        pageId: { type: 'string', description: '전환할 페이지 ID' },
+      },
+      required: ['token', 'pageId'],
+    },
+  },
+  {
+    name: 'sigma_delete_page',
+    description: `페이지를 삭제합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+마지막 남은 페이지는 삭제할 수 없습니다.
+현재 활성 페이지를 삭제하면 자동으로 다른 페이지로 전환됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        pageId: { type: 'string', description: '삭제할 페이지 ID' },
+      },
+      required: ['token', 'pageId'],
+    },
+  },
+
+  // === Group / Ungroup / Flatten (토큰 필수) ===
+  {
+    name: 'sigma_group_nodes',
+    description: `여러 노드를 Group으로 묶습니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+선택한 노드들이 하나의 Group 노드 아래로 묶입니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '그룹화할 노드 ID 배열 (최소 1개)',
+        },
+        name: { type: 'string', description: 'Group 이름 (선택)' },
+      },
+      required: ['token', 'nodeIds'],
+    },
+  },
+  {
+    name: 'sigma_ungroup',
+    description: `Group을 해제하여 자식 노드들을 부모로 이동시킵니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+대상 노드는 반드시 GROUP 타입이어야 합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '해제할 Group 노드 ID' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+  {
+    name: 'sigma_flatten',
+    description: `여러 노드를 하나의 Vector 노드로 병합(Flatten)합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+원본 노드들은 삭제되고, 병합된 단일 Vector 노드가 생성됩니다.
+복잡한 도형을 단순화하거나 Boolean 연산 결과를 확정할 때 사용합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Flatten할 노드 ID 배열 (최소 1개)',
+        },
+        name: { type: 'string', description: '결과 Vector 노드 이름 (선택)' },
+      },
+      required: ['token', 'nodeIds'],
+    },
+  },
+
+  // === Boolean Operations (토큰 필수) ===
+  {
+    name: 'sigma_boolean_operation',
+    description: `여러 노드에 Boolean 연산(합집합/차집합/교집합/배타적 합집합)을 수행합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+최소 2개의 노드가 필요합니다. 원본 노드들은 BooleanOperationNode로 대체됩니다.
+
+**operation 종류:**
+- UNION: 합집합 (모든 도형을 합침)
+- SUBTRACT: 차집합 (첫 번째 도형에서 나머지를 뺌)
+- INTERSECT: 교집합 (겹치는 영역만 남김)
+- EXCLUDE: 배타적 합집합 (겹치는 영역을 제외)`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '연산 대상 노드 ID 배열 (최소 2개)',
+        },
+        operation: {
+          type: 'string',
+          enum: ['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE'],
+          description: 'Boolean 연산 종류',
+        },
+        name: { type: 'string', description: '결과 노드 이름 (선택)' },
+      },
+      required: ['token', 'nodeIds', 'operation'],
+    },
+  },
+
+  // === Create Shapes (토큰 필수) ===
+  {
+    name: 'sigma_create_ellipse',
+    description: `Figma에 타원(Ellipse)을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+arcData를 지정하면 반원, 부채꼴, 도넛 등의 호(arc) 형태를 만들 수 있습니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        width: { type: 'number', description: '너비' },
+        height: { type: 'number', description: '높이' },
+        name: { type: 'string', description: '노드 이름 (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        fillColor: {
+          type: 'object',
+          description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeColor: {
+          type: 'object',
+          description: '테두리 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeWeight: { type: 'number', description: '테두리 두께' },
+        arcData: {
+          type: 'object',
+          description: '호(arc) 데이터 (선택). 반원, 부채꼴, 도넛 등',
+          properties: {
+            startingAngle: { type: 'number', description: '시작 각도 (라디안, 기본 0)' },
+            endingAngle: { type: 'number', description: '끝 각도 (라디안, 기본 2π)' },
+            innerRadius: { type: 'number', description: '내부 반지름 비율 (0~0.9, 도넛 형태)' },
+          },
+        },
+      },
+      required: ['token', 'x', 'y', 'width', 'height'],
+    },
+  },
+  {
+    name: 'sigma_create_polygon',
+    description: `Figma에 다각형(Polygon)을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+pointCount로 꼭짓점 수를 지정합니다 (3=삼각형, 5=오각형, 6=육각형 등).`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        width: { type: 'number', description: '너비' },
+        height: { type: 'number', description: '높이' },
+        name: { type: 'string', description: '노드 이름 (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        fillColor: {
+          type: 'object',
+          description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeColor: {
+          type: 'object',
+          description: '테두리 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeWeight: { type: 'number', description: '테두리 두께' },
+        pointCount: { type: 'number', description: '꼭짓점 수 (기본 3, 삼각형)' },
+      },
+      required: ['token', 'x', 'y', 'width', 'height'],
+    },
+  },
+  {
+    name: 'sigma_create_star',
+    description: `Figma에 별(Star)을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+pointCount로 꼭짓점 수, innerRadius로 내부 반지름 비율을 조절합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        width: { type: 'number', description: '너비' },
+        height: { type: 'number', description: '높이' },
+        name: { type: 'string', description: '노드 이름 (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        fillColor: {
+          type: 'object',
+          description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeColor: {
+          type: 'object',
+          description: '테두리 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeWeight: { type: 'number', description: '테두리 두께' },
+        pointCount: { type: 'number', description: '꼭짓점 수 (기본 5)' },
+        innerRadius: { type: 'number', description: '내부 반지름 비율 (0~1, 기본 0.382)' },
+      },
+      required: ['token', 'x', 'y', 'width', 'height'],
+    },
+  },
+  {
+    name: 'sigma_create_line',
+    description: `Figma에 선(Line)을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+기본적으로 수평선이 생성되며, rotation으로 각도를 조절할 수 있습니다.
+strokeColor 미지정 시 검은색(#000) 선이 생성됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        length: { type: 'number', description: '선 길이' },
+        name: { type: 'string', description: '노드 이름 (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        strokeColor: {
+          type: 'object',
+          description: '선 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 } (기본 검은색)',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeWeight: { type: 'number', description: '선 두께 (기본 1)' },
+        rotation: { type: 'number', description: '회전 각도 (도, 기본 0 = 수평)' },
+      },
+      required: ['token', 'x', 'y', 'length'],
+    },
+  },
+  {
+    name: 'sigma_create_vector',
+    description: `Figma에 벡터(Vector) 노드를 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+SVG 경로 데이터(vectorPaths)로 자유 형태의 도형을 만들 수 있습니다.
+
+**vectorPaths 형식:**
+\`[{ data: "M 0 0 L 100 0 L 50 100 Z", windingRule: "NONZERO" }]\`
+data는 SVG path의 d 속성과 동일한 형식입니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        width: { type: 'number', description: '너비' },
+        height: { type: 'number', description: '높이' },
+        name: { type: 'string', description: '노드 이름 (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        fillColor: {
+          type: 'object',
+          description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeColor: {
+          type: 'object',
+          description: '테두리 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
+          properties: {
+            r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' },
+          },
+        },
+        strokeWeight: { type: 'number', description: '테두리 두께' },
+        vectorPaths: {
+          type: 'array',
+          description: 'SVG 경로 데이터 배열',
+          items: {
+            type: 'object',
+            properties: {
+              data: { type: 'string', description: 'SVG path d 속성 (예: "M 0 0 L 100 0 L 50 100 Z")' },
+              windingRule: { type: 'string', enum: ['NONZERO', 'EVENODD'], description: '채우기 규칙 (기본 NONZERO)' },
+            },
+            required: ['data'],
+          },
+        },
+      },
+      required: ['token', 'x', 'y', 'width', 'height'],
+    },
+  },
+
+  // === Variables (토큰 필수) ===
+  {
+    name: 'sigma_create_variable_collection',
+    description: `변수 컬렉션(Variable Collection)을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+컬렉션은 변수를 그룹으로 묶는 컨테이너입니다. 기본 모드가 하나 자동 생성됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '컬렉션 이름 (예: "Colors", "Spacing")' },
+      },
+      required: ['token', 'name'],
+    },
+  },
+  {
+    name: 'sigma_create_variable',
+    description: `변수(Variable)를 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+변수는 컬렉션에 속해야 합니다. sigma_create_variable_collection으로 먼저 컬렉션을 생성하세요.
+
+**resolvedType:**
+- COLOR: RGBA 색상 값
+- FLOAT: 숫자 값 (크기, 간격 등)
+- STRING: 문자열 값
+- BOOLEAN: true/false`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '변수 이름 (예: "primary-color", "spacing-sm")' },
+        collectionId: { type: 'string', description: '컬렉션 ID' },
+        resolvedType: {
+          type: 'string',
+          description: '변수 타입',
+          enum: ['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'],
+        },
+      },
+      required: ['token', 'name', 'collectionId', 'resolvedType'],
+    },
+  },
+  {
+    name: 'sigma_get_variables',
+    description: `로컬 변수 컬렉션과 변수 목록을 조회합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+각 변수의 모드별 값(valuesByMode)도 함께 반환합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        type: {
+          type: 'string',
+          description: '조회할 변수 타입 필터 (선택)',
+          enum: ['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'],
+        },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_set_variable_value',
+    description: `변수의 특정 모드에 값을 설정합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+**값 형식 (resolvedType별):**
+- COLOR: { r: 0~1, g: 0~1, b: 0~1, a: 0~1 }
+- FLOAT: number
+- STRING: "text"
+- BOOLEAN: true/false`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        variableId: { type: 'string', description: '변수 ID' },
+        modeId: { type: 'string', description: '모드 ID (sigma_get_variables에서 확인)' },
+        value: { description: '설정할 값 (타입에 맞게)' },
+      },
+      required: ['token', 'variableId', 'modeId', 'value'],
+    },
+  },
+  {
+    name: 'sigma_bind_variable',
+    description: `노드 속성에 변수를 바인딩합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+바인딩하면 변수 값이 변경될 때 노드 속성도 자동으로 업데이트됩니다.
+
+**field 예시:** fills, strokes, opacity, width, height, itemSpacing, paddingLeft 등`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '대상 노드 ID' },
+        field: { type: 'string', description: '바인딩할 노드 속성 필드명' },
+        variableId: { type: 'string', description: '바인딩할 변수 ID' },
+      },
+      required: ['token', 'nodeId', 'field', 'variableId'],
+    },
+  },
+  {
+    name: 'sigma_add_variable_mode',
+    description: `변수 컬렉션에 새 모드를 추가합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+모드는 Light/Dark 테마, 디바이스 크기 등을 표현합니다.
+Figma 무료 플랜에서는 최대 1개의 모드만 지원합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        collectionId: { type: 'string', description: '컬렉션 ID' },
+        name: { type: 'string', description: '모드 이름 (예: "Dark", "Mobile")' },
+      },
+      required: ['token', 'collectionId', 'name'],
+    },
+  },
+
+  // === Styles (토큰 필수) ===
+  {
+    name: 'sigma_create_paint_style',
+    description: `Paint(색상) 스타일을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+생성된 스타일은 sigma_apply_style로 노드에 적용할 수 있습니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '스타일 이름 (예: "Primary/Blue")' },
+        paints: {
+          type: 'array',
+          description: '페인트 배열',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['SOLID'], description: '페인트 타입' },
+              color: {
+                type: 'object',
+                description: '색상 { r: 0~1, g: 0~1, b: 0~1 }',
+                properties: { r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' } },
+                required: ['r', 'g', 'b'],
+              },
+              opacity: { type: 'number', description: '불투명도 0~1 (기본 1)' },
+            },
+            required: ['type', 'color'],
+          },
+        },
+        description: { type: 'string', description: '스타일 설명 (선택)' },
+      },
+      required: ['token', 'name', 'paints'],
+    },
+  },
+  {
+    name: 'sigma_create_text_style',
+    description: `Text 스타일을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+폰트 자동 로드 후 스타일을 생성합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '스타일 이름 (예: "Heading/H1")' },
+        fontSize: { type: 'number', description: '폰트 크기 (선택)' },
+        fontFamily: { type: 'string', description: '폰트 패밀리 (기본 Inter)' },
+        fontWeight: { type: 'string', description: '폰트 두께 (기본 Regular)' },
+        lineHeight: {
+          description: '줄 높이 — "AUTO" 또는 { value, unit: "PIXELS"|"PERCENT" }',
+        },
+        letterSpacing: {
+          type: 'object',
+          description: '자간 { value, unit: "PIXELS"|"PERCENT" }',
+          properties: {
+            value: { type: 'number' },
+            unit: { type: 'string', enum: ['PIXELS', 'PERCENT'] },
+          },
+        },
+        textCase: { type: 'string', enum: ['ORIGINAL', 'UPPER', 'LOWER', 'TITLE'], description: '텍스트 대소문자' },
+        textDecoration: { type: 'string', enum: ['NONE', 'UNDERLINE', 'STRIKETHROUGH'], description: '텍스트 장식' },
+        description: { type: 'string', description: '스타일 설명 (선택)' },
+      },
+      required: ['token', 'name'],
+    },
+  },
+  {
+    name: 'sigma_create_effect_style',
+    description: `Effect(그림자/블러) 스타일을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+**effect type:**
+- DROP_SHADOW: 외부 그림자
+- INNER_SHADOW: 내부 그림자
+- LAYER_BLUR: 레이어 블러
+- BACKGROUND_BLUR: 배경 블러`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '스타일 이름 (예: "Shadow/Large")' },
+        effects: {
+          type: 'array',
+          description: '효과 배열',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR'] },
+              radius: { type: 'number', description: '블러 반경' },
+              color: {
+                type: 'object',
+                description: '색상 { r, g, b, a } (그림자용)',
+                properties: { r: { type: 'number' }, g: { type: 'number' }, b: { type: 'number' }, a: { type: 'number' } },
+              },
+              offset: {
+                type: 'object',
+                description: '오프셋 { x, y } (그림자용)',
+                properties: { x: { type: 'number' }, y: { type: 'number' } },
+              },
+              spread: { type: 'number', description: '퍼짐 (그림자용)' },
+              visible: { type: 'boolean', description: '표시 여부 (기본 true)' },
+            },
+            required: ['type', 'radius'],
+          },
+        },
+        description: { type: 'string', description: '스타일 설명 (선택)' },
+      },
+      required: ['token', 'name', 'effects'],
+    },
+  },
+  {
+    name: 'sigma_create_grid_style',
+    description: `Grid(그리드) 스타일을 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+**pattern:** COLUMNS, ROWS, GRID
+**alignment (COLUMNS/ROWS):** MIN, MAX, CENTER, STRETCH`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        name: { type: 'string', description: '스타일 이름 (예: "Grid/12col")' },
+        grids: {
+          type: 'array',
+          description: '그리드 배열',
+          items: {
+            type: 'object',
+            properties: {
+              pattern: { type: 'string', enum: ['COLUMNS', 'ROWS', 'GRID'], description: '그리드 패턴' },
+              sectionSize: { type: 'number', description: '셀 크기 (GRID: 기본 10, COLUMNS/ROWS: 기본 60)' },
+              count: { type: 'number', description: '컬럼/로우 수 (기본 12, COLUMNS/ROWS만)' },
+              gutterSize: { type: 'number', description: '거터 크기 (기본 20, COLUMNS/ROWS만)' },
+              offset: { type: 'number', description: '오프셋 (기본 0, COLUMNS/ROWS만)' },
+              alignment: { type: 'string', enum: ['MIN', 'MAX', 'CENTER', 'STRETCH'], description: '정렬 (COLUMNS/ROWS만)' },
+              visible: { type: 'boolean', description: '표시 여부 (기본 true)' },
+            },
+            required: ['pattern'],
+          },
+        },
+        description: { type: 'string', description: '스타일 설명 (선택)' },
+      },
+      required: ['token', 'name', 'grids'],
+    },
+  },
+  {
+    name: 'sigma_apply_style',
+    description: `노드에 스타일을 적용합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+sigma_get_styles로 스타일 ID를 먼저 확인하세요.
+
+**styleType:**
+- fill: Paint 스타일을 fills에 적용
+- stroke: Paint 스타일을 strokes에 적용
+- text: Text 스타일 적용 (TEXT 노드만)
+- effect: Effect 스타일 적용
+- grid: Grid 스타일 적용 (FRAME/COMPONENT만)`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '대상 노드 ID' },
+        styleType: {
+          type: 'string',
+          description: '스타일 타입',
+          enum: ['fill', 'stroke', 'text', 'effect', 'grid'],
+        },
+        styleId: { type: 'string', description: '적용할 스타일 ID' },
+      },
+      required: ['token', 'nodeId', 'styleType', 'styleId'],
+    },
+  },
+  {
+    name: 'sigma_delete_style',
+    description: `스타일을 삭제합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+sigma_get_styles로 스타일 ID를 먼저 확인하세요.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        styleId: { type: 'string', description: '삭제할 스타일 ID' },
+      },
+      required: ['token', 'styleId'],
+    },
+  },
+
+  // === Image (토큰 필수) ===
+  {
+    name: 'sigma_create_image',
+    description: `Figma에 이미지 노드를 생성합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
+base64 인코딩된 이미지 데이터를 받아 Rectangle에 IMAGE fill로 적용합니다.
+
+**scaleMode:**
+- FILL (기본): 프레임에 맞게 이미지를 채움 (잘릴 수 있음)
+- FIT: 프레임 안에 이미지를 맞춤 (여백 가능)
+- CROP: 원본 크기 유지, 잘림
+- TILE: 타일 반복`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        x: { type: 'number', description: 'X 좌표' },
+        y: { type: 'number', description: 'Y 좌표' },
+        width: { type: 'number', description: '너비' },
+        height: { type: 'number', description: '높이' },
+        imageData: { type: 'string', description: 'base64 인코딩된 이미지 데이터' },
+        name: { type: 'string', description: '노드 이름 (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        scaleMode: {
+          type: 'string',
+          description: '이미지 스케일 모드 (기본 FILL)',
+          enum: ['FILL', 'FIT', 'CROP', 'TILE'],
+        },
+        cornerRadius: { type: 'number', description: '모서리 둥글기 (선택)' },
+      },
+      required: ['token', 'x', 'y', 'width', 'height', 'imageData'],
     },
   },
 

@@ -60,6 +60,73 @@ export function getTargetPage(pageId?: string): PageNode {
   return figma.currentPage;
 }
 
+// === 페이지 관리 ===
+
+export interface CreatePageResult {
+  pageId: string;
+  name: string;
+  index: number;
+}
+
+export interface RenamePageResult {
+  pageId: string;
+  oldName: string;
+  newName: string;
+}
+
+export interface SwitchPageResult {
+  pageId: string;
+  name: string;
+}
+
+export interface DeletePageResult {
+  deleted: boolean;
+  name: string;
+}
+
+export function createPage(name?: string): CreatePageResult {
+  const page = figma.createPage();
+  if (name) page.name = name;
+  return {
+    pageId: page.id,
+    name: page.name,
+    index: figma.root.children.indexOf(page),
+  };
+}
+
+export function renamePage(pageId: string, name: string): RenamePageResult {
+  const page = figma.root.children.find(p => p.id === pageId);
+  if (!page) throw new Error(`페이지를 찾을 수 없습니다: ${pageId}`);
+  const oldName = page.name;
+  page.name = name;
+  return { pageId: page.id, oldName, newName: name };
+}
+
+export function switchPage(pageId: string): SwitchPageResult {
+  const page = figma.root.children.find(p => p.id === pageId);
+  if (!page) throw new Error(`페이지를 찾을 수 없습니다: ${pageId}`);
+  figma.currentPage = page;
+  return { pageId: page.id, name: page.name };
+}
+
+export function deletePage(pageId: string): DeletePageResult {
+  if (figma.root.children.length <= 1) {
+    throw new Error('마지막 페이지는 삭제할 수 없습니다');
+  }
+  const page = figma.root.children.find(p => p.id === pageId);
+  if (!page) throw new Error(`페이지를 찾을 수 없습니다: ${pageId}`);
+  const pageName = page.name;
+
+  // 현재 페이지를 삭제하는 경우, 다른 페이지로 먼저 전환
+  if (figma.currentPage.id === pageId) {
+    const otherPage = figma.root.children.find(p => p.id !== pageId);
+    if (otherPage) figma.currentPage = otherPage;
+  }
+
+  page.remove();
+  return { deleted: true, name: pageName };
+}
+
 // 파일 정보 전달 (전체 페이지 목록 포함)
 export function sendFileInfo() {
   const { fileKey, source } = getEffectiveFileKey();

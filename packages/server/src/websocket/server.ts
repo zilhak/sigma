@@ -214,6 +214,34 @@ export class FigmaWebSocketServer {
       case 'GET_REACTIONS_RESULT':
       case 'ADD_REACTION_RESULT':
       case 'REMOVE_REACTIONS_RESULT':
+      case 'CREATE_ELLIPSE_RESULT':
+      case 'CREATE_POLYGON_RESULT':
+      case 'CREATE_STAR_RESULT':
+      case 'CREATE_LINE_RESULT':
+      case 'CREATE_VECTOR_RESULT':
+      case 'CREATE_IMAGE_NODE_RESULT':
+      case 'CREATE_PAINT_STYLE_RESULT':
+      case 'CREATE_TEXT_STYLE_RESULT':
+      case 'CREATE_EFFECT_STYLE_RESULT':
+      case 'CREATE_GRID_STYLE_RESULT':
+      case 'APPLY_STYLE_RESULT':
+      case 'DELETE_STYLE_RESULT':
+      case 'CREATE_VARIABLE_COLLECTION_RESULT':
+      case 'CREATE_VARIABLE_RESULT':
+      case 'GET_VARIABLES_RESULT':
+      case 'SET_VARIABLE_VALUE_RESULT':
+      case 'BIND_VARIABLE_RESULT':
+      case 'ADD_VARIABLE_MODE_RESULT':
+      case 'GROUP_NODES_RESULT':
+      case 'UNGROUP_NODES_RESULT':
+      case 'FLATTEN_NODES_RESULT':
+      case 'BOOLEAN_OPERATION_RESULT':
+      case 'CREATE_PAGE_RESULT':
+      case 'RENAME_PAGE_RESULT':
+      case 'SWITCH_PAGE_RESULT':
+      case 'DELETE_PAGE_RESULT':
+      case 'GET_VIEWPORT_RESULT':
+      case 'SET_VIEWPORT_RESULT':
         this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
         break;
     }
@@ -812,6 +840,54 @@ export class FigmaWebSocketServer {
     });
   }
 
+  // === Group / Ungroup / Flatten ===
+
+  async groupNodes(nodeIds: string[], name?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GROUP_NODES', { nodeIds, name }, { pluginId });
+  }
+
+  async ungroupNodes(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('UNGROUP_NODES', { nodeId }, { pluginId });
+  }
+
+  async flattenNodes(nodeIds: string[], name?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('FLATTEN_NODES', { nodeIds, name }, { pluginId });
+  }
+
+  // === Viewport ===
+
+  async getViewport(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_VIEWPORT', {}, { pluginId });
+  }
+
+  async setViewport(options: { center?: { x: number; y: number }; zoom?: number; nodeIds?: string[] }, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_VIEWPORT', options, { pluginId });
+  }
+
+  // === Boolean Operations ===
+
+  async booleanOperation(nodeIds: string[], operation: string, name?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('BOOLEAN_OPERATION', { nodeIds, operation, name }, { pluginId });
+  }
+
+  // === Page Management ===
+
+  async createPage(name?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_PAGE', { name }, { pluginId });
+  }
+
+  async renamePage(pageId: string, name: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('RENAME_PAGE', { pageId, name }, { pluginId });
+  }
+
+  async switchPage(pageId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SWITCH_PAGE', { pageId }, { pluginId });
+  }
+
+  async deletePage(pageId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('DELETE_PAGE', { pageId }, { pluginId });
+  }
+
   // === Create Nodes ===
 
   async createRectangle(
@@ -833,6 +909,82 @@ export class FigmaWebSocketServer {
     pluginId?: string
   ): Promise<unknown> {
     return this.sendCommand('CREATE_EMPTY_FRAME', args, { pluginId });
+  }
+
+  async createEllipse(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_ELLIPSE', args, { pluginId });
+  }
+
+  async createPolygon(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_POLYGON', args, { pluginId });
+  }
+
+  async createStar(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_STAR', args, { pluginId });
+  }
+
+  async createLine(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_LINE', args, { pluginId });
+  }
+
+  async createVector(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_VECTOR', args, { pluginId });
+  }
+
+  async createImageNode(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_IMAGE_NODE', args, { pluginId });
+  }
+
+  // === Styles ===
+
+  async createPaintStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_PAINT_STYLE', args, { pluginId });
+  }
+
+  async createTextStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_TEXT_STYLE', args, { pluginId });
+  }
+
+  async createEffectStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_EFFECT_STYLE', args, { pluginId });
+  }
+
+  async createGridStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_GRID_STYLE', args, { pluginId });
+  }
+
+  async applyStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('APPLY_STYLE', args, { pluginId });
+  }
+
+  async deleteStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('DELETE_STYLE', args, { pluginId });
+  }
+
+  // === Variables ===
+
+  async createVariableCollection(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_VARIABLE_COLLECTION', args, { pluginId });
+  }
+
+  async createVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_VARIABLE', args, { pluginId });
+  }
+
+  async getVariables(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_VARIABLES', args, { pluginId });
+  }
+
+  async setVariableValue(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_VARIABLE_VALUE', args, { pluginId });
+  }
+
+  async bindVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('BIND_VARIABLE', args, { pluginId });
+  }
+
+  async addVariableMode(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('ADD_VARIABLE_MODE', args, { pluginId });
   }
 
   // === Selection ===

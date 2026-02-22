@@ -1,5 +1,5 @@
 /**
- * 빈 노드 생성 (Rectangle, Text, Frame)
+ * 빈 노드 생성 (Rectangle, Text, Frame, Ellipse, Polygon, Star, Line, Vector)
  * cursor-talk-to-figma의 create_rectangle, create_text, create_frame 참고
  */
 
@@ -283,5 +283,454 @@ export function createEmptyFrame(options: CreateEmptyFrameOptions): CreateEmptyF
     width: frame.width,
     height: frame.height,
     layoutMode: frame.layoutMode,
+  };
+}
+
+// === Ellipse ===
+
+export interface CreateEllipseOptions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name?: string;
+  parentId?: string;
+  fillColor?: { r: number; g: number; b: number; a?: number };
+  strokeColor?: { r: number; g: number; b: number; a?: number };
+  strokeWeight?: number;
+  arcData?: {
+    startingAngle: number;
+    endingAngle: number;
+    innerRadius: number;
+  };
+}
+
+export interface CreateEllipseResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function createEllipse(options: CreateEllipseOptions): CreateEllipseResult {
+  const ellipse = figma.createEllipse();
+  ellipse.x = options.x;
+  ellipse.y = options.y;
+  ellipse.resize(Math.max(options.width, 0.01), Math.max(options.height, 0.01));
+
+  if (options.name) ellipse.name = options.name;
+
+  if (options.fillColor) {
+    const { r, g, b, a } = options.fillColor;
+    ellipse.fills = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+  }
+
+  if (options.strokeColor) {
+    const { r, g, b, a } = options.strokeColor;
+    ellipse.strokes = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+    if (options.strokeWeight !== undefined) {
+      ellipse.strokeWeight = options.strokeWeight;
+    }
+  }
+
+  if (options.arcData) {
+    ellipse.arcData = {
+      startingAngle: options.arcData.startingAngle,
+      endingAngle: options.arcData.endingAngle,
+      innerRadius: options.arcData.innerRadius,
+    };
+  }
+
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(ellipse);
+  }
+
+  return {
+    nodeId: ellipse.id,
+    name: ellipse.name,
+    x: ellipse.x,
+    y: ellipse.y,
+    width: ellipse.width,
+    height: ellipse.height,
+  };
+}
+
+// === Polygon ===
+
+export interface CreatePolygonOptions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name?: string;
+  parentId?: string;
+  fillColor?: { r: number; g: number; b: number; a?: number };
+  strokeColor?: { r: number; g: number; b: number; a?: number };
+  strokeWeight?: number;
+  pointCount?: number;
+}
+
+export interface CreatePolygonResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pointCount: number;
+}
+
+export function createPolygon(options: CreatePolygonOptions): CreatePolygonResult {
+  const polygon = figma.createPolygon();
+  polygon.x = options.x;
+  polygon.y = options.y;
+  polygon.resize(Math.max(options.width, 0.01), Math.max(options.height, 0.01));
+
+  if (options.name) polygon.name = options.name;
+
+  if (options.pointCount !== undefined) {
+    polygon.pointCount = options.pointCount;
+  }
+
+  if (options.fillColor) {
+    const { r, g, b, a } = options.fillColor;
+    polygon.fills = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+  }
+
+  if (options.strokeColor) {
+    const { r, g, b, a } = options.strokeColor;
+    polygon.strokes = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+    if (options.strokeWeight !== undefined) {
+      polygon.strokeWeight = options.strokeWeight;
+    }
+  }
+
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(polygon);
+  }
+
+  return {
+    nodeId: polygon.id,
+    name: polygon.name,
+    x: polygon.x,
+    y: polygon.y,
+    width: polygon.width,
+    height: polygon.height,
+    pointCount: polygon.pointCount,
+  };
+}
+
+// === Star ===
+
+export interface CreateStarOptions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name?: string;
+  parentId?: string;
+  fillColor?: { r: number; g: number; b: number; a?: number };
+  strokeColor?: { r: number; g: number; b: number; a?: number };
+  strokeWeight?: number;
+  pointCount?: number;
+  innerRadius?: number;
+}
+
+export interface CreateStarResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pointCount: number;
+  innerRadius: number;
+}
+
+export function createStar(options: CreateStarOptions): CreateStarResult {
+  const star = figma.createStar();
+  star.x = options.x;
+  star.y = options.y;
+  star.resize(Math.max(options.width, 0.01), Math.max(options.height, 0.01));
+
+  if (options.name) star.name = options.name;
+
+  if (options.pointCount !== undefined) {
+    star.pointCount = options.pointCount;
+  }
+
+  if (options.innerRadius !== undefined) {
+    star.innerRadius = options.innerRadius;
+  }
+
+  if (options.fillColor) {
+    const { r, g, b, a } = options.fillColor;
+    star.fills = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+  }
+
+  if (options.strokeColor) {
+    const { r, g, b, a } = options.strokeColor;
+    star.strokes = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+    if (options.strokeWeight !== undefined) {
+      star.strokeWeight = options.strokeWeight;
+    }
+  }
+
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(star);
+  }
+
+  return {
+    nodeId: star.id,
+    name: star.name,
+    x: star.x,
+    y: star.y,
+    width: star.width,
+    height: star.height,
+    pointCount: star.pointCount,
+    innerRadius: star.innerRadius,
+  };
+}
+
+// === Line ===
+
+export interface CreateLineOptions {
+  x: number;
+  y: number;
+  length: number;
+  name?: string;
+  parentId?: string;
+  strokeColor?: { r: number; g: number; b: number; a?: number };
+  strokeWeight?: number;
+  rotation?: number;
+  dashPattern?: number[];
+}
+
+export interface CreateLineResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  length: number;
+}
+
+export function createLine(options: CreateLineOptions): CreateLineResult {
+  const line = figma.createLine();
+  line.x = options.x;
+  line.y = options.y;
+  line.resize(Math.max(options.length, 0.01), 0);
+
+  if (options.name) line.name = options.name;
+
+  // Line은 기본적으로 stroke가 필요
+  const strokeColor = options.strokeColor !== undefined
+    ? options.strokeColor
+    : { r: 0, g: 0, b: 0 };
+  const { r, g, b, a } = strokeColor;
+  line.strokes = [{
+    type: 'SOLID',
+    color: { r, g, b },
+    opacity: a !== undefined ? a : 1,
+  }];
+
+  const strokeWeight = options.strokeWeight !== undefined ? options.strokeWeight : 1;
+  line.strokeWeight = strokeWeight;
+
+  if (options.rotation !== undefined) {
+    line.rotation = options.rotation;
+  }
+
+  if (options.dashPattern) {
+    line.dashPattern = options.dashPattern;
+  }
+
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(line);
+  }
+
+  return {
+    nodeId: line.id,
+    name: line.name,
+    x: line.x,
+    y: line.y,
+    length: line.width,
+  };
+}
+
+// === Vector ===
+
+export interface CreateVectorOptions {
+  x: number;
+  y: number;
+  name?: string;
+  parentId?: string;
+  fillColor?: { r: number; g: number; b: number; a?: number };
+  strokeColor?: { r: number; g: number; b: number; a?: number };
+  strokeWeight?: number;
+  vectorPaths?: Array<{
+    windingRule: 'NONZERO' | 'EVENODD';
+    data: string;
+  }>;
+}
+
+export interface CreateVectorResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function createVector(options: CreateVectorOptions): CreateVectorResult {
+  const vector = figma.createVector();
+  vector.x = options.x;
+  vector.y = options.y;
+
+  if (options.name) vector.name = options.name;
+
+  if (options.vectorPaths) {
+    vector.vectorPaths = options.vectorPaths;
+  }
+
+  if (options.fillColor) {
+    const { r, g, b, a } = options.fillColor;
+    vector.fills = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+  }
+
+  if (options.strokeColor) {
+    const { r, g, b, a } = options.strokeColor;
+    vector.strokes = [{
+      type: 'SOLID',
+      color: { r, g, b },
+      opacity: a !== undefined ? a : 1,
+    }];
+    if (options.strokeWeight !== undefined) {
+      vector.strokeWeight = options.strokeWeight;
+    }
+  }
+
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(vector);
+  }
+
+  return {
+    nodeId: vector.id,
+    name: vector.name,
+    x: vector.x,
+    y: vector.y,
+    width: vector.width,
+    height: vector.height,
+  };
+}
+
+// ============================================
+// Image Node
+// ============================================
+
+export interface CreateImageNodeOptions {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  imageData: string;  // base64 encoded image
+  name?: string;
+  parentId?: string;
+  scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
+  cornerRadius?: number;
+}
+
+export interface CreateImageNodeResult {
+  nodeId: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  imageHash: string;
+}
+
+export function createImageNode(options: CreateImageNodeOptions): CreateImageNodeResult {
+  // base64 → Uint8Array
+  const binaryString = figma.base64Decode(options.imageData);
+
+  // Figma Image 생성
+  const image = figma.createImage(binaryString);
+
+  // Rectangle에 이미지 적용
+  const rect = figma.createRectangle();
+  rect.x = options.x;
+  rect.y = options.y;
+  rect.resize(options.width, options.height);
+  if (options.name) rect.name = options.name;
+  if (options.cornerRadius !== undefined) rect.cornerRadius = options.cornerRadius;
+
+  const scaleMode = options.scaleMode !== undefined ? options.scaleMode : 'FILL';
+  rect.fills = [{
+    type: 'IMAGE',
+    imageHash: image.hash,
+    scaleMode: scaleMode,
+  }];
+
+  if (options.parentId) {
+    const parent = figma.getNodeById(options.parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(rect);
+  }
+
+  return {
+    nodeId: rect.id,
+    name: rect.name,
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    imageHash: image.hash,
   };
 }
