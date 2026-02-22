@@ -236,6 +236,12 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     applyChildMargins(frame, children);
   }
 
+  // strokesIncludedInLayout: layoutMode가 HORIZONTAL/VERTICAL일 때만 설정 가능
+  // CSS box-model에서 border는 요소 크기에 포함되므로 Figma에서도 동일하게 적용
+  if (frame.layoutMode !== 'NONE' && frame.strokes.length > 0) {
+    frame.strokesIncludedInLayout = true;
+  }
+
   // 면별 다른 border 색상 처리 (Auto Layout + 자식 추가 후에 overlay 추가)
   applyBorderOverlays(frame, styles);
 

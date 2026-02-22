@@ -42,7 +42,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
   },
 
   async sigma_cleanup(args) {
-    const olderThanDays = (args.olderThanDays as number) || 7;
+    const olderThanDays = args.olderThanDays != null ? (args.olderThanDays as number) : 7;
     const category = (args.category as 'extracted' | 'screenshots' | 'all') || 'all';
 
     const result = await storage.cleanup({ olderThanDays, category });
@@ -125,12 +125,12 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
 
     // HTML인 경우 저장은 하지 않고 바로 Figma로 전송 (HTML은 스토리지에 저장하지 않음)
     if (saveFormat === 'html') {
-      if (!args.html) {
-        return jsonResponse({ error: 'html 필드가 필요합니다' });
+      if (!args.data) {
+        return jsonResponse({ error: 'data 필드가 필요합니다' });
       }
 
       if (wsServer.isFigmaConnected()) {
-        await wsServer.createFrame(null, args.name as string, undefined, 'html', args.html as string, saveImportPluginId, saveImportPageId);
+        await wsServer.createFrame(args.data as string, args.name as string, undefined, 'html', saveImportPluginId, saveImportPageId);
         return jsonResponse({
           success: true,
           message: `'${args.name}'이 Figma로 가져와졌습니다 (HTML, 저장 안 함)`,
@@ -158,7 +158,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
 
     // Figma 연결 시 가져오기
     if (wsServer.isFigmaConnected()) {
-      await wsServer.createFrame(savedComponent.data, savedComponent.name, undefined, 'json', undefined, saveImportPluginId, saveImportPageId);
+      await wsServer.createFrame(savedComponent.data, savedComponent.name, undefined, 'json', saveImportPluginId, saveImportPageId);
       return jsonResponse({
         success: true,
         message: `'${savedComponent.name}'이 저장되고 Figma로 가져와졌습니다`,

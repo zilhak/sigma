@@ -22,8 +22,18 @@ export function createDefaultStyles(): ComputedStyles {
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'stretch',
+    alignSelf: 'auto',
     flexWrap: 'nowrap',
     gap: 0,
+    rowGap: 0,
+    columnGap: 0,
+    borderSpacingX: 0,
+    borderSpacingY: 0,
+
+    // Flex 아이템 속성
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: 'auto',
 
     // 크기
     width: 'auto',
@@ -77,6 +87,20 @@ export function createDefaultStyles(): ComputedStyles {
     textDecoration: 'none',
     lineHeight: 0,
     letterSpacing: 0,
+    whiteSpace: 'normal',
+    textOverflow: 'clip',
+    verticalAlign: 'baseline',
+
+    // Grid 컨테이너 속성
+    gridTemplateColumns: 'none',
+    gridTemplateRows: 'none',
+    gridAutoFlow: 'row',
+
+    // Grid 아이템 속성
+    gridColumnStart: 'auto',
+    gridColumnEnd: 'auto',
+    gridRowStart: 'auto',
+    gridRowEnd: 'auto',
 
     // 기타
     opacity: 1,

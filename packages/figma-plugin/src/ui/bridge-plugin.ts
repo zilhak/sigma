@@ -336,5 +336,29 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
         setPendingCommandId(null);
       }
       break;
+
+    default: {
+      // 제네릭 패스스루: kebab-case-result → UPPER_SNAKE_RESULT 변환 후 서버로 전달
+      const msgType = msg.type as string;
+      if (msgType && msgType.endsWith('-result') && pendingCommandId) {
+        const upperType = msgType.toUpperCase().replace(/-/g, '_');
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          sendToServer({
+            type: upperType,
+            commandId: pendingCommandId,
+            success: msg.success,
+            result: msg.result,
+            error: msg.error,
+          });
+          if (msg.success) {
+            log(`완료: ${msgType}`, 'success');
+          } else {
+            log(`실패: ${msgType} - ${msg.error}`, 'error');
+          }
+          setPendingCommandId(null);
+        }
+      }
+      break;
+    }
   }
 }

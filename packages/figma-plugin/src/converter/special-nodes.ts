@@ -52,6 +52,10 @@ export function createSvgNode(node: ExtractedNode): FrameNode | null {
     // Figma API로 SVG 문자열을 노드로 변환
     const svgFrame = figma.createNodeFromSvg(processedSvg);
 
+    // 라운드트립 보존: 원본 svgString을 pluginData에 저장
+    // (createNodeFromSvg는 SVG를 네이티브 벡터로 변환하므로 재추출 시 원본 복구 불가)
+    svgFrame.setPluginData('sigma:svg', node.svgString);
+
     // 위치 및 크기는 SVG 자체에서 결정됨
     // 필요시 boundingRect로 크기 조정
     if (node.boundingRect.width > 0 && node.boundingRect.height > 0) {

@@ -395,7 +395,7 @@ export async function cleanup(options: {
   category?: 'extracted' | 'screenshots' | 'all';
 }): Promise<{ deleted: number; freedBytes: number }> {
   const category = options.category || 'all';
-  const olderThanDays = options.olderThanDays || TTL_DAYS;
+  const olderThanDays = options.olderThanDays != null ? options.olderThanDays : TTL_DAYS;
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
 
   let totalDeleted = 0;

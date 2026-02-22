@@ -100,6 +100,9 @@ export function applyBorder(frame: FrameNode, styles: ComputedStyles) {
 
   frame.strokes = [createSolidPaint(borderColor)];
 
+  // NOTE: strokesIncludedInLayout은 layoutMode가 HORIZONTAL/VERTICAL일 때만 설정 가능
+  // → createFigmaNode에서 layoutMode 설정 후에 적용 (node-creator.ts)
+
   // 4면 동일하면 uniform stroke, 다르면 per-side (IndividualStrokesMixin)
   const allEqual = (top === right && right === bottom && bottom === left);
   if (allEqual) {

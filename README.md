@@ -19,6 +19,7 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 | **Chrome Extension** | 웹페이지에서 컴포넌트 선택 및 추출 |
 | **Local Server** | 중앙 허브, MCP 서버, HTTP/WebSocket API |
 | **Figma Plugin** | JSON 데이터를 Figma 프레임으로 변환 |
+| **Shared** | 추출 로직, 타입, 임베드 스크립트 (공통 패키지) |
 
 ---
 
@@ -83,7 +84,7 @@ Playwright로 브라우저를 조작할 때는 **Sigma 임베드 스크립트**(
 
 ```bash
 # 1. 소스 클론
-git clone https://github.com/anthropics/sigma.git
+git clone https://github.com/zilhak/sigma.git
 cd sigma
 
 # 2. 의존성 설치
@@ -100,7 +101,7 @@ bun run --filter @sigma/server start
 
 1. Figma Desktop App 실행
 2. Plugins → Development → **Import plugin from manifest**
-3. `packages/figma-plugin/manifest.json` 선택
+3. `packages/figma-plugin/dist/manifest.json` 선택
 
 ### Chrome Extension 설치 (선택)
 
@@ -133,20 +134,42 @@ claude mcp add --transport http sigma http://localhost:19832/api/mcp
 User: "Storybook에서 Badge 컴포넌트를 Figma에 가져와줘"
 
 AI Agent:
-1. [Playwright] 페이지 이동
-2. [Sigma MCP] figma_create_frame()
+1. [Sigma MCP] sigma_login → 토큰 발급
+2. [Sigma MCP] sigma_list_plugins → pluginId 확인
+3. [Sigma MCP] sigma_bind(token, pluginId, pageId) → 바인딩
+4. [Playwright] 페이지 이동 + 추출 스크립트 inject
+5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 목록:**
-| 도구 | 설명 |
-|------|------|
-| `figma_status` | Figma 연결 상태 확인 |
-| `figma_create_frame` | JSON 데이터로 Figma 프레임 생성 |
-| `figma_get_frames` | Figma 현재 페이지의 프레임 목록 조회 |
-| `figma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
-| `list_saved` | 저장된 컴포넌트 목록 |
-| `save_extracted` | 컴포넌트 저장 |
-| `get_playwright_scripts` | Sigma 임베드 스크립트 목록 + 경로 + API 정보 반환 |
+**주요 MCP 도구:**
+
+| 분류 | 도구 | 설명 |
+|------|------|------|
+| 인증 | `sigma_login` | 토큰 발급 |
+| | `sigma_bind` | 토큰을 플러그인+페이지에 바인딩 |
+| | `sigma_status` | 토큰 및 바인딩 상태 확인 |
+| 정보 | `sigma_list_plugins` | 연결된 Figma Plugin 목록 |
+| | `sigma_list_pages` | 플러그인의 페이지 목록 |
+| 프레임 | `sigma_create_frame` | JSON/HTML 데이터로 프레임 생성 |
+| | `sigma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
+| | `sigma_update_frame` | 기존 프레임 내용 교체 |
+| | `sigma_delete_frame` | 프레임 삭제 |
+| | `sigma_get_frames` | 페이지의 프레임 목록 조회 |
+| 노드 조작 | `sigma_find_node` | 경로/이름으로 노드 검색 |
+| | `sigma_get_tree` | 문서 계층 구조 탐색 |
+| | `sigma_modify_node` | 노드 속성 변경 (rename, resize, fill 등) |
+| | `sigma_move_node` | 노드 이동 (reparent) |
+| | `sigma_clone_node` | 노드 복제 |
+| | `sigma_create_section` | Section 생성 |
+| | `sigma_screenshot` | 노드를 이미지로 캡처 |
+| | `sigma_extract_node` | 노드를 ExtractedNode JSON으로 추출 |
+| 데이터 | `save_extracted` | 추출 데이터 저장 |
+| | `list_saved` | 저장된 컴포넌트 목록 |
+| | `load_extracted` | 저장된 컴포넌트 로드 |
+| 스크립트 | `get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
+| 관리 | `server_status` | 서버 전체 상태 확인 |
+
+전체 도구 목록은 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ### Docker (선택 - 서버만)
 

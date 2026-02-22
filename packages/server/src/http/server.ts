@@ -147,8 +147,7 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
       }>();
 
       const format = body.format || 'json';
-      let data: ExtractedNode | null = null;
-      let html: string | undefined;
+      let data: unknown = null;
       let name: string | undefined = body.name;
       const position = body.position;
       const pluginId = body.pluginId;
@@ -163,11 +162,11 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         data = component.data;
         name = name || component.name;
       } else if (format === 'html' && body.html) {
-        html = body.html;
+        data = body.html;
       } else if (format === 'json' && body.data) {
         data = body.data;
       } else {
-        return c.json({ error: format === 'html' ? 'html field is required' : 'Either data or id is required' }, 400);
+        return c.json({ error: 'data 또는 id가 필요합니다' }, 400);
       }
 
       // Check Figma connection (specific plugin if pluginId provided)
@@ -181,7 +180,7 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
       }
 
       // Send to Figma with optional position, pluginId, and pageId
-      await wsServer.createFrame(data, name, position, format, html, pluginId, pageId);
+      await wsServer.createFrame(data, name, position, format, pluginId, pageId);
 
       return c.json({
         success: true,

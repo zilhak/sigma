@@ -31,11 +31,29 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
     extracted.tagName = 'span';
     extracted.textContent = node.characters;
     extractTextStyles(node, extracted.styles);
+    // Auto Layout 컨텍스트에서의 레이아웃 속성 추출
+    extractChildLayoutProps(node, extracted.styles);
     return extracted;
   }
 
   // 프레임/그룹/컴포넌트
   if (node.type === 'FRAME' || node.type === 'GROUP' || node.type === 'COMPONENT' || node.type === 'INSTANCE') {
+    // SVG pluginData 확인: createNodeFromSvg()로 생성된 프레임이면 svgString 복원
+    if ('getPluginData' in node) {
+      const svgData = (node as FrameNode).getPluginData('sigma:svg');
+      if (svgData) {
+        extracted.tagName = 'svg';
+        extracted.svgString = svgData;
+        extracted.styles.width = node.width;
+        extracted.styles.height = node.height;
+        if ('opacity' in node) {
+          extracted.styles.opacity = node.opacity;
+        }
+        extractChildLayoutProps(node, extracted.styles);
+        return extracted;
+      }
+    }
+
     extracted.tagName = 'div';
 
     // 레이아웃 스타일 추출
@@ -60,13 +78,20 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
       extracted.styles.opacity = node.opacity;
     }
 
-    // 크기 설정
-    extracted.styles.width = node.width;
-    extracted.styles.height = node.height;
+    // 크기 설정 (layoutSizing 기반: HUG/FILL → 'auto', FIXED → 숫자)
+    extractSizingMode(node as FrameNode, extracted.styles);
 
-    // 자식 노드 추출
+    // Auto Layout 자식 속성 (flexGrow, alignSelf, position)
+    extractChildLayoutProps(node, extracted.styles);
+
+    // 자식 노드 추출 (__sigma_border overlay는 border 속성으로 복원)
     if ('children' in node) {
       for (const child of node.children) {
+        // __sigma_border 가상 노드 감지 → 부모의 border 속성으로 복원
+        if (isBorderOverlay(child)) {
+          applyBorderOverlayToStyles(child, extracted.styles);
+          continue;
+        }
         const childExtracted = extractNodeToJSON(child);
         if (childExtracted) {
           extracted.children = extracted.children || [];
@@ -98,6 +123,9 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
     extracted.styles.width = node.width;
     extracted.styles.height = node.height;
 
+    // Auto Layout 자식 속성 (flexGrow, alignSelf, position)
+    extractChildLayoutProps(node, extracted.styles);
+
     return extracted;
   }
 
@@ -107,6 +135,8 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
     // SVG 문자열은 exportAsync로 추출해야 하지만, 동기 버전에서는 생략
     extracted.styles.width = node.width;
     extracted.styles.height = node.height;
+    // Auto Layout 자식 속성 (flexGrow, alignSelf, position)
+    extractChildLayoutProps(node, extracted.styles);
     return extracted;
   }
 
@@ -260,6 +290,25 @@ export function extractLayoutStyles(node: FrameNode, styles: ComputedStyles) {
         styles.alignItems = 'flex-start';
     }
   }
+
+  // overflow (clipsContent)
+  if (node.clipsContent) {
+    styles.overflow = 'hidden';
+  }
+
+  // flexWrap (layoutWrap)
+  if (node.layoutWrap === 'WRAP') {
+    styles.flexWrap = 'wrap';
+  }
+
+  // 교차축 갭 (counterAxisSpacing)
+  if (node.counterAxisSpacing !== undefined && node.counterAxisSpacing > 0) {
+    if (node.layoutMode === 'HORIZONTAL') {
+      styles.rowGap = node.counterAxisSpacing;
+    } else {
+      styles.columnGap = node.counterAxisSpacing;
+    }
+  }
 }
 
 /**
@@ -307,13 +356,25 @@ export function extractStrokeStyles(node: MinimalStrokesMixin, styles: ComputedS
     styles.borderLeftColor = strokeColor;
   }
 
-  // 스트로크 두께
-  if ('strokeWeight' in node && typeof node.strokeWeight === 'number') {
+  // 스트로크 두께 (개별 면 지원)
+  if ('strokeTopWeight' in node) {
+    const n = node as FrameNode;
+    styles.borderTopWidth = n.strokeTopWeight;
+    styles.borderRightWidth = n.strokeRightWeight;
+    styles.borderBottomWidth = n.strokeBottomWeight;
+    styles.borderLeftWidth = n.strokeLeftWeight;
+  } else if ('strokeWeight' in node && typeof node.strokeWeight === 'number') {
     styles.borderTopWidth = node.strokeWeight;
     styles.borderRightWidth = node.strokeWeight;
     styles.borderBottomWidth = node.strokeWeight;
     styles.borderLeftWidth = node.strokeWeight;
   }
+
+  // width=0인 면의 색상 정보 제거 (Figma 라운드트립 일관성)
+  if (styles.borderTopWidth === 0) styles.borderTopColor = { r: 0, g: 0, b: 0, a: 0 };
+  if (styles.borderRightWidth === 0) styles.borderRightColor = { r: 0, g: 0, b: 0, a: 0 };
+  if (styles.borderBottomWidth === 0) styles.borderBottomColor = { r: 0, g: 0, b: 0, a: 0 };
+  if (styles.borderLeftWidth === 0) styles.borderLeftColor = { r: 0, g: 0, b: 0, a: 0 };
 }
 
 /**
@@ -358,4 +419,163 @@ export function extractEffectStyles(node: BlendMixin, styles: ComputedStyles) {
   }
 
   styles.boxShadow = shadowParts.length > 0 ? shadowParts.join(', ') : 'none';
+}
+
+/**
+ * 프레임의 크기 모드 추출 (layoutSizingHorizontal/Vertical 기반)
+ * HUG/FILL → width/height: 'auto', FIXED → 숫자
+ */
+function extractSizingMode(node: FrameNode, styles: ComputedStyles) {
+  // 가로 크기
+  if ('layoutSizingHorizontal' in node) {
+    const lsh = node.layoutSizingHorizontal;
+    if (lsh === 'HUG' || lsh === 'FILL') {
+      styles.width = 'auto';
+    } else {
+      styles.width = node.width;
+    }
+  } else {
+    styles.width = node.width;
+  }
+
+  // 세로 크기
+  if ('layoutSizingVertical' in node) {
+    const lsv = node.layoutSizingVertical;
+    if (lsv === 'HUG' || lsv === 'FILL') {
+      styles.height = 'auto';
+    } else {
+      styles.height = node.height;
+    }
+  } else {
+    styles.height = node.height;
+  }
+}
+
+/**
+ * Auto Layout 자식 노드의 레이아웃 속성 추출
+ * layoutGrow → flexGrow, layoutAlign → alignSelf, layoutPositioning → position
+ */
+function extractChildLayoutProps(node: SceneNode, styles: ComputedStyles) {
+  // flexGrow (layoutGrow: 주축 방향 FILL)
+  if ('layoutGrow' in node) {
+    const lg = (node as FrameNode).layoutGrow;
+    if (typeof lg === 'number' && lg > 0) {
+      styles.flexGrow = lg;
+    }
+  }
+
+  // alignSelf (layoutAlign: 교차축 정렬)
+  if ('layoutAlign' in node) {
+    const la = (node as FrameNode).layoutAlign;
+    switch (la) {
+      case 'STRETCH':
+        styles.alignSelf = 'stretch';
+        break;
+      case 'CENTER':
+        styles.alignSelf = 'center';
+        break;
+      case 'MIN':
+        styles.alignSelf = 'flex-start';
+        break;
+      case 'MAX':
+        styles.alignSelf = 'flex-end';
+        break;
+      // 'INHERIT'는 부모의 alignItems를 따름 (기본값)
+    }
+  }
+
+  // position: absolute (layoutPositioning)
+  if ('layoutPositioning' in node && (node as FrameNode).layoutPositioning === 'ABSOLUTE') {
+    styles.position = 'absolute';
+  }
+}
+
+// ============================================================
+// __sigma_border overlay 역변환
+// ============================================================
+
+const BORDER_OVERLAY_NAMES: Record<string, 'top' | 'right' | 'bottom' | 'left'> = {
+  '__sigma_border_top': 'top',
+  '__sigma_border_right': 'right',
+  '__sigma_border_bottom': 'bottom',
+  '__sigma_border_left': 'left',
+};
+
+/**
+ * __sigma_border overlay 노드인지 판별
+ * pluginData 또는 이름 패턴으로 감지
+ */
+function isBorderOverlay(node: SceneNode): boolean {
+  // pluginData 기반 감지
+  if ('getPluginData' in node) {
+    const sigmaType = (node as FrameNode).getPluginData('sigma:type');
+    if (sigmaType === 'border_overlay') return true;
+  }
+  // 이름 패턴 기반 감지 (pluginData 없는 복제본 대응)
+  return node.name in BORDER_OVERLAY_NAMES;
+}
+
+/**
+ * __sigma_border overlay에서 border 정보를 추출하여 부모 styles에 적용
+ */
+function applyBorderOverlayToStyles(node: SceneNode, styles: ComputedStyles): void {
+  // 1. pluginData에서 border 정보 시도
+  if ('getPluginData' in node) {
+    const borderData = (node as FrameNode).getPluginData('sigma:border');
+    if (borderData) {
+      try {
+        const parsed = JSON.parse(borderData) as { side: string; color: RGBA; width: number };
+        applyBorderSide(styles, parsed.side, parsed.color, parsed.width);
+        return;
+      } catch { /* fallthrough to name-based */ }
+    }
+  }
+
+  // 2. 이름 + fill + 크기로 추정
+  const side = BORDER_OVERLAY_NAMES[node.name];
+  if (!side) return;
+
+  let color: RGBA = { r: 0, g: 0, b: 0, a: 1 };
+  let width = 0;
+
+  // fill에서 색상 추출
+  if ('fills' in node) {
+    const fills = (node as RectangleNode).fills;
+    if (Array.isArray(fills) && fills.length > 0 && fills[0].type === 'SOLID') {
+      color = {
+        r: fills[0].color.r,
+        g: fills[0].color.g,
+        b: fills[0].color.b,
+        a: fills[0].opacity !== undefined ? fills[0].opacity : 1,
+      };
+    }
+  }
+
+  // 크기에서 두께 추출 (top/bottom → height, left/right → width)
+  if ('width' in node && 'height' in node) {
+    width = (side === 'top' || side === 'bottom') ? node.height : node.width;
+  }
+
+  applyBorderSide(styles, side, color, width);
+}
+
+function applyBorderSide(styles: ComputedStyles, side: string, color: RGBA, width: number): void {
+  switch (side) {
+    case 'top':
+      styles.borderTopColor = color;
+      styles.borderTopWidth = width;
+      break;
+    case 'right':
+      styles.borderRightColor = color;
+      styles.borderRightWidth = width;
+      break;
+    case 'bottom':
+      styles.borderBottomColor = color;
+      styles.borderBottomWidth = width;
+      break;
+    case 'left':
+      styles.borderLeftColor = color;
+      styles.borderLeftWidth = width;
+      break;
+  }
 }

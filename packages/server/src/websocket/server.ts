@@ -189,6 +189,31 @@ export class FigmaWebSocketServer {
       case 'CREATE_SECTION_RESULT':
       case 'MOVE_NODE_RESULT':
       case 'CLONE_NODE_RESULT':
+      case 'CREATE_RECTANGLE_RESULT':
+      case 'CREATE_TEXT_RESULT':
+      case 'CREATE_EMPTY_FRAME_RESULT':
+      case 'GET_SELECTION_RESULT':
+      case 'SET_SELECTION_RESULT':
+      case 'GET_LOCAL_COMPONENTS_RESULT':
+      case 'CREATE_COMPONENT_INSTANCE_RESULT':
+      case 'GET_INSTANCE_OVERRIDES_RESULT':
+      case 'SET_INSTANCE_OVERRIDES_RESULT':
+      case 'GET_NODE_INFO_RESULT':
+      case 'GET_DOCUMENT_INFO_RESULT':
+      case 'GET_STYLES_RESULT':
+      case 'SCAN_TEXT_NODES_RESULT':
+      case 'SCAN_NODES_BY_TYPES_RESULT':
+      case 'BATCH_MODIFY_RESULT':
+      case 'BATCH_DELETE_RESULT':
+      case 'GET_ANNOTATIONS_RESULT':
+      case 'SET_ANNOTATION_RESULT':
+      case 'SET_MULTIPLE_TEXT_CONTENTS_RESULT':
+      case 'GET_NODES_INFO_RESULT':
+      case 'READ_MY_DESIGN_RESULT':
+      case 'SET_MULTIPLE_ANNOTATIONS_RESULT':
+      case 'GET_REACTIONS_RESULT':
+      case 'ADD_REACTION_RESULT':
+      case 'REMOVE_REACTIONS_RESULT':
         this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
         break;
     }
@@ -389,11 +414,10 @@ export class FigmaWebSocketServer {
   // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
   // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
   async createFrame(
-    data: ExtractedNode | null,
+    data: unknown,
     name?: string,
     position?: { x: number; y: number },
     format: 'json' | 'html' = 'json',
-    html?: string,
     pluginId?: string,
     pageId?: string
   ): Promise<void> {
@@ -407,9 +431,9 @@ export class FigmaWebSocketServer {
     }
 
     // 전송할 페이로드 결정
-    const payload = format === 'html' ? html : JSON.stringify(data);
+    const payload = format === 'html' ? (data as string) : JSON.stringify(data);
     if (!payload) {
-      throw new Error(format === 'html' ? 'HTML 데이터가 필요합니다' : 'JSON 데이터가 필요합니다');
+      throw new Error('데이터가 필요합니다');
     }
 
     const dataSize = Buffer.byteLength(payload, 'utf-8');
@@ -423,8 +447,7 @@ export class FigmaWebSocketServer {
     // 1MB 이하: sendCommand 사용
     return this.sendCommand<void>('CREATE_FRAME', {
       format,
-      data: format === 'json' ? data : undefined,
-      html: format === 'html' ? html : undefined,
+      data,
       name,
       position,
       pageId,
@@ -523,8 +546,7 @@ export class FigmaWebSocketServer {
   async updateFrame(
     nodeId: string,
     format: 'json' | 'html' = 'json',
-    data?: any | null,
-    html?: string,
+    data?: unknown,
     name?: string,
     pluginId?: string,
     pageId?: string
@@ -539,9 +561,9 @@ export class FigmaWebSocketServer {
     }
 
     // 페이로드 결정
-    const payload = format === 'html' ? html : JSON.stringify(data);
+    const payload = format === 'html' ? (data as string) : JSON.stringify(data);
     if (!payload) {
-      throw new Error(format === 'html' ? 'HTML 데이터가 필요합니다' : 'JSON 데이터가 필요합니다');
+      throw new Error('데이터가 필요합니다');
     }
 
     const dataSize = Buffer.byteLength(payload, 'utf-8');
@@ -556,8 +578,7 @@ export class FigmaWebSocketServer {
     return this.sendCommand('UPDATE_FRAME', {
       nodeId,
       format,
-      data: format === 'json' ? data : undefined,
-      html: format === 'html' ? html : undefined,
+      data,
       name,
       pageId,
     }, {
@@ -717,11 +738,12 @@ export class FigmaWebSocketServer {
    */
   async extractNode(
     nodeId: string,
-    pluginId?: string
+    pluginId?: string,
+    format: 'json' | 'html' = 'json'
   ): Promise<{ nodeId: string; nodeName: string; nodeType: string; data: unknown }> {
-    return this.sendCommand('EXTRACT_NODE_JSON', { nodeId }, {
+    return this.sendCommand('EXTRACT_NODE_JSON', { nodeId, format }, {
       pluginId,
-      logSuffix: ` (node: ${nodeId})`,
+      logSuffix: ` (node: ${nodeId}, format: ${format})`,
     });
   }
 
@@ -788,6 +810,170 @@ export class FigmaWebSocketServer {
       pluginId,
       logSuffix: ` (source: ${nodeId})`,
     });
+  }
+
+  // === Create Nodes ===
+
+  async createRectangle(
+    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: { r: number; g: number; b: number; a?: number }; strokeColor?: { r: number; g: number; b: number; a?: number }; strokeWeight?: number; cornerRadius?: number },
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('CREATE_RECTANGLE', args, { pluginId });
+  }
+
+  async createTextNode(
+    args: { x: number; y: number; text: string; name?: string; parentId?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; fontColor?: { r: number; g: number; b: number; a?: number }; textAlignHorizontal?: string },
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('CREATE_TEXT', args, { pluginId });
+  }
+
+  async createEmptyFrame(
+    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: unknown; strokeColor?: unknown; strokeWeight?: number; layoutMode?: string; layoutWrap?: string; paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number; primaryAxisAlignItems?: string; counterAxisAlignItems?: string; layoutSizingHorizontal?: string; layoutSizingVertical?: string; itemSpacing?: number; counterAxisSpacing?: number; cornerRadius?: number },
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('CREATE_EMPTY_FRAME', args, { pluginId });
+  }
+
+  // === Selection ===
+
+  async getSelection(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_SELECTION', {}, { pluginId });
+  }
+
+  async setSelectionNodes(
+    nodeIds: string[],
+    zoomToFit?: boolean,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('SET_SELECTION', { nodeIds, zoomToFit }, { pluginId });
+  }
+
+  // === Components ===
+
+  async getLocalComponents(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_LOCAL_COMPONENTS', {}, { pluginId });
+  }
+
+  async createComponentInstance(
+    componentKey: string,
+    x: number,
+    y: number,
+    parentId?: string,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('CREATE_COMPONENT_INSTANCE', { componentKey, x, y, parentId }, { pluginId });
+  }
+
+  async getInstanceOverrides(nodeId?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_INSTANCE_OVERRIDES', { nodeId }, { pluginId });
+  }
+
+  async setInstanceOverrides(
+    nodeId: string,
+    overrides: Record<string, unknown>,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('SET_INSTANCE_OVERRIDES', { nodeId, overrides }, { pluginId });
+  }
+
+  // === Query ===
+
+  async getNodeInfo(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_NODE_INFO', { nodeId }, { pluginId });
+  }
+
+  async getDocumentInfo(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_DOCUMENT_INFO', {}, { pluginId });
+  }
+
+  async getStylesInfo(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_STYLES', {}, { pluginId });
+  }
+
+  // === Batch ===
+
+  async scanTextNodes(nodeId: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SCAN_TEXT_NODES', { nodeId }, { pluginId });
+  }
+
+  async scanNodesByTypes(nodeId: string, types: string[], pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SCAN_NODES_BY_TYPES', { nodeId, types }, { pluginId });
+  }
+
+  async batchModifyNodes(
+    operations: Array<{ nodeId: string; method: string; args?: Record<string, unknown> }>,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('BATCH_MODIFY', { operations }, {
+      pluginId,
+      timeoutMs: 60000,
+    });
+  }
+
+  async batchDeleteNodes(nodeIds: string[], pluginId?: string): Promise<unknown> {
+    return this.sendCommand('BATCH_DELETE', { nodeIds }, { pluginId });
+  }
+
+  // === Batch Text ===
+
+  async setMultipleTextContents(
+    items: Array<{ nodeId: string; text: string }>,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('SET_MULTIPLE_TEXT_CONTENTS', { items }, {
+      pluginId,
+      timeoutMs: 60000,
+    });
+  }
+
+  // === Query (batch) ===
+
+  async getNodesInfo(nodeIds: string[], pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_NODES_INFO', { nodeIds }, { pluginId });
+  }
+
+  async readMyDesign(pluginId?: string): Promise<unknown> {
+    return this.sendCommand('READ_MY_DESIGN', {}, { pluginId });
+  }
+
+  // === Annotations ===
+
+  async setMultipleAnnotations(
+    items: Array<{ nodeId: string; label: string; labelType?: string }>,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('SET_MULTIPLE_ANNOTATIONS', { items }, { pluginId });
+  }
+
+  async getAnnotations(nodeId?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_ANNOTATIONS', { nodeId }, { pluginId });
+  }
+
+  async setAnnotation(
+    nodeId: string,
+    label: string,
+    labelType?: string,
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('SET_ANNOTATION', { nodeId, label, labelType }, { pluginId });
+  }
+
+  // === Prototyping ===
+
+  async getReactions(nodeId?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('GET_REACTIONS', { nodeId }, { pluginId });
+  }
+
+  async addReaction(
+    args: { nodeId: string; trigger: string; action: string; destinationId?: string; url?: string; transition?: { type: string; duration?: number; direction?: string }; preserveScrollPosition?: boolean },
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('ADD_REACTION', args, { pluginId });
+  }
+
+  async removeReactions(nodeId: string, triggerType?: string, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('REMOVE_REACTIONS', { nodeId, triggerType }, { pluginId });
   }
 
   // Broadcast to all Figma plugins

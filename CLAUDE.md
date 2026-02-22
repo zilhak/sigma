@@ -113,37 +113,92 @@ Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **�
 | `sigma_list_plugins` | 연결된 Figma Plugin 목록 | — |
 | `sigma_list_pages` | 플러그인의 페이지 목록 | `pluginId` |
 
-### Figma 프레임 생성/관리 (토큰 필수)
+### 노드 생성 (토큰 필수)
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_create_frame` | ExtractedNode JSON/HTML로 프레임 생성 | `token` | `data`, `html`, `format`, `name`, `position` |
+| `sigma_create_frame` | ExtractedNode JSON/HTML로 프레임 생성 | `token` | `data`, `format`, `name`, `position` |
 | `sigma_import_file` | 서버에 저장된 데이터로 프레임 생성 | `token`, `id` | `name`, `position` |
-| `sigma_update_frame` | 기존 프레임 내용을 새 데이터로 전체 교체 | `token`, `nodeId` | `data`, `html`, `format`, `name` |
-| `sigma_delete_frame` | 프레임 삭제 | `token`, `nodeId` | — |
-| `sigma_get_frames` | 페이지의 모든 프레임 위치/크기 조회 | `token` | — |
+| `sigma_create_rectangle` | 사각형 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `cornerRadius`, `parentId` |
+| `sigma_create_text` | 텍스트 노드 생성 (폰트 자동 로드) | `token`, `x`, `y`, `text` | `name`, `fontSize`, `fontFamily`, `fontWeight`, `fontColor`, `textAlignHorizontal`, `parentId` |
+| `sigma_create_empty_frame` | 빈 프레임 생성 (Auto Layout 지원) | `token`, `x`, `y`, `width`, `height` | `name`, `layoutMode`, `padding*`, `itemSpacing`, `fillColor`, `cornerRadius`, `layoutWrap`, `counterAxisSpacing`, `layoutSizing*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `parentId` |
+| `sigma_create_section` | Section 생성 | `token`, `name` | `position`, `size`, `children`, `fills` |
+| `sigma_create_component_instance` | 컴포넌트 인스턴스 생성 (로컬/라이브러리) | `token`, `componentKey`, `x`, `y` | `parentId` |
 
-### Figma 노드 조작 (토큰 필수)
+### 노드 조작 (토큰 필수)
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_modify_node` | 노드에 개별 메서드 실행 | `token`, `nodeId`, `method` | `args` |
-| `sigma_find_node` | 경로/이름으로 노드 검색 | `token`, `path` | `type` |
-| `sigma_get_tree` | 문서 계층 구조 탐색 | `token` | `nodeId`, `path`, `depth`, `filter`, `limit` |
-| `sigma_create_section` | Section 생성 (기존 노드를 자식으로 이동 가능) | `token`, `name` | `position`, `size`, `children`, `fills` |
+| `sigma_batch_modify` | 여러 노드에 modify 일괄 실행 | `token`, `operations` | — |
+| `sigma_update_frame` | 프레임 내용을 새 데이터로 전체 교체 | `token`, `nodeId` | `data`, `format`, `name` |
+| `sigma_delete_frame` | 프레임 삭제 | `token`, `nodeId` | — |
+| `sigma_batch_delete` | 여러 노드 일괄 삭제 | `token`, `nodeIds` | — |
 | `sigma_move_node` | 노드를 다른 부모로 이동 (reparent) | `token`, `nodeId`, `parentId` | `index` |
-| `sigma_clone_node` | 노드 복제 (다른 부모/좌표 지정 가능) | `token`, `nodeId` | `parentId`, `position`, `name` |
-| `sigma_screenshot` | 노드를 이미지로 캡처하여 파일 저장 | `token`, `nodeId` | `format`, `scale`, `filename` |
-| `sigma_extract_node` | Figma 노드를 ExtractedNode JSON으로 추출 | `token`, `nodeId` | — |
-| `sigma_test_roundtrip` | 노드 추출 → 재생성 라운드트립 테스트 | `token`, `nodeId` | — |
+| `sigma_clone_node` | 노드 복제 | `token`, `nodeId` | `parentId`, `position`, `name` |
+| `sigma_set_multiple_text_contents` | 여러 텍스트 노드 내용 일괄 변경 | `token`, `items` | — |
 
 **`sigma_modify_node` 지원 메서드:**
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove
-- **Visual**: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode
-- **Layout**: setLayoutMode, setPadding, setItemSpacing, setClipsContent, setPrimaryAxisSizingMode, setCounterAxisSizingMode, setPrimaryAxisAlignItems, setCounterAxisAlignItems
-- **Text**: setCharacters, setFontSize, setTextAlignHorizontal
+- **Visual**: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode, setCornerSmoothing, setDashPattern, setMask
+- **Transform**: setRotation
+- **Layout (Frame)**: setLayoutMode, setPadding, setItemSpacing, setClipsContent, setPrimaryAxisSizingMode, setCounterAxisSizingMode, setPrimaryAxisAlignItems, setCounterAxisAlignItems, setLayoutWrap, setCounterAxisSpacing, setLayoutSizing
+- **Layout (Child)**: setLayoutAlign, setLayoutGrow, setLayoutPositioning
+- **Constraints**: setConstraints, setMinWidth, setMaxWidth, setMinHeight, setMaxHeight
+- **Text**: setCharacters, setFontSize, setTextAlignHorizontal, setTextAlignVertical, setFontFamily, setFontWeight, setTextAutoResize, setLineHeight, setLetterSpacing
+- **Rich Text (Range)**: setRangeFontSize, setRangeFontName, setRangeFills, setRangeTextDecoration, setRangeLineHeight, setRangeLetterSpacing
 
-노드 타입별로 지원 메서드가 다르며, 미지원 메서드 호출 시 사용 가능한 전체 목록이 반환된다.
+### 조회/검색 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_get_frames` | 페이지의 모든 프레임 위치/크기 조회 | `token` | — |
+| `sigma_find_node` | 경로/이름으로 노드 검색 | `token`, `path` | `type` |
+| `sigma_get_tree` | 문서 계층 구조 탐색 | `token` | `nodeId`, `path`, `depth`, `filter`, `limit` |
+| `sigma_get_node_info` | 노드 상세 정보 조회 (fills, strokes, text, layout) | `token`, `nodeId` | — |
+| `sigma_get_nodes_info` | 여러 노드 상세 정보 일괄 조회 | `token`, `nodeIds` | — |
+| `sigma_get_document_info` | 문서 정보 (파일명, 페이지 목록) | `token` | — |
+| `sigma_get_styles` | 로컬 스타일 조회 (Paint, Text, Effect, Grid) | `token` | — |
+| `sigma_get_selection` | 현재 선택된 노드 목록 | `token` | — |
+| `sigma_set_selection` | 특정 노드 선택 + 뷰포트 이동 | `token`, `nodeIds` | `zoomToFit` |
+| `sigma_read_my_design` | 현재 선택된 노드의 상세 정보 조회 | `token` | — |
+| `sigma_scan_text_nodes` | 하위 모든 텍스트 노드 스캔 | `token`, `nodeId` | — |
+| `sigma_scan_nodes_by_types` | 하위에서 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
+
+### 컴포넌트 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_get_local_components` | 로컬 컴포넌트 목록 (key, name, 크기) | `token` | — |
+| `sigma_get_instance_overrides` | 인스턴스의 오버라이드 속성 조회 | `token` | `nodeId` |
+| `sigma_set_instance_overrides` | 인스턴스 오버라이드 설정 | `token`, `nodeId`, `overrides` | — |
+
+### 주석 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_get_annotations` | 노드의 주석 목록 조회 | `token` | `nodeId` |
+| `sigma_set_annotation` | 노드에 주석 추가 | `token`, `nodeId`, `label` | `labelType` |
+| `sigma_set_multiple_annotations` | 여러 노드에 주석 일괄 추가 | `token`, `items` | — |
+
+### 프로토타이핑 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_get_reactions` | 노드의 인터랙션 목록 조회 | `token` | `nodeId` |
+| `sigma_add_reaction` | 노드에 인터랙션 추가 (클릭→이동, 호버→팝업 등) | `token`, `nodeId`, `trigger`, `action` | `destinationId`, `url`, `transition`, `preserveScrollPosition` |
+| `sigma_remove_reactions` | 노드의 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
+
+**trigger**: ON_CLICK, ON_HOVER, ON_PRESS, ON_DRAG, MOUSE_ENTER, MOUSE_LEAVE, AFTER_TIMEOUT
+**action**: NAVIGATE(이동), OVERLAY(팝업), BACK(뒤로), CLOSE(닫기), OPEN_URL(외부 링크), SCROLL_TO(스크롤), SWAP(교체)
+
+### 이미지/추출 (토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_screenshot` | 노드를 이미지로 캡처하여 파일 저장 | `token`, `nodeId` | `format`, `scale`, `filename` |
+| `sigma_extract_node` | Figma 노드를 지정 포맷(JSON/HTML)으로 추출 | `token`, `nodeId` | `format` |
+| `sigma_test_roundtrip` | 노드를 지정 포맷으로 추출 → 재생성 라운드트립 테스트 | `token`, `nodeId` | `format` |
 
 ### 데이터 저장/관리 (토큰 불필요)
 

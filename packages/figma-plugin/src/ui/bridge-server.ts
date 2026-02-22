@@ -52,6 +52,8 @@ interface ServerMessage {
   fills?: unknown;
   parentId?: string;
   scale?: number;
+  // 제네릭 패스스루를 위한 인덱스 시그니처
+  [key: string]: unknown;
 }
 
 // 서버(WebSocket) 메시지 핸들러
@@ -75,7 +77,7 @@ export function handleServerMessage(msg: ServerMessage) {
       );
 
       if (format === 'html') {
-        sendToPlugin('create-from-html', msg.html, msg.name, msg.position, undefined, undefined, msg.pageId);
+        sendToPlugin('create-from-html', msg.data, msg.name, msg.position, undefined, undefined, msg.pageId);
       } else {
         sendToPlugin('create-from-json', msg.data, msg.name, msg.position, undefined, undefined, msg.pageId);
       }
@@ -133,7 +135,7 @@ export function handleServerMessage(msg: ServerMessage) {
             type: 'update-frame',
             nodeId: msg.nodeId,
             format: updateFormat,
-            data: updateFormat === 'html' ? msg.html : msg.data,
+            data: msg.data,
             name: msg.name,
             pageId: msg.pageId,
           },
@@ -253,7 +255,8 @@ export function handleServerMessage(msg: ServerMessage) {
     }
 
     case SERVER_MSG.EXTRACT_NODE_JSON: {
-      log(`노드 JSON 추출 요청: ${msg.nodeId}`, 'info');
+      const extractFormat = msg.format || 'json';
+      log(`노드 추출 요청: ${msg.nodeId} (${extractFormat})`, 'info');
       setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
@@ -261,6 +264,7 @@ export function handleServerMessage(msg: ServerMessage) {
           pluginMessage: {
             type: 'extract-node-json',
             nodeId: msg.nodeId,
+            format: extractFormat,
           },
         },
         '*'
@@ -324,6 +328,23 @@ export function handleServerMessage(msg: ServerMessage) {
         },
         '*'
       );
+      break;
+    }
+
+    default: {
+      // 제네릭 패스스루: 새 명령어는 UPPER_SNAKE → kebab-case 변환 후 플러그인으로 전달
+      if (msg.commandId && msg.type) {
+        const kebabType = msg.type.toLowerCase().replace(/_/g, '-');
+        log(`명령 전달: ${msg.type} → ${kebabType}`, 'info');
+        setPendingCommandId(msg.commandId);
+
+        // type과 commandId를 제외한 모든 필드를 플러그인에 전달
+        const { type: _type, commandId: _cmdId, ...rest } = msg;
+        parent.postMessage(
+          { pluginMessage: { type: kebabType, ...rest } },
+          '*'
+        );
+      }
       break;
     }
   }

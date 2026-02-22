@@ -8,14 +8,22 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
     'setLayoutMode', 'setPadding', 'setItemSpacing', 'setClipsContent', 'setPrimaryAxisSizingMode', 'setCounterAxisSizingMode', 'setPrimaryAxisAlignItems', 'setCounterAxisAlignItems',
+    'setLayoutWrap', 'setCounterAxisSpacing', 'setLayoutSizing',
     'setCharacters', 'setFontSize', 'setTextAlignHorizontal',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight',
+    'setCornerSmoothing', 'setDashPattern', 'setMask',
   ]),
   // COMPONENT: FRAME과 동일
   COMPONENT: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
     'setLayoutMode', 'setPadding', 'setItemSpacing', 'setClipsContent', 'setPrimaryAxisSizingMode', 'setCounterAxisSizingMode', 'setPrimaryAxisAlignItems', 'setCounterAxisAlignItems',
+    'setLayoutWrap', 'setCounterAxisSpacing', 'setLayoutSizing',
     'setCharacters', 'setFontSize', 'setTextAlignHorizontal',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight',
+    'setCornerSmoothing', 'setDashPattern', 'setMask',
   ]),
   // SECTION: 제한적 (Auto Layout 미지원, stroke/cornerRadius 미지원)
   SECTION: new Set([
@@ -25,36 +33,49 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
   // GROUP: 가장 제한적 (크기는 자식에 의해 결정, fills 미지원)
   GROUP: new Set([
     'rename', 'setOpacity', 'setVisible', 'setLocked', 'remove',
-    // resize 미지원 - Group의 크기는 자식에 의해 자동 결정됨
-    // fills 미지원 - Group은 fills를 지원하지 않음
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning', 'setMask',
   ]),
   // TEXT: 텍스트 관련 메서드 + 기본 스타일
   TEXT: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setEffects', 'setBlendMode',
-    'setCharacters', 'setFontSize', 'setTextAlignHorizontal',
+    'setCharacters', 'setFontSize', 'setTextAlignHorizontal', 'setTextAlignVertical', 'setFontFamily', 'setFontWeight',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setMask',
+    'setTextAutoResize', 'setLineHeight', 'setLetterSpacing',
+    'setRangeFontSize', 'setRangeFontName', 'setRangeFills', 'setRangeTextDecoration', 'setRangeLineHeight', 'setRangeLetterSpacing',
   ]),
   // INSTANCE: 제한적 (컴포넌트 인스턴스)
   INSTANCE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setMinWidth', 'setMaxWidth', 'setMinHeight', 'setMaxHeight', 'setMask',
   ]),
   // RECTANGLE, ELLIPSE 등 Shape 노드
   RECTANGLE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setCornerRadius', 'setCornerRadii', 'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setCornerSmoothing', 'setDashPattern', 'setMask',
   ]),
   ELLIPSE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setDashPattern', 'setMask',
   ]),
   VECTOR: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setFills', 'setSolidFill', 'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setDashPattern', 'setMask',
   ]),
   LINE: new Set([
     'rename', 'resize', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setStrokes', 'setStrokeWeight', 'setEffects', 'setBlendMode',
+    'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning',
+    'setConstraints', 'setDashPattern', 'setMask',
   ]),
   // DEFAULT: 알 수 없는 타입에 대한 기본값 (가장 기본적인 메서드만)
   DEFAULT: new Set([
@@ -76,6 +97,28 @@ export function isMethodSupportedForType(nodeType: string, method: string): bool
 export function getSupportedMethodsForType(nodeType: string): string[] {
   const supported = METHOD_SUPPORT_MATRIX[nodeType] || METHOD_SUPPORT_MATRIX['DEFAULT'];
   return Array.from(supported);
+}
+
+/**
+ * 텍스트 노드의 모든 폰트를 로드하는 헬퍼
+ * Mixed font 텍스트에서 range 작업 전에 필요
+ */
+async function loadAllFonts(textNode: TextNode): Promise<void> {
+  const fontName = textNode.fontName;
+  if (fontName !== figma.mixed) {
+    await figma.loadFontAsync(fontName as FontName);
+    return;
+  }
+  const len = textNode.characters.length;
+  const loaded = new Set<string>();
+  for (let i = 0; i < len; i++) {
+    const font = textNode.getRangeFontName(i, i + 1) as FontName;
+    const key = `${font.family}|${font.style}`;
+    if (!loaded.has(key)) {
+      loaded.add(key);
+      await figma.loadFontAsync(font);
+    }
+  }
 }
 
 /**
@@ -349,6 +392,40 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     },
   },
 
+  setLayoutWrap: {
+    description: 'Auto Layout 줄바꿈 모드 설정. args: { wrap: "NO_WRAP" | "WRAP" }',
+    handler: (node, args) => {
+      if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
+      const wrap = args.wrap as string;
+      if (!wrap) throw new Error('wrap이 필요합니다');
+      (node as FrameNode).layoutWrap = wrap as 'NO_WRAP' | 'WRAP';
+      return { layoutWrap: (node as FrameNode).layoutWrap };
+    },
+  },
+  setCounterAxisSpacing: {
+    description: '줄바꿈 시 행/열 간격 설정. args: { spacing: number }',
+    handler: (node, args) => {
+      if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
+      const spacing = args.spacing as number;
+      if (spacing === undefined) throw new Error('spacing이 필요합니다');
+      (node as FrameNode).counterAxisSpacing = spacing;
+      return { counterAxisSpacing: (node as FrameNode).counterAxisSpacing };
+    },
+  },
+  setLayoutSizing: {
+    description: '레이아웃 크기 모드 설정. args: { horizontal?: "FIXED" | "HUG" | "FILL", vertical?: "FIXED" | "HUG" | "FILL" }',
+    handler: (node, args) => {
+      if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
+      const f = node as FrameNode;
+      if (args.horizontal) f.layoutSizingHorizontal = args.horizontal as 'FIXED' | 'HUG' | 'FILL';
+      if (args.vertical) f.layoutSizingVertical = args.vertical as 'FIXED' | 'HUG' | 'FILL';
+      return {
+        layoutSizingHorizontal: f.layoutSizingHorizontal,
+        layoutSizingVertical: f.layoutSizingVertical,
+      };
+    },
+  },
+
   // === Text ===
   setCharacters: {
     description: '텍스트 내용 변경. args: { characters: string }. 노드가 TextNode여야 합니다.',
@@ -381,6 +458,309 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
       await figma.loadFontAsync((node as TextNode).fontName as FontName);
       (node as TextNode).textAlignHorizontal = align as 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED';
       return { textAlignHorizontal: (node as TextNode).textAlignHorizontal };
+    },
+  },
+  setTextAlignVertical: {
+    description: '텍스트 수직 정렬. args: { align: "TOP" | "CENTER" | "BOTTOM" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const align = args.align as string;
+      if (!align) throw new Error('align이 필요합니다');
+      await figma.loadFontAsync((node as TextNode).fontName as FontName);
+      (node as TextNode).textAlignVertical = align as 'TOP' | 'CENTER' | 'BOTTOM';
+      return { textAlignVertical: (node as TextNode).textAlignVertical };
+    },
+  },
+  setFontFamily: {
+    description: '폰트 패밀리 변경. args: { family: string, style?: string }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const family = args.family as string;
+      if (!family) throw new Error('family가 필요합니다');
+      const style = (args.style as string) !== undefined ? (args.style as string) : 'Regular';
+      await figma.loadFontAsync({ family, style });
+      (node as TextNode).fontName = { family, style };
+      return { fontName: (node as TextNode).fontName };
+    },
+  },
+  setFontWeight: {
+    description: '폰트 굵기 변경. args: { weight: number } (100~900). 현재 폰트 패밀리에서 해당 weight의 style을 적용합니다.',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const weight = args.weight as number;
+      if (weight === undefined) throw new Error('weight가 필요합니다');
+      const textNode = node as TextNode;
+      const currentFont = textNode.fontName as FontName;
+      const weightMap: Record<number, string> = {
+        100: 'Thin', 200: 'Extra Light', 300: 'Light', 400: 'Regular',
+        500: 'Medium', 600: 'Semi Bold', 700: 'Bold', 800: 'Extra Bold', 900: 'Black',
+      };
+      const style = weightMap[weight] !== undefined ? weightMap[weight] : 'Regular';
+      await figma.loadFontAsync({ family: currentFont.family, style });
+      textNode.fontName = { family: currentFont.family, style };
+      return { fontName: textNode.fontName };
+    },
+  },
+
+  // === Transform ===
+  setRotation: {
+    description: '회전 각도 설정 (degree). args: { rotation: number }',
+    handler: (node, args) => {
+      const rotation = args.rotation as number;
+      if (rotation === undefined) throw new Error('rotation이 필요합니다');
+      node.rotation = rotation;
+      return { rotation: node.rotation };
+    },
+  },
+
+  // === Layout Child Properties ===
+  setLayoutAlign: {
+    description: 'Auto Layout 자식의 교차축 정렬. args: { align: "INHERIT" | "STRETCH" }',
+    handler: (node, args) => {
+      if (!('layoutAlign' in node)) throw new Error('이 노드는 layoutAlign을 지원하지 않습니다');
+      const align = args.align as string;
+      if (!align) throw new Error('align이 필요합니다');
+      (node as any).layoutAlign = align;
+      return { layoutAlign: (node as any).layoutAlign };
+    },
+  },
+  setLayoutGrow: {
+    description: 'Auto Layout 자식의 주축 확장. args: { grow: number } (0=고정, 1=채우기)',
+    handler: (node, args) => {
+      if (!('layoutGrow' in node)) throw new Error('이 노드는 layoutGrow를 지원하지 않습니다');
+      const grow = args.grow as number;
+      if (grow === undefined) throw new Error('grow가 필요합니다');
+      (node as any).layoutGrow = grow;
+      return { layoutGrow: (node as any).layoutGrow };
+    },
+  },
+  setLayoutPositioning: {
+    description: 'Auto Layout 자식의 위치 모드. args: { positioning: "AUTO" | "ABSOLUTE" }',
+    handler: (node, args) => {
+      if (!('layoutPositioning' in node)) throw new Error('이 노드는 layoutPositioning을 지원하지 않습니다');
+      const positioning = args.positioning as string;
+      if (!positioning) throw new Error('positioning이 필요합니다');
+      (node as any).layoutPositioning = positioning;
+      return { layoutPositioning: (node as any).layoutPositioning };
+    },
+  },
+
+  // === Constraints ===
+  setConstraints: {
+    description: '제약조건 설정. args: { horizontal?: "MIN"|"CENTER"|"MAX"|"STRETCH"|"SCALE", vertical?: "MIN"|"CENTER"|"MAX"|"STRETCH"|"SCALE" }',
+    handler: (node, args) => {
+      if (!('constraints' in node)) throw new Error('이 노드는 constraints를 지원하지 않습니다');
+      const h = args.horizontal as string;
+      const v = args.vertical as string;
+      if (!h && !v) throw new Error('horizontal 또는 vertical이 필요합니다');
+      const cn = node as ConstraintMixin & SceneNode;
+      const current = cn.constraints;
+      cn.constraints = {
+        horizontal: (h ? h : current.horizontal) as ConstraintType,
+        vertical: (v ? v : current.vertical) as ConstraintType,
+      };
+      return { constraints: cn.constraints };
+    },
+  },
+
+  // === Min/Max Size ===
+  setMinWidth: {
+    description: '최소 너비 설정. args: { value: number | null } (null=제한 없음)',
+    handler: (node, args) => {
+      if (!('minWidth' in node)) throw new Error('이 노드는 minWidth를 지원하지 않습니다');
+      (node as any).minWidth = args.value !== undefined ? args.value : null;
+      return { minWidth: (node as any).minWidth };
+    },
+  },
+  setMaxWidth: {
+    description: '최대 너비 설정. args: { value: number | null }',
+    handler: (node, args) => {
+      if (!('maxWidth' in node)) throw new Error('이 노드는 maxWidth를 지원하지 않습니다');
+      (node as any).maxWidth = args.value !== undefined ? args.value : null;
+      return { maxWidth: (node as any).maxWidth };
+    },
+  },
+  setMinHeight: {
+    description: '최소 높이 설정. args: { value: number | null }',
+    handler: (node, args) => {
+      if (!('minHeight' in node)) throw new Error('이 노드는 minHeight를 지원하지 않습니다');
+      (node as any).minHeight = args.value !== undefined ? args.value : null;
+      return { minHeight: (node as any).minHeight };
+    },
+  },
+  setMaxHeight: {
+    description: '최대 높이 설정. args: { value: number | null }',
+    handler: (node, args) => {
+      if (!('maxHeight' in node)) throw new Error('이 노드는 maxHeight를 지원하지 않습니다');
+      (node as any).maxHeight = args.value !== undefined ? args.value : null;
+      return { maxHeight: (node as any).maxHeight };
+    },
+  },
+
+  // === Visual Extended ===
+  setCornerSmoothing: {
+    description: '코너 스무딩 (iOS 스타일 둥근 모서리). args: { smoothing: number } (0~1)',
+    handler: (node, args) => {
+      if (!('cornerSmoothing' in node)) throw new Error('이 노드는 cornerSmoothing을 지원하지 않습니다');
+      const smoothing = args.smoothing as number;
+      if (smoothing === undefined) throw new Error('smoothing이 필요합니다');
+      (node as any).cornerSmoothing = Math.max(0, Math.min(1, smoothing));
+      return { cornerSmoothing: (node as any).cornerSmoothing };
+    },
+  },
+  setDashPattern: {
+    description: '점선 패턴 설정. args: { pattern: number[] } (예: [5, 3] = 5px 선, 3px 간격)',
+    handler: (node, args) => {
+      if (!('dashPattern' in node)) throw new Error('이 노드는 dashPattern을 지원하지 않습니다');
+      const pattern = args.pattern;
+      if (!Array.isArray(pattern)) throw new Error('pattern 배열이 필요합니다');
+      (node as any).dashPattern = pattern;
+      return { dashPattern: (node as any).dashPattern };
+    },
+  },
+  setMask: {
+    description: '마스크 설정/해제. args: { isMask: boolean }',
+    handler: (node, args) => {
+      if (!('isMask' in node)) throw new Error('이 노드는 mask를 지원하지 않습니다');
+      const isMask = args.isMask;
+      if (isMask === undefined) throw new Error('isMask가 필요합니다');
+      (node as any).isMask = !!isMask;
+      return { isMask: (node as any).isMask };
+    },
+  },
+
+  // === Text Extended ===
+  setTextAutoResize: {
+    description: '텍스트 자동 크기 조정. args: { mode: "NONE"|"WIDTH_AND_HEIGHT"|"HEIGHT"|"TRUNCATE" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const mode = args.mode as string;
+      if (!mode) throw new Error('mode가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).textAutoResize = mode as 'NONE' | 'WIDTH_AND_HEIGHT' | 'HEIGHT' | 'TRUNCATE';
+      return { textAutoResize: (node as TextNode).textAutoResize };
+    },
+  },
+  setLineHeight: {
+    description: '행간 설정. args: { value: number, unit?: "PIXELS"|"PERCENT"|"AUTO" }. AUTO이면 value 무시.',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      await loadAllFonts(node as TextNode);
+      const unit = (args.unit as string) || 'PIXELS';
+      if (unit === 'AUTO') {
+        (node as TextNode).lineHeight = { unit: 'AUTO' };
+      } else {
+        const value = args.value as number;
+        if (value === undefined) throw new Error('value가 필요합니다');
+        (node as TextNode).lineHeight = { value, unit: unit as 'PIXELS' | 'PERCENT' };
+      }
+      return { lineHeight: (node as TextNode).lineHeight };
+    },
+  },
+  setLetterSpacing: {
+    description: '자간 설정. args: { value: number, unit?: "PIXELS"|"PERCENT" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const value = args.value as number;
+      if (value === undefined) throw new Error('value가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      const unit = (args.unit as string) || 'PIXELS';
+      (node as TextNode).letterSpacing = { value, unit: unit as 'PIXELS' | 'PERCENT' };
+      return { letterSpacing: (node as TextNode).letterSpacing };
+    },
+  },
+
+  // === Rich Text (Range) ===
+  setRangeFontSize: {
+    description: '텍스트 일부의 폰트 크기 변경. args: { start: number, end: number, size: number }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const size = args.size as number;
+      if (start === undefined || end === undefined || size === undefined) throw new Error('start, end, size가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).setRangeFontSize(start, end, size);
+      return { start, end, fontSize: size };
+    },
+  },
+  setRangeFontName: {
+    description: '텍스트 일부의 폰트 변경. args: { start: number, end: number, family: string, style?: string }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const family = args.family as string;
+      if (start === undefined || end === undefined || !family) throw new Error('start, end, family가 필요합니다');
+      const style = (args.style as string) !== undefined ? (args.style as string) : 'Regular';
+      await loadAllFonts(node as TextNode);
+      await figma.loadFontAsync({ family, style });
+      (node as TextNode).setRangeFontName(start, end, { family, style });
+      return { start, end, fontName: { family, style } };
+    },
+  },
+  setRangeFills: {
+    description: '텍스트 일부의 색상 변경. args: { start: number, end: number, r: 0~1, g: 0~1, b: 0~1, opacity?: 0~1 }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const r = args.r as number;
+      const g = args.g as number;
+      const b = args.b as number;
+      if (start === undefined || end === undefined || r === undefined || g === undefined || b === undefined) {
+        throw new Error('start, end, r, g, b가 필요합니다');
+      }
+      const opacity = args.opacity !== undefined ? args.opacity as number : 1;
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).setRangeFills(start, end, [{ type: 'SOLID', color: { r, g, b }, opacity }]);
+      return { start, end, fills: { r, g, b, opacity } };
+    },
+  },
+  setRangeTextDecoration: {
+    description: '텍스트 일부의 장식. args: { start: number, end: number, decoration: "NONE"|"UNDERLINE"|"STRIKETHROUGH" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const decoration = args.decoration as string;
+      if (start === undefined || end === undefined || !decoration) throw new Error('start, end, decoration이 필요합니다');
+      await loadAllFonts(node as TextNode);
+      (node as TextNode).setRangeTextDecoration(start, end, decoration as TextDecoration);
+      return { start, end, textDecoration: decoration };
+    },
+  },
+  setRangeLineHeight: {
+    description: '텍스트 일부의 행간 변경. args: { start: number, end: number, value: number, unit?: "PIXELS"|"PERCENT"|"AUTO" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      if (start === undefined || end === undefined) throw new Error('start, end가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      const unit = (args.unit as string) || 'PIXELS';
+      if (unit === 'AUTO') {
+        (node as TextNode).setRangeLineHeight(start, end, { unit: 'AUTO' });
+      } else {
+        const value = args.value as number;
+        if (value === undefined) throw new Error('value가 필요합니다');
+        (node as TextNode).setRangeLineHeight(start, end, { value, unit: unit as 'PIXELS' | 'PERCENT' });
+      }
+      return { start, end, lineHeight: unit === 'AUTO' ? { unit: 'AUTO' } : { value: args.value, unit } };
+    },
+  },
+  setRangeLetterSpacing: {
+    description: '텍스트 일부의 자간 변경. args: { start: number, end: number, value: number, unit?: "PIXELS"|"PERCENT" }',
+    handler: async (node, args) => {
+      if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
+      const start = args.start as number;
+      const end = args.end as number;
+      const value = args.value as number;
+      if (start === undefined || end === undefined || value === undefined) throw new Error('start, end, value가 필요합니다');
+      await loadAllFonts(node as TextNode);
+      const unit = (args.unit as string) || 'PIXELS';
+      (node as TextNode).setRangeLetterSpacing(start, end, { value, unit: unit as 'PIXELS' | 'PERCENT' });
+      return { start, end, letterSpacing: { value, unit } };
     },
   },
 };
