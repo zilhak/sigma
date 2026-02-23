@@ -74,6 +74,50 @@ figma.on('currentpagechange', () => {
   sendFileInfo();
 });
 
+// 선택 변경 시 UI에 정보 전송
+function sendSelectionInfo() {
+  const selection = figma.currentPage.selection;
+  const nodes = selection.map(node => ({
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    x: 'x' in node ? (node as SceneNode).x : 0,
+    y: 'y' in node ? (node as SceneNode).y : 0,
+    width: 'width' in node ? (node as SceneNode).width : 0,
+    height: 'height' in node ? (node as SceneNode).height : 0,
+  }));
+
+  figma.ui.postMessage({
+    type: 'selection-changed',
+    nodes,
+    viewport: {
+      centerX: figma.viewport.center.x,
+      centerY: figma.viewport.center.y,
+      zoom: figma.viewport.zoom,
+    },
+  });
+}
+
+figma.on('selectionchange', sendSelectionInfo);
+
+// 뷰포트 변경 감지 (폴링, 500ms 간격)
+let lastViewportX = figma.viewport.center.x;
+let lastViewportY = figma.viewport.center.y;
+let lastViewportZoom = figma.viewport.zoom;
+
+setInterval(() => {
+  const cx = figma.viewport.center.x;
+  const cy = figma.viewport.center.y;
+  const z = figma.viewport.zoom;
+
+  if (cx !== lastViewportX || cy !== lastViewportY || z !== lastViewportZoom) {
+    lastViewportX = cx;
+    lastViewportY = cy;
+    lastViewportZoom = z;
+    sendSelectionInfo();
+  }
+}, 500);
+
 // 메시지 핸들러
 figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
   switch (msg.type) {

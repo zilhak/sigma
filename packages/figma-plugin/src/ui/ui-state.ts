@@ -32,25 +32,57 @@ export const dom = {
   statusDotMini: document.getElementById('statusDotMini') as HTMLDivElement,
   statusText: document.getElementById('statusText') as HTMLSpanElement,
   tabs: document.querySelectorAll('.tab'),
-  pasteJsonSection: document.getElementById('pasteJsonSection') as HTMLDivElement,
-  pasteHtmlSection: document.getElementById('pasteHtmlSection') as HTMLDivElement,
+  // 섹션
+  infoSection: document.getElementById('infoSection') as HTMLDivElement,
   serverSection: document.getElementById('serverSection') as HTMLDivElement,
-  jsonInput: document.getElementById('jsonInput') as HTMLTextAreaElement,
-  htmlInput: document.getElementById('htmlInput') as HTMLTextAreaElement,
-  importJsonBtn: document.getElementById('importJsonBtn') as HTMLButtonElement,
-  importHtmlBtn: document.getElementById('importHtmlBtn') as HTMLButtonElement,
-  message: document.getElementById('message') as HTMLDivElement,
+  logSection: document.getElementById('logSection') as HTMLDivElement,
+  objectSection: document.getElementById('objectSection') as HTMLDivElement,
+  // 정보 탭
+  viewportCenter: document.getElementById('viewportCenter') as HTMLSpanElement,
+  viewportZoom: document.getElementById('viewportZoom') as HTMLSpanElement,
+  selectionTextArea: document.getElementById('selectionTextArea') as HTMLTextAreaElement,
+  // 서버 탭
   serverConnected: document.getElementById('serverConnected') as HTMLDivElement,
   serverDisconnected: document.getElementById('serverDisconnected') as HTMLDivElement,
-  minimizeBtn: document.getElementById('minimizeBtn') as HTMLButtonElement,
-  expandBtn: document.getElementById('expandBtn') as HTMLButtonElement,
-  fullView: document.getElementById('fullView') as HTMLDivElement,
-  minimizedView: document.getElementById('minimizedView') as HTMLDivElement,
-  logContainer: document.getElementById('logContainer') as HTMLDivElement,
   fileKeyInput: document.getElementById('fileKeyInput') as HTMLInputElement,
   fileKeyStatus: document.getElementById('fileKeyStatus') as HTMLSpanElement,
   fileKeyHint: document.getElementById('fileKeyHint') as HTMLDivElement,
   saveFileKeyBtn: document.getElementById('saveFileKeyBtn') as HTMLButtonElement,
+  // 로그 탭
+  logContainer: document.getElementById('logContainer') as HTMLDivElement,
+  // 개체 탭
+  importHtmlBtn: document.getElementById('importHtmlBtn') as HTMLButtonElement,
+  importJsonBtn: document.getElementById('importJsonBtn') as HTMLButtonElement,
+  importServerBtn: document.getElementById('importServerBtn') as HTMLButtonElement,
+  exportHtmlBtn: document.getElementById('exportHtmlBtn') as HTMLButtonElement,
+  exportJsonBtn: document.getElementById('exportJsonBtn') as HTMLButtonElement,
+  // Import Modal
+  importModal: document.getElementById('importModal') as HTMLDivElement,
+  importModalTitle: document.getElementById('importModalTitle') as HTMLDivElement,
+  importTextArea: document.getElementById('importTextArea') as HTMLTextAreaElement,
+  importModalCancel: document.getElementById('importModalCancel') as HTMLButtonElement,
+  importModalSubmit: document.getElementById('importModalSubmit') as HTMLButtonElement,
+  // Export Modal
+  exportModal: document.getElementById('exportModal') as HTMLDivElement,
+  exportModalTitle: document.getElementById('exportModalTitle') as HTMLDivElement,
+  exportTextArea: document.getElementById('exportTextArea') as HTMLTextAreaElement,
+  exportModalClose: document.getElementById('exportModalClose') as HTMLButtonElement,
+  exportModalCopy: document.getElementById('exportModalCopy') as HTMLButtonElement,
+  exportModalSave: document.getElementById('exportModalSave') as HTMLButtonElement,
+  exportModalSaveServer: document.getElementById('exportModalSaveServer') as HTMLButtonElement,
+  // Server List Modal
+  serverListModal: document.getElementById('serverListModal') as HTMLDivElement,
+  serverList: document.getElementById('serverList') as HTMLDivElement,
+  serverListClose: document.getElementById('serverListClose') as HTMLButtonElement,
+  serverListImport: document.getElementById('serverListImport') as HTMLButtonElement,
+  // 재시도 버튼
+  retryConnectBtn: document.getElementById('retryConnectBtn') as HTMLButtonElement,
+  // 공통
+  message: document.getElementById('message') as HTMLDivElement,
+  minimizeBtn: document.getElementById('minimizeBtn') as HTMLButtonElement,
+  expandBtn: document.getElementById('expandBtn') as HTMLButtonElement,
+  fullView: document.getElementById('fullView') as HTMLDivElement,
+  minimizedView: document.getElementById('minimizedView') as HTMLDivElement,
 };
 
 // === 상태 변수 ===
@@ -157,6 +189,47 @@ export function updatePluginIdDisplay() {
       pluginIdElement.textContent = '-';
       pluginIdElement.title = '';
     }
+  }
+}
+
+// 선택 정보 업데이트
+export interface SelectionNode {
+  id: string;
+  name: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function updateSelectionDisplay(nodes: SelectionNode[], viewport: { centerX: number; centerY: number; zoom: number }) {
+  // 뷰포트 정보
+  dom.viewportCenter.textContent = `(${Math.round(viewport.centerX)}, ${Math.round(viewport.centerY)})`;
+  dom.viewportZoom.textContent = `${Math.round(viewport.zoom * 100)}%`;
+
+  // 선택 노드 목록
+  if (nodes.length === 0) {
+    dom.selectionTextArea.value = '';
+    dom.selectionTextArea.placeholder = '노드를 선택하면 여기에 표시됩니다...';
+  } else {
+    const lines = nodes.map(n =>
+      `${n.id}  ${n.type} "${n.name}"  (${Math.round(n.x)}, ${Math.round(n.y)}) ${Math.round(n.width)}x${Math.round(n.height)}`
+    );
+    dom.selectionTextArea.value = lines.join('\n');
+  }
+}
+
+// Export 결과 콜백 (ui.ts에서 설정)
+let exportResultCallback: ((format: string, success: boolean, data: unknown, error?: string) => void) | null = null;
+
+export function setExportResultCallback(cb: (format: string, success: boolean, data: unknown, error?: string) => void) {
+  exportResultCallback = cb;
+}
+
+export function notifyExportResult(format: string, success: boolean, data: unknown, error?: string) {
+  if (exportResultCallback) {
+    exportResultCallback(format, success, data, error);
   }
 }
 

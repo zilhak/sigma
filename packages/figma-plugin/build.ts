@@ -61,7 +61,7 @@ function buildHTML() {
   let html = readFileSync(join(__dirname, 'src/ui.html'), 'utf-8');
 
   // Inject version into HTML
-  html = html.replace(/>v0\.0\.1<\/span>/g, `>${VERSION}</span>`);
+  html = html.replace(/>__VERSION__<\/span>/g, `>${VERSION}</span>`);
 
   // Inline the JS into the HTML
   html = html.replace(

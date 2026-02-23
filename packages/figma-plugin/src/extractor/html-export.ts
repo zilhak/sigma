@@ -177,8 +177,11 @@ export function buildStyleString(styles: ComputedStyles): string {
   if (styles.color && styles.color.a > 0) {
     parts.push(`color: ${rgbaToCSS(styles.color)}`);
   }
-  if (styles.fontSize && styles.fontSize !== 14) {
+  if (styles.fontSize && styles.fontSize > 0) {
     parts.push(`font-size: ${styles.fontSize}px`);
+  }
+  if (styles.fontFamily && styles.fontFamily !== 'Inter') {
+    parts.push(`font-family: ${styles.fontFamily}`);
   }
   if (styles.fontWeight && styles.fontWeight !== '400') {
     parts.push(`font-weight: ${styles.fontWeight}`);

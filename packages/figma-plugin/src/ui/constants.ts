@@ -45,4 +45,5 @@ export const PLUGIN_MSG = {
   CREATE_SECTION_RESULT: 'create-section-result',
   MOVE_NODE_RESULT: 'move-node-result',
   CLONE_NODE_RESULT: 'clone-node-result',
+  SELECTION_CHANGED: 'selection-changed',
 } as const;

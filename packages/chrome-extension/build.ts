@@ -25,7 +25,7 @@ async function build() {
 
   // Process popup.html with version injection
   let popupHtml = readFileSync(join(__dirname, 'src/popup/popup.html'), 'utf-8');
-  popupHtml = popupHtml.replace(/>v0\.0\.1<\/span>/g, `>${VERSION}</span>`);
+  popupHtml = popupHtml.replace(/>__VERSION__<\/span>/g, `>${VERSION}</span>`);
   writeFileSync(join(__dirname, 'dist/popup.html'), popupHtml);
 
   // Build configurations

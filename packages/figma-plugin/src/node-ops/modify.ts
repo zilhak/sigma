@@ -1,3 +1,58 @@
+// ============================================================
+// 타입 안전 유틸리티 — Agent가 보낼 수 있는 모든 형태를 정규화
+// ============================================================
+
+/** 숫자 인자 정규화: "16" → 16, 16 → 16, 잘못된 값 → throw */
+function toNum(val: unknown, name: string): number {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const n = Number(val);
+    if (!isNaN(n)) return n;
+  }
+  throw new Error(name + '은(는) 숫자여야 합니다. 받은 값: ' + String(val));
+}
+
+/** 선택적 숫자 인자: undefined면 undefined 반환, 아니면 toNum */
+function toNumOpt(val: unknown, name: string): number | undefined {
+  if (val === undefined || val === null) return undefined;
+  return toNum(val, name);
+}
+
+/** Boolean 인자 정규화: "false" → false, "true" → true, 0 → false */
+function toBool(val: unknown): boolean {
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') return val.toLowerCase() === 'true';
+  return !!val;
+}
+
+/** Enum 인자 정규화: 대문자 변환 + 유효값 검증 */
+function toEnum<T extends string>(val: unknown, allowed: readonly T[], name: string): T {
+  const upper = String(val).toUpperCase().replace(/-/g, '_') as T;
+  if (allowed.indexOf(upper) !== -1) return upper;
+  throw new Error(name + '은(는) ' + allowed.join(', ') + ' 중 하나여야 합니다. 받은 값: ' + String(val));
+}
+
+/** 선택적 Enum: undefined면 undefined, 아니면 toEnum */
+function toEnumOpt<T extends string>(val: unknown, allowed: readonly T[], name: string): T | undefined {
+  if (val === undefined || val === null) return undefined;
+  return toEnum(val, allowed, name);
+}
+
+/**
+ * TextNode의 폰트를 로드하는 헬퍼. figma.mixed인 경우 모든 폰트를 로드.
+ */
+async function loadTextNodeFonts(textNode: TextNode): Promise<void> {
+  const fontName = textNode.fontName;
+  if (fontName === figma.mixed) {
+    const allFonts = textNode.getRangeAllFontNames(0, textNode.characters.length);
+    for (const font of allFonts) {
+      await figma.loadFontAsync(font);
+    }
+  } else {
+    await figma.loadFontAsync(fontName);
+  }
+}
+
 /**
  * 노드 타입별 지원 메서드 매트릭스
  * 각 메서드가 어떤 노드 타입에서 지원되는지 정의
@@ -185,9 +240,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   resize: {
     description: '노드 크기 변경. args: { width: number, height: number }',
     handler: (node, args) => {
-      const w = args.width as number;
-      const h = args.height as number;
-      if (w === undefined || h === undefined) throw new Error('width, height가 필요합니다');
+      const w = toNum(args.width, 'width');
+      const h = toNum(args.height, 'height');
       const safeW = Math.max(w, 0.01);
       const safeH = Math.max(h, 0.01);
       // SectionNode는 resize() 메서드가 없고 width/height 직접 설정
@@ -205,8 +259,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   move: {
     description: '노드 위치 변경. args: { x: number, y: number }',
     handler: (node, args) => {
-      const x = args.x as number;
-      const y = args.y as number;
+      const x = toNumOpt(args.x, 'x');
+      const y = toNumOpt(args.y, 'y');
       if (x !== undefined) node.x = x;
       if (y !== undefined) node.y = y;
       return { x: node.x, y: node.y };
@@ -215,8 +269,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   setOpacity: {
     description: '불투명도 설정 (0~1). args: { opacity: number }',
     handler: (node, args) => {
-      const opacity = args.opacity as number;
-      if (opacity === undefined) throw new Error('opacity가 필요합니다');
+      const opacity = toNum(args.opacity, 'opacity');
       node.opacity = Math.max(0, Math.min(1, opacity));
       return { opacity: node.opacity };
     },
@@ -224,18 +277,16 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   setVisible: {
     description: '가시성 설정. args: { visible: boolean }',
     handler: (node, args) => {
-      const visible = args.visible;
-      if (visible === undefined) throw new Error('visible이 필요합니다');
-      node.visible = !!visible;
+      if (args.visible === undefined) throw new Error('visible이 필요합니다');
+      node.visible = toBool(args.visible);
       return { visible: node.visible };
     },
   },
   setLocked: {
     description: '잠금 설정. args: { locked: boolean }',
     handler: (node, args) => {
-      const locked = args.locked;
-      if (locked === undefined) throw new Error('locked가 필요합니다');
-      node.locked = !!locked;
+      if (args.locked === undefined) throw new Error('locked가 필요합니다');
+      node.locked = toBool(args.locked);
       return { locked: node.locked };
     },
   },
@@ -264,11 +315,10 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '단색 채우기 설정 (편의 메서드). args: { r: 0~1, g: 0~1, b: 0~1, opacity?: 0~1 }',
     handler: (node, args) => {
       if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
-      const r = args.r as number;
-      const g = args.g as number;
-      const b = args.b as number;
-      if (r === undefined || g === undefined || b === undefined) throw new Error('r, g, b가 필요합니다');
-      const opacity = args.opacity !== undefined ? args.opacity as number : 1;
+      const r = toNum(args.r, 'r');
+      const g = toNum(args.g, 'g');
+      const b = toNum(args.b, 'b');
+      const opacity = args.opacity !== undefined ? toNum(args.opacity, 'opacity') : 1;
       (node as GeometryMixin & SceneNode).fills = [{
         type: 'SOLID',
         color: { r, g, b },
@@ -291,8 +341,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '테두리 두께 설정. args: { weight: number }',
     handler: (node, args) => {
       if (!('strokeWeight' in node)) throw new Error('이 노드는 strokeWeight를 지원하지 않습니다');
-      const weight = args.weight as number;
-      if (weight === undefined) throw new Error('weight가 필요합니다');
+      const weight = toNum(args.weight, 'weight');
       (node as GeometryMixin & SceneNode).strokeWeight = weight;
       return { strokeWeight: (node as GeometryMixin & SceneNode).strokeWeight };
     },
@@ -301,8 +350,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '모서리 라운드 설정 (균일). args: { radius: number }',
     handler: (node, args) => {
       if (!('cornerRadius' in node)) throw new Error('이 노드는 cornerRadius를 지원하지 않습니다');
-      const radius = args.radius as number;
-      if (radius === undefined) throw new Error('radius가 필요합니다');
+      const radius = toNum(args.radius, 'radius');
       (node as FrameNode).cornerRadius = radius;
       return { cornerRadius: (node as FrameNode).cornerRadius };
     },
@@ -312,10 +360,14 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     handler: (node, args) => {
       if (!('topLeftRadius' in node)) throw new Error('이 노드는 개별 cornerRadius를 지원하지 않습니다');
       const f = node as FrameNode;
-      if (args.topLeft !== undefined) f.topLeftRadius = args.topLeft as number;
-      if (args.topRight !== undefined) f.topRightRadius = args.topRight as number;
-      if (args.bottomRight !== undefined) f.bottomRightRadius = args.bottomRight as number;
-      if (args.bottomLeft !== undefined) f.bottomLeftRadius = args.bottomLeft as number;
+      const tl = toNumOpt(args.topLeft, 'topLeft');
+      const tr = toNumOpt(args.topRight, 'topRight');
+      const br = toNumOpt(args.bottomRight, 'bottomRight');
+      const bl = toNumOpt(args.bottomLeft, 'bottomLeft');
+      if (tl !== undefined) f.topLeftRadius = tl;
+      if (tr !== undefined) f.topRightRadius = tr;
+      if (br !== undefined) f.bottomRightRadius = br;
+      if (bl !== undefined) f.bottomLeftRadius = bl;
       return {
         topLeftRadius: f.topLeftRadius,
         topRightRadius: f.topRightRadius,
@@ -338,8 +390,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '블렌드 모드 설정. args: { blendMode: string } (NORMAL, MULTIPLY, SCREEN 등)',
     handler: (node, args) => {
       if (!('blendMode' in node)) throw new Error('이 노드는 blendMode를 지원하지 않습니다');
-      const blendMode = args.blendMode as string;
-      if (!blendMode) throw new Error('blendMode가 필요합니다');
+      const blendMode = toEnum(args.blendMode, ['NORMAL','DARKEN','MULTIPLY','LINEAR_BURN','COLOR_BURN','LIGHTEN','SCREEN','LINEAR_DODGE','COLOR_DODGE','OVERLAY','SOFT_LIGHT','HARD_LIGHT','DIFFERENCE','EXCLUSION','HUE','SATURATION','COLOR','LUMINOSITY','PASS_THROUGH'] as const, 'blendMode');
       (node as FrameNode).blendMode = blendMode as BlendMode;
       return { blendMode: (node as FrameNode).blendMode };
     },
@@ -350,8 +401,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Auto Layout 모드 설정. args: { layoutMode: "NONE" | "HORIZONTAL" | "VERTICAL" }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const mode = args.layoutMode as string;
-      if (!mode) throw new Error('layoutMode가 필요합니다');
+      const mode = toEnum(args.layoutMode, ['NONE','HORIZONTAL','VERTICAL'] as const, 'layoutMode');
       (node as FrameNode).layoutMode = mode as 'NONE' | 'HORIZONTAL' | 'VERTICAL';
       return { layoutMode: (node as FrameNode).layoutMode };
     },
@@ -361,10 +411,14 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const f = node as FrameNode;
-      if (args.top !== undefined) f.paddingTop = args.top as number;
-      if (args.right !== undefined) f.paddingRight = args.right as number;
-      if (args.bottom !== undefined) f.paddingBottom = args.bottom as number;
-      if (args.left !== undefined) f.paddingLeft = args.left as number;
+      const top = toNumOpt(args.top, 'top');
+      const right = toNumOpt(args.right, 'right');
+      const bottom = toNumOpt(args.bottom, 'bottom');
+      const left = toNumOpt(args.left, 'left');
+      if (top !== undefined) f.paddingTop = top;
+      if (right !== undefined) f.paddingRight = right;
+      if (bottom !== undefined) f.paddingBottom = bottom;
+      if (left !== undefined) f.paddingLeft = left;
       return {
         paddingTop: f.paddingTop,
         paddingRight: f.paddingRight,
@@ -377,8 +431,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Auto Layout 아이템 간격 설정. args: { spacing: number }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const spacing = args.spacing as number;
-      if (spacing === undefined) throw new Error('spacing이 필요합니다');
+      const spacing = toNum(args.spacing, 'spacing');
       (node as FrameNode).itemSpacing = spacing;
       return { itemSpacing: (node as FrameNode).itemSpacing };
     },
@@ -387,9 +440,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '콘텐츠 클리핑(Clip content) 설정. args: { clips: boolean }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const clips = args.clips;
-      if (clips === undefined) throw new Error('clips가 필요합니다');
-      (node as FrameNode).clipsContent = !!clips;
+      if (args.clips === undefined) throw new Error('clips가 필요합니다');
+      (node as FrameNode).clipsContent = toBool(args.clips);
       return { clipsContent: (node as FrameNode).clipsContent };
     },
   },
@@ -397,8 +449,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '주축 크기 모드 설정. args: { mode: "FIXED" | "AUTO" }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const mode = args.mode as string;
-      if (!mode) throw new Error('mode가 필요합니다');
+      const mode = toEnum(args.mode, ['FIXED','AUTO'] as const, 'mode');
       (node as FrameNode).primaryAxisSizingMode = mode as 'FIXED' | 'AUTO';
       return { primaryAxisSizingMode: (node as FrameNode).primaryAxisSizingMode };
     },
@@ -407,8 +458,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '교차축 크기 모드 설정. args: { mode: "FIXED" | "AUTO" }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const mode = args.mode as string;
-      if (!mode) throw new Error('mode가 필요합니다');
+      const mode = toEnum(args.mode, ['FIXED','AUTO'] as const, 'mode');
       (node as FrameNode).counterAxisSizingMode = mode as 'FIXED' | 'AUTO';
       return { counterAxisSizingMode: (node as FrameNode).counterAxisSizingMode };
     },
@@ -417,8 +467,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '주축 정렬 설정. args: { align: "MIN" | "CENTER" | "MAX" | "SPACE_BETWEEN" }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const align = args.align as string;
-      if (!align) throw new Error('align이 필요합니다');
+      const align = toEnum(args.align, ['MIN','CENTER','MAX','SPACE_BETWEEN'] as const, 'align');
       (node as FrameNode).primaryAxisAlignItems = align as 'MIN' | 'CENTER' | 'MAX' | 'SPACE_BETWEEN';
       return { primaryAxisAlignItems: (node as FrameNode).primaryAxisAlignItems };
     },
@@ -427,8 +476,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '교차축 정렬 설정. args: { align: "MIN" | "CENTER" | "MAX" }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const align = args.align as string;
-      if (!align) throw new Error('align이 필요합니다');
+      const align = toEnum(args.align, ['MIN','CENTER','MAX','BASELINE'] as const, 'align');
       (node as FrameNode).counterAxisAlignItems = align as 'MIN' | 'CENTER' | 'MAX';
       return { counterAxisAlignItems: (node as FrameNode).counterAxisAlignItems };
     },
@@ -438,8 +486,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Auto Layout 줄바꿈 모드 설정. args: { wrap: "NO_WRAP" | "WRAP" }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const wrap = args.wrap as string;
-      if (!wrap) throw new Error('wrap이 필요합니다');
+      const wrap = toEnum(args.wrap, ['NO_WRAP','WRAP'] as const, 'wrap');
       (node as FrameNode).layoutWrap = wrap as 'NO_WRAP' | 'WRAP';
       return { layoutWrap: (node as FrameNode).layoutWrap };
     },
@@ -448,8 +495,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '줄바꿈 시 행/열 간격 설정. args: { spacing: number }',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
-      const spacing = args.spacing as number;
-      if (spacing === undefined) throw new Error('spacing이 필요합니다');
+      const spacing = toNum(args.spacing, 'spacing');
       (node as FrameNode).counterAxisSpacing = spacing;
       return { counterAxisSpacing: (node as FrameNode).counterAxisSpacing };
     },
@@ -459,8 +505,10 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const f = node as FrameNode;
-      if (args.horizontal) f.layoutSizingHorizontal = args.horizontal as 'FIXED' | 'HUG' | 'FILL';
-      if (args.vertical) f.layoutSizingVertical = args.vertical as 'FIXED' | 'HUG' | 'FILL';
+      const horizontal = toEnumOpt(args.horizontal, ['FIXED','HUG','FILL'] as const, 'horizontal');
+      const vertical = toEnumOpt(args.vertical, ['FIXED','HUG','FILL'] as const, 'vertical');
+      if (horizontal) f.layoutSizingHorizontal = horizontal as 'FIXED' | 'HUG' | 'FILL';
+      if (vertical) f.layoutSizingVertical = vertical as 'FIXED' | 'HUG' | 'FILL';
       return {
         layoutSizingHorizontal: f.layoutSizingHorizontal,
         layoutSizingVertical: f.layoutSizingVertical,
@@ -473,9 +521,9 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 내용 변경. args: { characters: string }. 노드가 TextNode여야 합니다.',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const characters = args.characters as string;
-      if (characters === undefined) throw new Error('characters가 필요합니다');
-      await figma.loadFontAsync((node as TextNode).fontName as FontName);
+      if (args.characters === undefined) throw new Error('characters가 필요합니다');
+      const characters = String(args.characters);
+      await loadTextNodeFonts(node as TextNode);
       (node as TextNode).characters = characters;
       return { characters: (node as TextNode).characters };
     },
@@ -484,9 +532,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '폰트 크기 변경. args: { size: number }. 노드가 TextNode여야 합니다.',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const size = args.size as number;
-      if (size === undefined) throw new Error('size가 필요합니다');
-      await figma.loadFontAsync((node as TextNode).fontName as FontName);
+      const size = toNum(args.size, 'size');
+      await loadTextNodeFonts(node as TextNode);
       (node as TextNode).fontSize = size;
       return { fontSize: (node as TextNode).fontSize };
     },
@@ -495,9 +542,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 수평 정렬. args: { align: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const align = args.align as string;
-      if (!align) throw new Error('align이 필요합니다');
-      await figma.loadFontAsync((node as TextNode).fontName as FontName);
+      const align = toEnum(args.align, ['LEFT','CENTER','RIGHT','JUSTIFIED'] as const, 'align');
+      await loadTextNodeFonts(node as TextNode);
       (node as TextNode).textAlignHorizontal = align as 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED';
       return { textAlignHorizontal: (node as TextNode).textAlignHorizontal };
     },
@@ -506,9 +552,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 수직 정렬. args: { align: "TOP" | "CENTER" | "BOTTOM" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const align = args.align as string;
-      if (!align) throw new Error('align이 필요합니다');
-      await figma.loadFontAsync((node as TextNode).fontName as FontName);
+      const align = toEnum(args.align, ['TOP','CENTER','BOTTOM'] as const, 'align');
+      await loadTextNodeFonts(node as TextNode);
       (node as TextNode).textAlignVertical = align as 'TOP' | 'CENTER' | 'BOTTOM';
       return { textAlignVertical: (node as TextNode).textAlignVertical };
     },
@@ -526,21 +571,63 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     },
   },
   setFontWeight: {
-    description: '폰트 굵기 변경. args: { weight: number } (100~900). 현재 폰트 패밀리에서 해당 weight의 style을 적용합니다.',
+    description: '폰트 굵기 변경. args: { weight: number | string } (숫자: 100~900, 문자열: "Regular", "Bold" 등 스타일명). 해당 폰트에서 사용 가능한 스타일을 자동 탐색합니다.',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const weight = args.weight as number;
-      if (weight === undefined) throw new Error('weight가 필요합니다');
+      let w = args.weight;
+      if (w === undefined) throw new Error('weight가 필요합니다');
+      if (typeof w === 'string' && /^\d+$/.test(w)) w = Number(w);
+      const weight = w;
       const textNode = node as TextNode;
-      const currentFont = textNode.fontName as FontName;
-      const weightMap: Record<number, string> = {
-        100: 'Thin', 200: 'Extra Light', 300: 'Light', 400: 'Regular',
-        500: 'Medium', 600: 'Semi Bold', 700: 'Bold', 800: 'Extra Bold', 900: 'Black',
-      };
-      const style = weightMap[weight] !== undefined ? weightMap[weight] : 'Regular';
-      await figma.loadFontAsync({ family: currentFont.family, style });
-      textNode.fontName = { family: currentFont.family, style };
-      return { fontName: textNode.fontName };
+      const currentFont = textNode.fontName;
+      if (currentFont === figma.mixed) throw new Error('텍스트에 여러 폰트가 혼합되어 있습니다. setRangeFontName을 사용하세요.');
+
+      // 해당 폰트 패밀리의 사용 가능한 스타일 목록 조회
+      const allFonts = await figma.listAvailableFontsAsync();
+      const familyFonts = allFonts.filter(f => f.fontName.family === currentFont.family);
+      const availableStyles = familyFonts.map(f => f.fontName.style);
+
+      let targetStyle: string | undefined;
+
+      if (typeof weight === 'string') {
+        // 문자열: 정확히 일치하는 스타일 먼저, 없으면 대소문자 무시 매칭
+        targetStyle = availableStyles.find(s => s === weight);
+        if (!targetStyle) {
+          const lower = weight.toLowerCase();
+          targetStyle = availableStyles.find(s => s.toLowerCase() === lower);
+        }
+        // "SemiBold" vs "Semi Bold" 같은 공백 차이도 처리
+        if (!targetStyle) {
+          const normalized = weight.toLowerCase().replace(/\s+/g, '');
+          targetStyle = availableStyles.find(s => s.toLowerCase().replace(/\s+/g, '') === normalized);
+        }
+      } else {
+        // 숫자: weight 매핑 후 가용 스타일에서 탐색
+        const weightCandidates: Record<number, string[]> = {
+          100: ['Thin', 'Hairline'],
+          200: ['Extra Light', 'ExtraLight', 'Ultra Light', 'UltraLight'],
+          300: ['Light'],
+          400: ['Regular', 'Normal', 'Book'],
+          500: ['Medium'],
+          600: ['Semi Bold', 'SemiBold', 'Demi Bold', 'DemiBold'],
+          700: ['Bold'],
+          800: ['Extra Bold', 'ExtraBold', 'Ultra Bold', 'UltraBold'],
+          900: ['Black', 'Heavy'],
+        };
+        const candidates = weightCandidates[weight] !== undefined ? weightCandidates[weight] : ['Regular'];
+        for (const candidate of candidates) {
+          targetStyle = availableStyles.find(s => s.toLowerCase().replace(/\s+/g, '') === candidate.toLowerCase().replace(/\s+/g, ''));
+          if (targetStyle) break;
+        }
+      }
+
+      if (!targetStyle) {
+        throw new Error('스타일 "' + String(weight) + '"을 찾을 수 없습니다. ' + currentFont.family + '의 사용 가능한 스타일: ' + availableStyles.join(', '));
+      }
+
+      await figma.loadFontAsync({ family: currentFont.family, style: targetStyle });
+      textNode.fontName = { family: currentFont.family, style: targetStyle };
+      return { fontName: textNode.fontName, availableStyles };
     },
   },
 
@@ -548,8 +635,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   setRotation: {
     description: '회전 각도 설정 (degree). args: { rotation: number }',
     handler: (node, args) => {
-      const rotation = args.rotation as number;
-      if (rotation === undefined) throw new Error('rotation이 필요합니다');
+      const rotation = toNum(args.rotation, 'rotation');
       node.rotation = rotation;
       return { rotation: node.rotation };
     },
@@ -560,8 +646,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Auto Layout 자식의 교차축 정렬. args: { align: "INHERIT" | "STRETCH" }',
     handler: (node, args) => {
       if (!('layoutAlign' in node)) throw new Error('이 노드는 layoutAlign을 지원하지 않습니다');
-      const align = args.align as string;
-      if (!align) throw new Error('align이 필요합니다');
+      const align = toEnum(args.align, ['MIN','CENTER','MAX','STRETCH','INHERIT'] as const, 'align');
       (node as any).layoutAlign = align;
       return { layoutAlign: (node as any).layoutAlign };
     },
@@ -570,8 +655,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Auto Layout 자식의 주축 확장. args: { grow: number } (0=고정, 1=채우기)',
     handler: (node, args) => {
       if (!('layoutGrow' in node)) throw new Error('이 노드는 layoutGrow를 지원하지 않습니다');
-      const grow = args.grow as number;
-      if (grow === undefined) throw new Error('grow가 필요합니다');
+      const grow = toNum(args.grow, 'grow');
       (node as any).layoutGrow = grow;
       return { layoutGrow: (node as any).layoutGrow };
     },
@@ -580,8 +664,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Auto Layout 자식의 위치 모드. args: { positioning: "AUTO" | "ABSOLUTE" }',
     handler: (node, args) => {
       if (!('layoutPositioning' in node)) throw new Error('이 노드는 layoutPositioning을 지원하지 않습니다');
-      const positioning = args.positioning as string;
-      if (!positioning) throw new Error('positioning이 필요합니다');
+      const positioning = toEnum(args.positioning, ['AUTO','ABSOLUTE'] as const, 'positioning');
       (node as any).layoutPositioning = positioning;
       return { layoutPositioning: (node as any).layoutPositioning };
     },
@@ -592,8 +675,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '제약조건 설정. args: { horizontal?: "MIN"|"CENTER"|"MAX"|"STRETCH"|"SCALE", vertical?: "MIN"|"CENTER"|"MAX"|"STRETCH"|"SCALE" }',
     handler: (node, args) => {
       if (!('constraints' in node)) throw new Error('이 노드는 constraints를 지원하지 않습니다');
-      const h = args.horizontal as string;
-      const v = args.vertical as string;
+      const h = toEnumOpt(args.horizontal, ['MIN','CENTER','MAX','STRETCH','SCALE'] as const, 'horizontal');
+      const v = toEnumOpt(args.vertical, ['MIN','CENTER','MAX','STRETCH','SCALE'] as const, 'vertical');
       if (!h && !v) throw new Error('horizontal 또는 vertical이 필요합니다');
       const cn = node as ConstraintMixin & SceneNode;
       const current = cn.constraints;
@@ -610,7 +693,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '최소 너비 설정. args: { value: number | null } (null=제한 없음)',
     handler: (node, args) => {
       if (!('minWidth' in node)) throw new Error('이 노드는 minWidth를 지원하지 않습니다');
-      (node as any).minWidth = args.value !== undefined ? args.value : null;
+      (node as any).minWidth = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
       return { minWidth: (node as any).minWidth };
     },
   },
@@ -618,7 +701,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '최대 너비 설정. args: { value: number | null }',
     handler: (node, args) => {
       if (!('maxWidth' in node)) throw new Error('이 노드는 maxWidth를 지원하지 않습니다');
-      (node as any).maxWidth = args.value !== undefined ? args.value : null;
+      (node as any).maxWidth = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
       return { maxWidth: (node as any).maxWidth };
     },
   },
@@ -626,7 +709,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '최소 높이 설정. args: { value: number | null }',
     handler: (node, args) => {
       if (!('minHeight' in node)) throw new Error('이 노드는 minHeight를 지원하지 않습니다');
-      (node as any).minHeight = args.value !== undefined ? args.value : null;
+      (node as any).minHeight = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
       return { minHeight: (node as any).minHeight };
     },
   },
@@ -634,7 +717,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '최대 높이 설정. args: { value: number | null }',
     handler: (node, args) => {
       if (!('maxHeight' in node)) throw new Error('이 노드는 maxHeight를 지원하지 않습니다');
-      (node as any).maxHeight = args.value !== undefined ? args.value : null;
+      (node as any).maxHeight = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
       return { maxHeight: (node as any).maxHeight };
     },
   },
@@ -644,8 +727,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '코너 스무딩 (iOS 스타일 둥근 모서리). args: { smoothing: number } (0~1)',
     handler: (node, args) => {
       if (!('cornerSmoothing' in node)) throw new Error('이 노드는 cornerSmoothing을 지원하지 않습니다');
-      const smoothing = args.smoothing as number;
-      if (smoothing === undefined) throw new Error('smoothing이 필요합니다');
+      const smoothing = toNum(args.smoothing, 'smoothing');
       (node as any).cornerSmoothing = Math.max(0, Math.min(1, smoothing));
       return { cornerSmoothing: (node as any).cornerSmoothing };
     },
@@ -656,7 +738,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
       if (!('dashPattern' in node)) throw new Error('이 노드는 dashPattern을 지원하지 않습니다');
       const pattern = args.pattern;
       if (!Array.isArray(pattern)) throw new Error('pattern 배열이 필요합니다');
-      (node as any).dashPattern = pattern;
+      (node as any).dashPattern = pattern.map((v: unknown) => toNum(v, 'pattern element'));
       return { dashPattern: (node as any).dashPattern };
     },
   },
@@ -664,9 +746,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '마스크 설정/해제. args: { isMask: boolean }',
     handler: (node, args) => {
       if (!('isMask' in node)) throw new Error('이 노드는 mask를 지원하지 않습니다');
-      const isMask = args.isMask;
-      if (isMask === undefined) throw new Error('isMask가 필요합니다');
-      (node as any).isMask = !!isMask;
+      if (args.isMask === undefined) throw new Error('isMask가 필요합니다');
+      (node as any).isMask = toBool(args.isMask);
       return { isMask: (node as any).isMask };
     },
   },
@@ -676,8 +757,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 자동 크기 조정. args: { mode: "NONE"|"WIDTH_AND_HEIGHT"|"HEIGHT"|"TRUNCATE" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const mode = args.mode as string;
-      if (!mode) throw new Error('mode가 필요합니다');
+      const mode = toEnum(args.mode, ['NONE','WIDTH_AND_HEIGHT','HEIGHT','TRUNCATE'] as const, 'mode');
       await loadAllFonts(node as TextNode);
       (node as TextNode).textAutoResize = mode as 'NONE' | 'WIDTH_AND_HEIGHT' | 'HEIGHT' | 'TRUNCATE';
       return { textAutoResize: (node as TextNode).textAutoResize };
@@ -688,12 +768,11 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       await loadAllFonts(node as TextNode);
-      const unit = (args.unit as string) || 'PIXELS';
+      const unit = toEnumOpt(args.unit, ['PIXELS','PERCENT','AUTO'] as const, 'unit') || 'PIXELS';
       if (unit === 'AUTO') {
         (node as TextNode).lineHeight = { unit: 'AUTO' };
       } else {
-        const value = args.value as number;
-        if (value === undefined) throw new Error('value가 필요합니다');
+        const value = toNum(args.value, 'value');
         (node as TextNode).lineHeight = { value, unit: unit as 'PIXELS' | 'PERCENT' };
       }
       return { lineHeight: (node as TextNode).lineHeight };
@@ -703,10 +782,9 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '자간 설정. args: { value: number, unit?: "PIXELS"|"PERCENT" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const value = args.value as number;
-      if (value === undefined) throw new Error('value가 필요합니다');
+      const value = toNum(args.value, 'value');
       await loadAllFonts(node as TextNode);
-      const unit = (args.unit as string) || 'PIXELS';
+      const unit = toEnumOpt(args.unit, ['PIXELS','PERCENT','AUTO'] as const, 'unit') || 'PIXELS';
       (node as TextNode).letterSpacing = { value, unit: unit as 'PIXELS' | 'PERCENT' };
       return { letterSpacing: (node as TextNode).letterSpacing };
     },
@@ -717,10 +795,9 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부의 폰트 크기 변경. args: { start: number, end: number, size: number }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      const size = args.size as number;
-      if (start === undefined || end === undefined || size === undefined) throw new Error('start, end, size가 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
+      const size = toNum(args.size, 'size');
       await loadAllFonts(node as TextNode);
       (node as TextNode).setRangeFontSize(start, end, size);
       return { start, end, fontSize: size };
@@ -730,10 +807,10 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부의 폰트 변경. args: { start: number, end: number, family: string, style?: string }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
       const family = args.family as string;
-      if (start === undefined || end === undefined || !family) throw new Error('start, end, family가 필요합니다');
+      if (!family) throw new Error('start, end, family가 필요합니다');
       const style = (args.style as string) !== undefined ? (args.style as string) : 'Regular';
       await loadAllFonts(node as TextNode);
       await figma.loadFontAsync({ family, style });
@@ -745,15 +822,12 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부의 색상 변경. args: { start: number, end: number, r: 0~1, g: 0~1, b: 0~1, opacity?: 0~1 }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      const r = args.r as number;
-      const g = args.g as number;
-      const b = args.b as number;
-      if (start === undefined || end === undefined || r === undefined || g === undefined || b === undefined) {
-        throw new Error('start, end, r, g, b가 필요합니다');
-      }
-      const opacity = args.opacity !== undefined ? args.opacity as number : 1;
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
+      const r = toNum(args.r, 'r');
+      const g = toNum(args.g, 'g');
+      const b = toNum(args.b, 'b');
+      const opacity = args.opacity !== undefined ? toNum(args.opacity, 'opacity') : 1;
       await loadAllFonts(node as TextNode);
       (node as TextNode).setRangeFills(start, end, [{ type: 'SOLID', color: { r, g, b }, opacity }]);
       return { start, end, fills: { r, g, b, opacity } };
@@ -763,10 +837,9 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부의 장식. args: { start: number, end: number, decoration: "NONE"|"UNDERLINE"|"STRIKETHROUGH" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      const decoration = args.decoration as string;
-      if (start === undefined || end === undefined || !decoration) throw new Error('start, end, decoration이 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
+      const decoration = toEnum(args.decoration, ['NONE','UNDERLINE','STRIKETHROUGH'] as const, 'decoration');
       await loadAllFonts(node as TextNode);
       (node as TextNode).setRangeTextDecoration(start, end, decoration as TextDecoration);
       return { start, end, textDecoration: decoration };
@@ -776,16 +849,14 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부의 행간 변경. args: { start: number, end: number, value: number, unit?: "PIXELS"|"PERCENT"|"AUTO" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      if (start === undefined || end === undefined) throw new Error('start, end가 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
       await loadAllFonts(node as TextNode);
-      const unit = (args.unit as string) || 'PIXELS';
+      const unit = toEnumOpt(args.unit, ['PIXELS','PERCENT','AUTO'] as const, 'unit') || 'PIXELS';
       if (unit === 'AUTO') {
         (node as TextNode).setRangeLineHeight(start, end, { unit: 'AUTO' });
       } else {
-        const value = args.value as number;
-        if (value === undefined) throw new Error('value가 필요합니다');
+        const value = toNum(args.value, 'value');
         (node as TextNode).setRangeLineHeight(start, end, { value, unit: unit as 'PIXELS' | 'PERCENT' });
       }
       return { start, end, lineHeight: unit === 'AUTO' ? { unit: 'AUTO' } : { value: args.value, unit } };
@@ -795,12 +866,11 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부의 자간 변경. args: { start: number, end: number, value: number, unit?: "PIXELS"|"PERCENT" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      const value = args.value as number;
-      if (start === undefined || end === undefined || value === undefined) throw new Error('start, end, value가 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
+      const value = toNum(args.value, 'value');
       await loadAllFonts(node as TextNode);
-      const unit = (args.unit as string) || 'PIXELS';
+      const unit = toEnumOpt(args.unit, ['PIXELS','PERCENT'] as const, 'unit') || 'PIXELS';
       (node as TextNode).setRangeLetterSpacing(start, end, { value, unit: unit as 'PIXELS' | 'PERCENT' });
       return { start, end, letterSpacing: { value, unit } };
     },
@@ -864,9 +934,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부에 하이퍼링크 추가/제거. args: { start: number, end: number, url?: string } (url 미지정 시 링크 제거)',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      if (start === undefined || end === undefined) throw new Error('start, end가 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
       await loadAllFonts(node as TextNode);
       const url = args.url as string | undefined;
       if (url) {
@@ -881,11 +950,9 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부에 목록 형식 설정. args: { start: number, end: number, listType: "ORDERED"|"UNORDERED"|"NONE" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      const listType = args.listType as string;
-      if (start === undefined || end === undefined) throw new Error('start, end가 필요합니다');
-      if (!listType) throw new Error('listType이 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
+      const listType = toEnum(args.listType, ['ORDERED','UNORDERED','NONE'] as const, 'listType');
       await loadAllFonts(node as TextNode);
       (node as TextNode).setRangeListOptions(start, end, { type: listType as 'ORDERED' | 'UNORDERED' | 'NONE' });
       return { start, end, listType };
@@ -895,10 +962,9 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 일부에 들여쓰기 설정. args: { start: number, end: number, value: number }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const start = args.start as number;
-      const end = args.end as number;
-      const value = args.value as number;
-      if (start === undefined || end === undefined || value === undefined) throw new Error('start, end, value가 필요합니다');
+      const start = toNum(args.start, 'start');
+      const end = toNum(args.end, 'end');
+      const value = toNum(args.value, 'value');
       await loadAllFonts(node as TextNode);
       (node as TextNode).setRangeIndentation(start, end, value);
       return { start, end, indentation: value };
@@ -911,8 +977,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Stroke 정렬 설정. args: { align: "INSIDE"|"OUTSIDE"|"CENTER" }',
     handler: (node, args) => {
       if (!('strokeAlign' in node)) throw new Error('이 노드는 strokeAlign을 지원하지 않습니다');
-      const align = args.align as string;
-      if (!align) throw new Error('align이 필요합니다');
+      const align = toEnum(args.align, ['INSIDE','OUTSIDE','CENTER'] as const, 'align');
       (node as any).strokeAlign = align;
       return { strokeAlign: (node as any).strokeAlign };
     },
@@ -921,8 +986,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Stroke 끝 모양 설정. args: { cap: "NONE"|"ROUND"|"SQUARE"|"ARROW_LINES"|"ARROW_EQUILATERAL" }',
     handler: (node, args) => {
       if (!('strokeCap' in node)) throw new Error('이 노드는 strokeCap을 지원하지 않습니다');
-      const cap = args.cap as string;
-      if (!cap) throw new Error('cap이 필요합니다');
+      const cap = toEnum(args.cap, ['NONE','ROUND','SQUARE','ARROW_LINES','ARROW_EQUILATERAL'] as const, 'cap');
       (node as any).strokeCap = cap;
       return { strokeCap: (node as any).strokeCap };
     },
@@ -931,8 +995,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: 'Stroke 연결 모양 설정. args: { join: "MITER"|"BEVEL"|"ROUND" }',
     handler: (node, args) => {
       if (!('strokeJoin' in node)) throw new Error('이 노드는 strokeJoin을 지원하지 않습니다');
-      const join = args.join as string;
-      if (!join) throw new Error('join이 필요합니다');
+      const join = toEnum(args.join, ['MITER','BEVEL','ROUND'] as const, 'join');
       (node as any).strokeJoin = join;
       return { strokeJoin: (node as any).strokeJoin };
     },
@@ -942,10 +1005,14 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     handler: (node, args) => {
       if (!('strokeTopWeight' in node)) throw new Error('이 노드는 individualStrokeWeights를 지원하지 않습니다');
       const f = node as any;
-      if (args.top !== undefined) f.strokeTopWeight = args.top as number;
-      if (args.right !== undefined) f.strokeRightWeight = args.right as number;
-      if (args.bottom !== undefined) f.strokeBottomWeight = args.bottom as number;
-      if (args.left !== undefined) f.strokeLeftWeight = args.left as number;
+      const top = toNumOpt(args.top, 'top');
+      const right = toNumOpt(args.right, 'right');
+      const bottom = toNumOpt(args.bottom, 'bottom');
+      const left = toNumOpt(args.left, 'left');
+      if (top !== undefined) f.strokeTopWeight = top;
+      if (right !== undefined) f.strokeRightWeight = right;
+      if (bottom !== undefined) f.strokeBottomWeight = bottom;
+      if (left !== undefined) f.strokeLeftWeight = left;
       return {
         strokeTopWeight: f.strokeTopWeight,
         strokeRightWeight: f.strokeRightWeight,
@@ -961,8 +1028,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '문단 간격 설정. args: { value: number }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const value = args.value as number;
-      if (value === undefined) throw new Error('value가 필요합니다');
+      const value = toNum(args.value, 'value');
       await loadAllFonts(node as TextNode);
       (node as TextNode).paragraphSpacing = value;
       return { paragraphSpacing: (node as TextNode).paragraphSpacing };
@@ -972,8 +1038,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '문단 들여쓰기 설정. args: { value: number }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const value = args.value as number;
-      if (value === undefined) throw new Error('value가 필요합니다');
+      const value = toNum(args.value, 'value');
       await loadAllFonts(node as TextNode);
       (node as TextNode).paragraphIndent = value;
       return { paragraphIndent: (node as TextNode).paragraphIndent };
@@ -983,8 +1048,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 대소문자 변환 설정. args: { textCase: "ORIGINAL"|"UPPER"|"LOWER"|"TITLE"|"SMALL_CAPS"|"SMALL_CAPS_FORCED" }',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const textCase = args.textCase as string;
-      if (!textCase) throw new Error('textCase가 필요합니다');
+      const textCase = toEnum(args.textCase, ['ORIGINAL','UPPER','LOWER','TITLE','SMALL_CAPS','SMALL_CAPS_FORCED'] as const, 'textCase');
       await loadAllFonts(node as TextNode);
       (node as TextNode).textCase = textCase as TextCase;
       return { textCase: (node as TextNode).textCase };
@@ -994,8 +1058,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '텍스트 말줄임 설정. args: { truncation: "DISABLED"|"ENDING" }',
     handler: (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const truncation = args.truncation as string;
-      if (!truncation) throw new Error('truncation이 필요합니다');
+      const truncation = toEnum(args.truncation, ['DISABLED','ENDING'] as const, 'truncation');
       (node as TextNode).textTruncation = truncation as 'DISABLED' | 'ENDING';
       return { textTruncation: (node as TextNode).textTruncation };
     },
@@ -1004,8 +1067,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '최대 줄 수 설정 (textTruncation과 함께 사용). args: { maxLines: number }',
     handler: (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
-      const maxLines = args.maxLines as number;
-      if (maxLines === undefined) throw new Error('maxLines가 필요합니다');
+      const maxLines = toNum(args.maxLines, 'maxLines');
       (node as TextNode).maxLines = maxLines;
       return { maxLines: (node as TextNode).maxLines };
     },
@@ -1017,8 +1079,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '스크롤/오버플로 방향 설정 (Auto Layout 프레임). args: { direction: "NONE"|"HORIZONTAL"|"VERTICAL"|"BOTH" }',
     handler: (node, args) => {
       if (!('overflowDirection' in node)) throw new Error('이 노드는 overflowDirection을 지원하지 않습니다');
-      const direction = args.direction as string;
-      if (!direction) throw new Error('direction이 필요합니다');
+      const direction = toEnum(args.direction, ['NONE','HORIZONTAL_SCROLLING','VERTICAL_SCROLLING','HORIZONTAL_AND_VERTICAL_SCROLLING'] as const, 'direction');
       (node as any).overflowDirection = direction;
       return { overflowDirection: (node as any).overflowDirection };
     },
@@ -1030,9 +1091,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     description: '그라디언트 채우기 설정. args: { type: "GRADIENT_LINEAR"|"GRADIENT_RADIAL"|"GRADIENT_ANGULAR"|"GRADIENT_DIAMOND", gradientStops: [{position: 0~1, color: {r,g,b,a}}], gradientTransform?: [[number,number,number],[number,number,number]] }',
     handler: (node, args) => {
       if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
-      const type = args.type as string;
+      const type = toEnum(args.type, ['GRADIENT_LINEAR','GRADIENT_RADIAL','GRADIENT_ANGULAR','GRADIENT_DIAMOND'] as const, 'type');
       const gradientStops = args.gradientStops as Array<{ position: number; color: { r: number; g: number; b: number; a?: number } }>;
-      if (!type) throw new Error('type이 필요합니다');
       if (!gradientStops || !Array.isArray(gradientStops)) throw new Error('gradientStops 배열이 필요합니다');
       const stops = gradientStops.map(s => ({
         position: s.position,
@@ -1056,7 +1116,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
       if (!imageData) throw new Error('imageData(base64)가 필요합니다');
       const bytes = figma.base64Decode(imageData);
       const image = figma.createImage(bytes);
-      const scaleMode = args.scaleMode !== undefined ? args.scaleMode as string : 'FILL';
+      const scaleMode = toEnumOpt(args.scaleMode, ['FILL','FIT','CROP','TILE'] as const, 'scaleMode') || 'FILL';
       (node as GeometryMixin & SceneNode).fills = [{
         type: 'IMAGE',
         imageHash: image.hash,

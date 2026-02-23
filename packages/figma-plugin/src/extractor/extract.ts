@@ -90,6 +90,12 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
 
     // 자식 노드 추출 (__sigma_border overlay는 border 속성으로 복원)
     if ('children' in node) {
+      // GROUP은 자체 좌표계를 만들지 않아 자식 x/y가 부모 기준 절대 좌표
+      // → GROUP 위치를 빼서 상대 좌표로 변환
+      const isGroup = node.type === 'GROUP';
+      const groupOffsetX = isGroup ? ('x' in node ? node.x : 0) : 0;
+      const groupOffsetY = isGroup ? ('y' in node ? node.y : 0) : 0;
+
       for (const child of node.children) {
         // __sigma_border 가상 노드 감지 → 부모의 border 속성으로 복원
         if (isBorderOverlay(child)) {
@@ -98,6 +104,11 @@ export function extractNodeToJSON(node: SceneNode): ExtractedNode | null {
         }
         const childExtracted = extractNodeToJSON(child);
         if (childExtracted) {
+          // GROUP 자식의 좌표를 GROUP 상대 좌표로 변환
+          if (isGroup && childExtracted.boundingRect) {
+            childExtracted.boundingRect.x -= groupOffsetX;
+            childExtracted.boundingRect.y -= groupOffsetY;
+          }
           extracted.children = extracted.children || [];
           extracted.children.push(childExtracted);
         }

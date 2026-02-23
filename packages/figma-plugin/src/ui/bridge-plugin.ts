@@ -2,8 +2,8 @@ import { PLUGIN_MSG } from './constants';
 import {
   getWs, getPendingCommandId, setPendingCommandId,
   getIsConnected, getFileInfo, setFileInfo,
-  log, showMessage, updateFileKeyUI,
-  type FileInfo,
+  log, showMessage, updateFileKeyUI, updateSelectionDisplay, notifyExportResult,
+  type FileInfo, type SelectionNode,
 } from './ui-state';
 
 // 서버(WebSocket)로 메시지 전송 헬퍼
@@ -155,13 +155,28 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
       log(msg.message as string, 'info');
       break;
 
+    case PLUGIN_MSG.SELECTION_CHANGED: {
+      const nodes = (msg.nodes || []) as SelectionNode[];
+      const viewport = msg.viewport as { centerX: number; centerY: number; zoom: number };
+      updateSelectionDisplay(nodes, viewport);
+      break;
+    }
+
     case PLUGIN_MSG.EXTRACT_RESULT:
-      // 추출 결과 처리 (서버 연동 전용)
+      // 추출 결과 처리
       if (msg.success) {
         log(`추출 완료 (${msg.format})`, 'success');
       } else {
         log(`추출 실패: ${msg.error}`, 'error');
       }
+
+      // Export 모달 결과 콜백 호출
+      notifyExportResult(
+        msg.format as string,
+        msg.success as boolean,
+        msg.data,
+        msg.error as string | undefined
+      );
 
       // 서버로 결과 전송
       if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {

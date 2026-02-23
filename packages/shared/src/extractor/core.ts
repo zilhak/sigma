@@ -479,18 +479,54 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
 
   const allChildren = [...beforeElements, ...domChildren, ...afterElements];
 
+  // 자식의 실제 렌더링 위치를 기반으로 부모 boundingRect 확장
+  // absolute/fixed 자식은 부모의 getBoundingClientRect()에 포함되지 않으므로
+  // 브라우저가 이미 계산한 자식의 bounding box를 사용하여 부모 크기를 보정
+  let finalX = rect.x;
+  let finalY = rect.y;
+  let finalMaxX = rect.x + rect.width;
+  let finalMaxY = rect.y + rect.height;
+
+  const overflow = computedStyle.overflow;
+  const isOverflowVisible = !overflow || overflow === 'visible';
+
+  if (isOverflowVisible && allChildren.length > 0) {
+    for (const child of allChildren) {
+      const cr = child.boundingRect;
+      if (cr.width > 0 && cr.height > 0) {
+        finalX = Math.min(finalX, cr.x);
+        finalY = Math.min(finalY, cr.y);
+        finalMaxX = Math.max(finalMaxX, cr.x + cr.width);
+        finalMaxY = Math.max(finalMaxY, cr.y + cr.height);
+      }
+    }
+  }
+
+  const extractedStyles = extractStyles(computedStyle);
+
+  // 자식 오버플로로 확장된 경우, styles의 width/height도 보정
+  // (변환기가 styles.width/height를 boundingRect보다 우선 사용하므로)
+  const expandedWidth = finalMaxX - finalX;
+  const expandedHeight = finalMaxY - finalY;
+  if (expandedWidth > rect.width && typeof extractedStyles.width === 'number') {
+    extractedStyles.width = expandedWidth;
+  }
+  if (expandedHeight > rect.height && typeof extractedStyles.height === 'number') {
+    extractedStyles.height = expandedHeight;
+  }
+
   return {
     id: generateId(),
     tagName: tagName,
     className: getClassName(element),
     textContent: getDirectTextContent(element as HTMLElement),
     attributes: getAttributes(element as HTMLElement),
-    styles: extractStyles(computedStyle),
+    styles: extractedStyles,
     boundingRect: {
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
+      x: finalX,
+      y: finalY,
+      width: expandedWidth,
+      height: expandedHeight,
     },
     children: allChildren,
   };

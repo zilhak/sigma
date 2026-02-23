@@ -113,6 +113,19 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
         childNode.y = child.boundingRect.y - parentRect.y;
       }
     }
+
+    // 프레임 크기를 자식의 실제 위치 기반으로 재조정
+    // (absolute 자식이 부모 boundingRect 밖으로 나가는 경우 확장)
+    let maxRight = width;
+    let maxBottom = height;
+    for (let i = 0; i < frame.children.length; i++) {
+      const fChild = frame.children[i];
+      maxRight = Math.max(maxRight, fChild.x + fChild.width);
+      maxBottom = Math.max(maxBottom, fChild.y + fChild.height);
+    }
+    if (maxRight > width || maxBottom > height) {
+      frame.resize(Math.max(maxRight, 1), Math.max(maxBottom, 1));
+    }
   } else if (children.length > 0 && hasNegativeMargins(children)) {
     // ── 음수 마진 감지 → 절대 위치 배치 ──
     // Figma Auto Layout은 음수 간격/가변 간격을 지원하지 않으므로
@@ -136,6 +149,18 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
         childNode.x = child.boundingRect.x - parentRect.x;
         childNode.y = child.boundingRect.y - parentRect.y;
       }
+    }
+
+    // 프레임 크기를 자식의 실제 위치 기반으로 재조정
+    let maxRight2 = width;
+    let maxBottom2 = height;
+    for (let i = 0; i < frame.children.length; i++) {
+      const fChild = frame.children[i];
+      maxRight2 = Math.max(maxRight2, fChild.x + fChild.width);
+      maxBottom2 = Math.max(maxBottom2, fChild.y + fChild.height);
+    }
+    if (maxRight2 > width || maxBottom2 > height) {
+      frame.resize(Math.max(maxRight2, 1), Math.max(maxBottom2, 1));
     }
   } else {
     // ── 기존 Flex/Block 레이아웃 경로 ──
@@ -234,6 +259,15 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
 
     // 자식 요소의 CSS margin을 부모의 itemSpacing/padding으로 변환
     applyChildMargins(frame, children);
+
+    // overflow: visible인 Auto Layout 프레임에서,
+    // Figma의 균일 itemSpacing이 브라우저의 가변 간격보다 커서
+    // 콘텐츠가 프레임을 초과하는 경우 HUG 모드로 전환하여 프레임이 콘텐츠를 감싸도록 함
+    if (!isRoot && frame.layoutMode !== 'NONE' &&
+        styles.overflow !== 'hidden' && styles.overflow !== 'clip' &&
+        styles.overflow !== 'scroll' && styles.overflow !== 'auto') {
+      frame.primaryAxisSizingMode = 'AUTO';
+    }
   }
 
   // strokesIncludedInLayout: layoutMode가 HORIZONTAL/VERTICAL일 때만 설정 가능
