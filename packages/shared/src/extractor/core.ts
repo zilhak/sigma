@@ -188,10 +188,22 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
   // 자식의 실제 렌더링 위치를 기반으로 부모 boundingRect 확장
   // absolute/fixed 자식은 부모의 getBoundingClientRect()에 포함되지 않으므로
   // 브라우저가 이미 계산한 자식의 bounding box를 사용하여 부모 크기를 보정
+
+  // overflow: hidden/scroll/auto 컨테이너의 실제 콘텐츠 크기 반영
+  // scrollWidth/scrollHeight는 클리핑된 콘텐츠 포함 전체 크기를 반환
+  const htmlEl = element as HTMLElement;
+  const contentWidth = Math.max(rect.width, htmlEl.scrollWidth || 0);
+  const contentHeight = Math.max(rect.height, htmlEl.scrollHeight || 0);
+
+  // 무한 스크롤 보호: 최대 크기 제한
+  const MAX_DIMENSION = 10000;
+  const cappedWidth = Math.min(contentWidth, MAX_DIMENSION);
+  const cappedHeight = Math.min(contentHeight, MAX_DIMENSION);
+
   let finalX = rect.x;
   let finalY = rect.y;
-  let finalMaxX = rect.x + rect.width;
-  let finalMaxY = rect.y + rect.height;
+  let finalMaxX = rect.x + cappedWidth;
+  let finalMaxY = rect.y + cappedHeight;
 
   const overflow = computedStyle.overflow;
   const isOverflowVisible = !overflow || overflow === 'visible';
