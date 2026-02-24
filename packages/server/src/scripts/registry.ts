@@ -59,6 +59,8 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
   const diffPath = resolve(scriptsDir, 'diff.standalone.js');
   const storybookPath = resolve(scriptsDir, 'storybook.standalone.js');
 
+  const enhancerPath = resolve(scriptsDir, 'enhancer.js');
+
   return [
     {
       name: 'extractor.standalone.js',
@@ -356,6 +358,50 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
         '',
         '// 5. 저장된 ID로 Sigma MCP로 Figma에 import',
         '// sigma_import_file({ token, id: result.id, name: ... })',
+      ].join('\n'),
+    },
+
+    {
+      name: 'enhancer.js',
+      description:
+        'CDP 보강 모듈 (ESM). Playwright CDPSession과 함께 사용하여 기본 추출 결과를 보강합니다. ' +
+        '실제 렌더링 폰트 감지(CSS.getPlatformFontsForNode) 등 CDP 전용 기능을 제공.',
+      path: enhancerPath,
+      exists: existsSync(enhancerPath),
+      api: [
+        {
+          method: 'enhance(cdp, data, options)',
+          description: 'ExtractedNode를 CDP로 보강. platformFonts 옵션으로 실제 렌더링 폰트 감지.',
+          params: 'cdp: CDPClient, data: ExtractedNode, options?: { platformFonts?: boolean }',
+          returns: 'Promise<EnhanceResult> { data, fontEnhancements? }',
+          example:
+            "const cdp = await page.context().newCDPSession(page);\nconst { data } = await enhance(cdp, extractedData, { platformFonts: true });",
+        },
+        {
+          method: 'enhanceFonts(cdp, rootNode)',
+          description: '텍스트 노드의 실제 렌더링 폰트를 CDP로 조회하여 보강',
+          params: 'cdp: CDPClient, rootNode: ExtractedNode',
+          returns: 'Promise<FontEnhancement[]>',
+          example:
+            "const fonts = await enhanceFonts(cdp, extractedData);",
+        },
+      ],
+      usage: [
+        '// CDP 보강 모듈은 페이지 내부가 아닌 Playwright 프로세스에서 사용',
+        "// import { enhance } from '<path>';  // 또는 동적 import",
+        '',
+        '// 1. 기본 추출 (페이지 내부)',
+        "await page.addScriptTag({ path: '<extractor-path>' });",
+        "const data = await page.evaluate(() => window.__sigma__.extract('.component'));",
+        '',
+        '// 2. CDP 세션 생성',
+        'const cdp = await page.context().newCDPSession(page);',
+        '',
+        '// 3. CDP 보강 (Playwright 프로세스)',
+        'const { data: enhanced, fontEnhancements } = await enhance(cdp, data, { platformFonts: true });',
+        '',
+        '// 4. 보강된 데이터로 Figma import',
+        "// sigma_create_frame({ token, data: enhanced, name: 'Enhanced Component' })",
       ].join('\n'),
     },
   ];

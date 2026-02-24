@@ -47,6 +47,16 @@ async function build() {
     outfile: storybookOut,
   });
   console.log(`✅ Built: ${storybookOut}`);
+
+  // 4. CDP Enhancer Module (ESM — Playwright/Node.js에서 import하여 사용)
+  const enhancerOut = resolve(__dirname, 'dist/enhancer.js');
+  await esbuild.build({
+    ...commonOptions,
+    format: 'esm',
+    entryPoints: [resolve(__dirname, 'src/enhancer/index.ts')],
+    outfile: enhancerOut,
+  });
+  console.log(`✅ Built: ${enhancerOut}`);
 }
 
 build().catch((err) => {

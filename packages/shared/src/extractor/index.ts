@@ -4,41 +4,27 @@
  * DOM 요소 추출 함수를 제공합니다.
  * 주의: 이 모듈은 DOM API에 의존하므로 브라우저 환경에서만 사용 가능합니다.
  */
-export {
-  // Main extraction
-  extractElement,
 
-  // Bulk & viewport extraction
-  extractAll,
-  extractVisible,
+// Main extraction
+export { extractElement, extractAll, extractVisible, getDesignTokens } from './core';
 
-  // Design tokens
-  getDesignTokens,
+// Utilities
+export { generateId, parseSize, parseAutoSize, parseBorderSpacing, getClassName, getDirectTextContent, getAttributes } from './utils';
 
-  // Style extraction
-  extractStyles,
+// Style extraction
+export { extractStyles } from './styles';
 
-  // Visibility
-  isElementVisible,
+// Visibility
+export { isElementVisible } from './visibility';
 
-  // DOM utilities
-  getClassName,
-  getDirectTextContent,
-  getAttributes,
+// Text merge
+export { isAllInlineTextContent, getFullInlineTextContent } from './text';
 
-  // Size parsing
-  parseSize,
-  parseAutoSize,
-  generateId,
+// Icon font detection
+export { isIconFontElement, captureIconAsImage } from './icons';
 
-  // Pseudo-elements
-  extractPseudoElements,
-  extractPseudoElement,
-} from './core';
+// Pseudo-elements
+export { extractPseudoElement, extractPseudoElements } from './pseudo';
 
-export {
-  // SVG handling
-  serializeSvgWithComputedStyles,
-  applySvgComputedStyles,
-  parseComputedLength,
-} from './svg';
+// SVG handling
+export { serializeSvgWithComputedStyles, applySvgComputedStyles, parseComputedLength } from './svg';
