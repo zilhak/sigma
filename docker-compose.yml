@@ -6,11 +6,8 @@ services:
       - "19831:19831"  # WebSocket (Figma Plugin)
       - "19832:19832"  # HTTP API + MCP
     volumes:
-      - sigma-data:/root/.sigma  # Persist extracted components
+      - ${HOME}/.sigma:/root/.sigma  # Bind mount: 호스트에서 직접 접근 가능
     restart: always  # Auto-restart on boot (with Docker Desktop)
     environment:
       - NODE_ENV=production
-
-volumes:
-  sigma-data:
-    name: sigma-data
+      - SIGMA_HOST_DATA_DIR=${HOME}/.sigma  # 호스트 경로 (MCP 응답용)

@@ -14,6 +14,15 @@ export interface StoredComponent {
 const BASE_DIR = join(homedir(), '.sigma');
 const EXTRACTED_DIR = join(BASE_DIR, 'extracted');
 const SCREENSHOTS_DIR = join(BASE_DIR, 'screenshots');
+
+// Docker 환경에서 컨테이너 내부 경로 → 호스트 경로 변환
+// SIGMA_HOST_DATA_DIR이 설정되면 외부 반환용 경로를 호스트 기준으로 치환
+const HOST_BASE_DIR = process.env.SIGMA_HOST_DATA_DIR || BASE_DIR;
+
+export function toHostPath(containerPath: string): string {
+  if (HOST_BASE_DIR === BASE_DIR) return containerPath;
+  return containerPath.replace(BASE_DIR, HOST_BASE_DIR);
+}
 const MAX_COMPONENTS = 100;
 
 // Cleanup thresholds
@@ -442,7 +451,7 @@ export async function saveScreenshot(base64Data: string, filename: string): Prom
   const buffer = Buffer.from(base64Data, 'base64');
   await writeFile(filepath, buffer);
 
-  return filepath;
+  return toHostPath(filepath);
 }
 
 // List screenshots
@@ -458,7 +467,7 @@ export async function listScreenshots(): Promise<ScreenshotInfo[]> {
       const stats = await stat(filepath);
       screenshots.push({
         filename: file,
-        path: filepath,
+        path: toHostPath(filepath),
         size: stats.size,
         createdAt: stats.birthtime.toISOString(),
       });
