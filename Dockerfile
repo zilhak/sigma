@@ -2,23 +2,13 @@
 FROM oven/bun:1 AS base
 WORKDIR /app
 
-# Install dependencies
-FROM base AS deps
+# Copy everything needed for install + run
 COPY package.json bun.lock* bunfig.toml ./
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/server/package.json ./packages/server/
-RUN bun install --no-save
-
-# Production runner
-FROM base AS runner
-
-# Copy dependencies (Bun hoists to root node_modules)
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy source code
 COPY packages/shared ./packages/shared
 COPY packages/server ./packages/server
-COPY package.json ./
+
+# Install after source copy so workspace symlinks are created correctly
+RUN bun install --no-save
 
 # Create data directory
 RUN mkdir -p /root/.sigma/extracted
