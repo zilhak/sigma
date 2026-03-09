@@ -726,8 +726,9 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
 
 JSON은 저장 후 가져오기, HTML은 저장 없이 바로 가져오기.
 
-position 파라미터가 없으므로 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
-정확한 위치 제어가 필요하면 save_extracted로 저장 후 sigma_import_file(position 지정)을 사용하세요.`,
+**position 안내:**
+position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
+특정 위치에 배치하고 싶으면 position을 명시하세요.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -748,6 +749,14 @@ position 파라미터가 없으므로 자동 배치됩니다 (이전 프레임 �
           enum: ['json', 'html'],
           default: 'json',
           description: "데이터 형식 (기본값: 'json')",
+        },
+        position: {
+          type: 'object',
+          description: '프레임 생성 위치 (x, y 좌표)',
+          properties: {
+            x: { type: 'number', description: 'X 좌표' },
+            y: { type: 'number', description: 'Y 좌표' },
+          },
         },
       },
       required: ['token', 'name'],

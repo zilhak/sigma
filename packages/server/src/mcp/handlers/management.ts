@@ -105,6 +105,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
     const { wsServer } = context;
     const saveImportToken = args.token as string;
     const saveImportValidation = validateToken(saveImportToken);
+    const saveImportPosition = args.position as { x: number; y: number } | undefined;
 
     if (!saveImportValidation.valid) {
       return jsonResponse({ error: saveImportValidation.error });
@@ -130,7 +131,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
       }
 
       if (wsServer.isFigmaConnected()) {
-        await wsServer.createFrame(args.data as string, args.name as string, undefined, 'html', saveImportPluginId, saveImportPageId);
+        await wsServer.createFrame(args.data as string, args.name as string, saveImportPosition, 'html', saveImportPluginId, saveImportPageId);
         return jsonResponse({
           success: true,
           message: `'${args.name}'이 Figma로 가져와졌습니다 (HTML, 저장 안 함)`,
@@ -158,7 +159,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
 
     // Figma 연결 시 가져오기
     if (wsServer.isFigmaConnected()) {
-      await wsServer.createFrame(savedComponent.data, savedComponent.name, undefined, 'json', saveImportPluginId, saveImportPageId);
+      await wsServer.createFrame(savedComponent.data, savedComponent.name, saveImportPosition, 'json', saveImportPluginId, saveImportPageId);
       return jsonResponse({
         success: true,
         message: `'${savedComponent.name}'이 저장되고 Figma로 가져와졌습니다`,
