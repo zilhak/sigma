@@ -174,7 +174,11 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
 바인딩된 페이지에 프레임이 생성됩니다.
 
 - json (기본값): ExtractedNode 구조로 정확한 스타일 보존
-- html: 인라인 스타일 HTML. 스타일 손실 가능성 있음`,
+- html: 인라인 스타일 HTML. 스타일 손실 가능성 있음
+
+**position 안내:**
+position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
+특정 위치에 배치하고 싶으면 position을 명시하세요.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -213,7 +217,11 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
     description: `저장된 컴포넌트를 Figma로 가져옵니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
-바인딩된 페이지에 프레임이 생성됩니다.`,
+바인딩된 페이지에 프레임이 생성됩니다.
+
+**position 안내:**
+position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
+특정 위치에 배치하고 싶으면 position을 명시하세요.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -716,7 +724,10 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
 바인딩된 페이지에 프레임이 생성됩니다.
 
-JSON은 저장 후 가져오기, HTML은 저장 없이 바로 가져오기.`,
+JSON은 저장 후 가져오기, HTML은 저장 없이 바로 가져오기.
+
+position 파라미터가 없으므로 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
+정확한 위치 제어가 필요하면 save_extracted로 저장 후 sigma_import_file(position 지정)을 사용하세요.`,
     inputSchema: {
       type: 'object',
       properties: {

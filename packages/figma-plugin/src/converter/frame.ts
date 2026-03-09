@@ -4,14 +4,48 @@ import { parseHTML } from './html-parser';
 import { applyBackground, applyBorder, applyCornerRadius, applyBoxShadow, applyPadding } from './styles';
 import { applyLayoutMode, applySizingMode, applyAlignment } from './layout';
 
-// 마지막 생성 위치 추적
-export let lastCreatedPosition: { x: number; y: number } | null = null;
-export const OFFSET_X = 20; // 다음 프레임 X 오프셋
-export const OFFSET_Y = 20; // 다음 프레임 Y 오프셋
+// 마지막 생성 프레임 정보 추적 (위치 + 크기)
+export let lastCreatedFrame: { x: number; y: number; width: number; height: number } | null = null;
+export const FRAME_GAP = 100; // 프레임 간 간격 (px)
 
 // Helper to update position (needed since exports can't be reassigned from outside)
 export function setLastCreatedPosition(pos: { x: number; y: number } | null) {
-  lastCreatedPosition = pos;
+  if (pos) {
+    lastCreatedFrame = { x: pos.x, y: pos.y, width: 0, height: 0 };
+  } else {
+    lastCreatedFrame = null;
+  }
+}
+
+/**
+ * position 미지정 시 자동 배치 위치 계산
+ * - 이전 프레임이 있으면: 오른쪽에 FRAME_GAP 간격으로 배치
+ * - 이전 프레임이 없으면: 현재 페이지의 기존 프레임 bounding box 아래 또는 (0, 0)
+ */
+function getAutoPosition(frame: SceneNode, targetPage: PageNode): { x: number; y: number } {
+  // 이전에 생성한 프레임이 있으면 그 오른쪽에 배치
+  if (lastCreatedFrame) {
+    return {
+      x: lastCreatedFrame.x + lastCreatedFrame.width + FRAME_GAP,
+      y: lastCreatedFrame.y,
+    };
+  }
+
+  // 페이지에 기존 프레임이 있으면 bounding box 아래에 배치
+  const existingFrames = targetPage.children;
+  if (existingFrames.length > 0) {
+    let maxY = -Infinity;
+    for (const child of existingFrames) {
+      const bottom = child.y + child.height;
+      if (bottom > maxY) {
+        maxY = bottom;
+      }
+    }
+    return { x: 0, y: maxY + 200 };
+  }
+
+  // 빈 페이지면 (0, 0)
+  return { x: 0, y: 0 };
 }
 
 /**
@@ -44,21 +78,18 @@ export async function createFrameFromJSON(
   // 이름 설정
   frame.name = name || node.className || node.tagName;
 
-  // 위치 결정: 명시적 좌표 > 이전 위치 오프셋 > 뷰포트 중앙
+  // 위치 결정: 명시적 좌표 > 자동 배치 (이전 프레임 옆 또는 페이지 하단)
   if (position) {
     frame.x = position.x;
     frame.y = position.y;
-  } else if (lastCreatedPosition) {
-    frame.x = lastCreatedPosition.x + OFFSET_X;
-    frame.y = lastCreatedPosition.y + OFFSET_Y;
   } else {
-    const center = figma.viewport.center;
-    frame.x = center.x - frame.width / 2;
-    frame.y = center.y - frame.height / 2;
+    const autoPos = getAutoPosition(frame, targetPage);
+    frame.x = autoPos.x;
+    frame.y = autoPos.y;
   }
 
-  // 마지막 위치 저장
-  lastCreatedPosition = { x: frame.x, y: frame.y };
+  // 마지막 프레임 정보 저장 (위치 + 크기)
+  lastCreatedFrame = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
 
   // 대상 페이지에 추가
   targetPage.appendChild(frame);
@@ -112,20 +143,17 @@ export async function createFrameFromHTML(
 
   frame.name = name || 'HTML Import';
 
-  // 위치 결정
+  // 위치 결정: 명시적 좌표 > 자동 배치
   if (position) {
     frame.x = position.x;
     frame.y = position.y;
-  } else if (lastCreatedPosition) {
-    frame.x = lastCreatedPosition.x + OFFSET_X;
-    frame.y = lastCreatedPosition.y + OFFSET_Y;
   } else {
-    const center = figma.viewport.center;
-    frame.x = center.x - frame.width / 2;
-    frame.y = center.y - frame.height / 2;
+    const autoPos = getAutoPosition(frame, targetPage);
+    frame.x = autoPos.x;
+    frame.y = autoPos.y;
   }
 
-  lastCreatedPosition = { x: frame.x, y: frame.y };
+  lastCreatedFrame = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
 
   // 대상 페이지에 추가
   targetPage.appendChild(frame);
@@ -167,13 +195,7 @@ export async function updateExistingFrame(
 
   const frame = targetNode as FrameNode;
 
-  // 3. 폰트 로드
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
-
-  // 4. 소스 데이터 결정
+  // 3. 소스 데이터 결정
   let sourceNode: ExtractedNode;
   if (format === 'html') {
     const parsed = parseHTML(data as string);
@@ -184,6 +206,12 @@ export async function updateExistingFrame(
   } else {
     sourceNode = data as ExtractedNode;
   }
+
+  // 4. 폰트 로드
+  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
+  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
 
   // 5. 기존 자식 모두 제거 (역순으로 제거하여 인덱스 안정성 보장)
   const childCount = frame.children.length;

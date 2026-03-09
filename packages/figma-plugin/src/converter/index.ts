@@ -1,4 +1,4 @@
-export { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, lastCreatedPosition, setLastCreatedPosition, OFFSET_X, OFFSET_Y } from './frame';
+export { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, lastCreatedFrame, setLastCreatedPosition, FRAME_GAP } from './frame';
 export { createFigmaNode, createTextNode } from './node-creator';
 export { createSvgNode, createImageNode, createInputNode, createPseudoElementNode, resolveCssVariablesInSvg, resolveFontStyle } from './special-nodes';
 export { parseHTML } from './html-parser';

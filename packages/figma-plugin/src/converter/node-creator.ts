@@ -208,6 +208,32 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
             childFrame.layoutAlign = 'INHERIT';
           }
 
+          // 부모의 align-items: stretch 처리:
+          // CSS에서 align-self: auto인 자식은 부모의 교차축을 채움.
+          // Figma의 counterAxisAlignItems에는 STRETCH가 없으므로 자식 개별 설정으로 구현.
+          // 단, 모든 자식에 무조건 적용하면 HUG/FIXED 크기가 깨지므로,
+          // 자식의 교차축 크기가 부모 내부 교차축과 일치할 때만 적용 (실제 stretch된 경우).
+          if (styles.alignItems === 'stretch' && child.boundingRect) {
+            const isHorizontal = frame.layoutMode === 'HORIZONTAL';
+            const parentCross = isHorizontal ? node.boundingRect.height : node.boundingRect.width;
+            const crossPadding = isHorizontal
+              ? (styles.paddingTop + styles.paddingBottom + styles.borderTopWidth + styles.borderBottomWidth)
+              : (styles.paddingLeft + styles.paddingRight + styles.borderLeftWidth + styles.borderRightWidth);
+            const parentInnerCross = parentCross - crossPadding;
+            const childCross = isHorizontal ? child.boundingRect.height : child.boundingRect.width;
+            if (parentInnerCross > 0 && Math.abs(childCross - parentInnerCross) < 2) {
+              childFrame.layoutAlign = 'STRETCH';
+              // layoutAlign: STRETCH만으로는 부족 — sizing도 FILL로 설정해야 실제로 늘어남
+              if ('layoutSizingVertical' in childFrame) {
+                if (isHorizontal) {
+                  (childFrame as any).layoutSizingVertical = 'FILL';
+                } else {
+                  (childFrame as any).layoutSizingHorizontal = 'FILL';
+                }
+              }
+            }
+          }
+
           // table-cell: 행 내 공간을 균등 분배 (table-row 부모 또는 anonymous table box)
           const childStyles = child.styles;
           if (childStyles && childStyles.display === 'table-cell') {
