@@ -5,6 +5,7 @@ import {
   setIsMinimized,
   log, showMessage, hideMessage, updateStatus,
   setExportResultCallback, escapeHtml,
+  copyNodeInfoToClipboard,
 } from './ui/ui-state';
 import { sendToPlugin } from './ui/bridge-server';
 import { handleServerMessage } from './ui/bridge-server';
@@ -76,6 +77,11 @@ dom.tabs.forEach((tab) => {
     const target = sectionMap[tabName];
     if (target) target.classList.add('active');
   });
+});
+
+// === 정보 탭: 노드 정보 복사 ===
+dom.copyNodeInfoBtn.addEventListener('click', () => {
+  copyNodeInfoToClipboard();
 });
 
 // === 개체 탭: Import/Export (직접 포맷 버튼) ===

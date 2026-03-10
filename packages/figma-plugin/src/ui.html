@@ -442,6 +442,36 @@
       color: #333;
     }
 
+    .copy-node-btn {
+      width: 100%;
+      margin-top: 6px;
+      padding: 6px 0;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      background: #f5f5f5;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .copy-node-btn:hover:not(:disabled) {
+      background: #18a058;
+      color: white;
+      border-color: #18a058;
+    }
+
+    .copy-node-btn:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .copy-node-btn.copied {
+      background: #18a058;
+      color: white;
+      border-color: #18a058;
+    }
+
     .selection-textarea:focus {
       outline: none;
       border-color: #18a058;
@@ -634,6 +664,7 @@
       </div>
       <div class="info-section-title">선택한 노드:</div>
       <textarea class="selection-textarea" id="selectionTextArea" readonly placeholder="노드를 선택하면 여기에 표시됩니다..."></textarea>
+      <button id="copyNodeInfoBtn" class="copy-node-btn" disabled>노드 정보 복사</button>
     </div>
 
     <!-- 서버 탭 -->

@@ -41,6 +41,7 @@ export const dom = {
   viewportCenter: document.getElementById('viewportCenter') as HTMLSpanElement,
   viewportZoom: document.getElementById('viewportZoom') as HTMLSpanElement,
   selectionTextArea: document.getElementById('selectionTextArea') as HTMLTextAreaElement,
+  copyNodeInfoBtn: document.getElementById('copyNodeInfoBtn') as HTMLButtonElement,
   // 서버 탭
   serverConnected: document.getElementById('serverConnected') as HTMLDivElement,
   serverDisconnected: document.getElementById('serverDisconnected') as HTMLDivElement,
@@ -94,6 +95,7 @@ let pendingCommandId: string | null = null;
 let assignedPluginId: string | null = null;
 let chunkBuffer: ChunkBuffer | null = null;
 let fileInfo: FileInfo | null = null;
+let currentSelectionNodes: SelectionNode[] = [];
 
 // === 상태 getter/setter ===
 export function getWs(): WebSocket | null { return ws; }
@@ -201,6 +203,7 @@ export interface SelectionNode {
   y: number;
   width: number;
   height: number;
+  parentPath?: string;
 }
 
 export function updateSelectionDisplay(nodes: SelectionNode[], viewport: { centerX: number; centerY: number; zoom: number }) {
@@ -208,16 +211,63 @@ export function updateSelectionDisplay(nodes: SelectionNode[], viewport: { cente
   dom.viewportCenter.textContent = `(${Math.round(viewport.centerX)}, ${Math.round(viewport.centerY)})`;
   dom.viewportZoom.textContent = `${Math.round(viewport.zoom * 100)}%`;
 
+  // 선택 노드 저장
+  currentSelectionNodes = nodes;
+
   // 선택 노드 목록
   if (nodes.length === 0) {
     dom.selectionTextArea.value = '';
     dom.selectionTextArea.placeholder = '노드를 선택하면 여기에 표시됩니다...';
+    dom.copyNodeInfoBtn.disabled = true;
   } else {
     const lines = nodes.map(n =>
       `${n.id}  ${n.type} "${n.name}"  (${Math.round(n.x)}, ${Math.round(n.y)}) ${Math.round(n.width)}x${Math.round(n.height)}`
     );
     dom.selectionTextArea.value = lines.join('\n');
+    dom.copyNodeInfoBtn.disabled = false;
   }
+}
+
+// 선택 노드 정보를 AI용 최소 데이터로 클립보드에 복사
+export function copyNodeInfoToClipboard() {
+  if (currentSelectionNodes.length === 0) return;
+
+  const info = fileInfo;
+  const data: Record<string, unknown> = {};
+
+  // 파일/페이지 컨텍스트
+  if (info) {
+    data.file = info.fileName;
+    if (info.fileKey) data.fileKey = info.fileKey;
+    data.page = info.pageName;
+    data.pageId = info.pageId;
+  }
+
+  // 노드 정보
+  data.nodes = currentSelectionNodes.map(n => {
+    const node: Record<string, unknown> = {
+      id: n.id,
+      type: n.type,
+      name: n.name,
+      x: Math.round(n.x),
+      y: Math.round(n.y),
+      width: Math.round(n.width),
+      height: Math.round(n.height),
+    };
+    if (n.parentPath) node.path = n.parentPath;
+    return node;
+  });
+
+  const text = JSON.stringify(data, null, 2);
+
+  navigator.clipboard.writeText(text).then(() => {
+    dom.copyNodeInfoBtn.textContent = '\u2714 복사됨!';
+    dom.copyNodeInfoBtn.classList.add('copied');
+    setTimeout(() => {
+      dom.copyNodeInfoBtn.textContent = '노드 정보 복사';
+      dom.copyNodeInfoBtn.classList.remove('copied');
+    }, 1500);
+  });
 }
 
 // Export 결과 콜백 (ui.ts에서 설정)

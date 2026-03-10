@@ -74,6 +74,17 @@ figma.on('currentpagechange', () => {
   sendFileInfo();
 });
 
+// 노드의 부모 경로 구하기
+function getNodePath(node: BaseNode): string {
+  const parts: string[] = [];
+  let current = node.parent;
+  while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+    parts.unshift(current.name);
+    current = current.parent;
+  }
+  return parts.join(' > ');
+}
+
 // 선택 변경 시 UI에 정보 전송
 function sendSelectionInfo() {
   const selection = figma.currentPage.selection;
@@ -85,6 +96,7 @@ function sendSelectionInfo() {
     y: 'y' in node ? (node as SceneNode).y : 0,
     width: 'width' in node ? (node as SceneNode).width : 0,
     height: 'height' in node ? (node as SceneNode).height : 0,
+    parentPath: getNodePath(node),
   }));
 
   figma.ui.postMessage({
