@@ -260,14 +260,28 @@ export function copyNodeInfoToClipboard() {
 
   const text = JSON.stringify(data, null, 2);
 
-  navigator.clipboard.writeText(text).then(() => {
+  const onCopied = () => {
     dom.copyNodeInfoBtn.textContent = '\u2714 복사됨!';
     dom.copyNodeInfoBtn.classList.add('copied');
     setTimeout(() => {
       dom.copyNodeInfoBtn.textContent = '노드 정보 복사';
       dom.copyNodeInfoBtn.classList.remove('copied');
     }, 1500);
-  });
+  };
+
+  try {
+    // execCommand fallback: textarea에 텍스트를 넣고 선택 후 복사
+    const ta = dom.selectionTextArea;
+    const prevValue = ta.value;
+    ta.value = text;
+    ta.select();
+    document.execCommand('copy');
+    ta.value = prevValue;
+    console.log('[Sigma] 노드 정보 클립보드 복사 완료');
+    onCopied();
+  } catch (e) {
+    console.error('[Sigma] 클립보드 복사 실패:', e);
+  }
 }
 
 // Export 결과 콜백 (ui.ts에서 설정)
