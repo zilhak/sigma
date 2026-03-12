@@ -42,6 +42,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 - `??` (nullish coalescing) 사용 금지 → 삼항 연산자로 대체
 - `?.` (optional chaining)은 사용 가능
 - 브라우저 API (DOM, fetch 등) 접근 불가 — 이는 `ui.ts` (iframe) 에서만 가능
+- `ui.ts` iframe에서 클립보드 사용 시 `document.execCommand('copy')` 동기 호출 필수 — 상세: [`docs/figma-plugin-clipboard.md`](docs/figma-plugin-clipboard.md)
 
 ### 임시 파일 저장 규칙
 
