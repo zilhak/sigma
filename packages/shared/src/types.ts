@@ -225,7 +225,7 @@ export interface TreeNode {
     visible?: boolean;
     locked?: boolean;
     /** FRAME/COMPONENT만 해당 */
-    layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+    layoutMode?: string;
     /** TEXT만 해당 (처음 100자) */
     characters?: string;
   };

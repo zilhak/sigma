@@ -84,7 +84,7 @@ export function getVariables(type?: string): GetVariablesResult {
           safeValues[modeId] = { type: 'VARIABLE_ALIAS', id: (val as any).id };
         } else if (val && typeof val === 'object') {
           // RGB/RGBA 등 객체를 plain object로 변환
-          safeValues[modeId] = { ...(val as Record<string, unknown>) };
+          safeValues[modeId] = { ...(val as unknown as Record<string, unknown>) };
         } else {
           safeValues[modeId] = val;
         }

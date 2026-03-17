@@ -53,8 +53,8 @@ export function addReaction(params: AddReactionParams): AddReactionResult {
 
   const reactionsNode = node as SceneNode & { reactions: ReadonlyArray<Reaction> };
 
-  // Action 구성
-  const actionObj: Action = {} as Action;
+  // Action 구성 (plain object로 빌드 후 캐스팅)
+  const actionProps: Record<string, unknown> = {};
 
   switch (params.action) {
     case 'NAVIGATE':
@@ -64,21 +64,21 @@ export function addReaction(params: AddReactionParams): AddReactionResult {
       if (!params.destinationId) throw new Error(`${params.action} 액션에는 destinationId가 필요합니다`);
       const destNode = figma.getNodeById(params.destinationId);
       if (!destNode) throw new Error(`대상 노드를 찾을 수 없습니다: ${params.destinationId}`);
-      actionObj.type = 'NODE';
-      actionObj.destinationId = params.destinationId;
-      actionObj.navigation = params.action as 'NAVIGATE' | 'OVERLAY' | 'SCROLL_TO' | 'SWAP';
+      actionProps.type = 'NODE';
+      actionProps.destinationId = params.destinationId;
+      actionProps.navigation = params.action;
       break;
     }
     case 'BACK':
-      actionObj.type = 'BACK';
+      actionProps.type = 'BACK';
       break;
     case 'CLOSE':
-      actionObj.type = 'CLOSE';
+      actionProps.type = 'CLOSE';
       break;
     case 'OPEN_URL': {
       if (!params.url) throw new Error('OPEN_URL 액션에는 url이 필요합니다');
-      actionObj.type = 'URL';
-      (actionObj as any).url = params.url;
+      actionProps.type = 'URL';
+      actionProps.url = params.url;
       break;
     }
     default:
@@ -92,32 +92,30 @@ export function addReaction(params: AddReactionParams): AddReactionResult {
     const directionalTypes = ['MOVE_IN', 'MOVE_OUT', 'PUSH', 'SLIDE_IN', 'SLIDE_OUT'];
 
     if (directionalTypes.includes(tType)) {
-      // 방향성 전환: direction과 matchLayers 필수
-      actionObj.transition = {
+      actionProps.transition = {
         type: tType,
-        direction: (t.direction || 'LEFT') as any,
+        direction: (t.direction || 'LEFT'),
         matchLayers: false,
         duration: t.duration !== undefined ? t.duration : 0.3,
         easing: { type: 'EASE_IN_AND_OUT' },
-      } as any;
+      };
     } else {
-      // 단순 전환: DISSOLVE, SMART_ANIMATE, SCROLL_ANIMATE
-      actionObj.transition = {
+      actionProps.transition = {
         type: tType,
         duration: t.duration !== undefined ? t.duration : 0.3,
         easing: { type: 'EASE_IN_AND_OUT' },
-      } as Transition;
+      };
     }
   }
 
   if (params.preserveScrollPosition !== undefined) {
-    actionObj.preserveScrollPosition = params.preserveScrollPosition;
+    actionProps.preserveScrollPosition = params.preserveScrollPosition;
   }
 
+  const actionObj = actionProps as unknown as Action;
+
   // Trigger 구성
-  const trigger: Trigger = {
-    type: params.trigger as Trigger['type'],
-  };
+  const trigger = { type: params.trigger } as unknown as Trigger;
 
   // 기존 리액션에 추가
   const newReaction: Reaction = { trigger, actions: [actionObj] };
@@ -155,7 +153,7 @@ export function removeReactions(nodeId: string, triggerType?: string): RemoveRea
 
   if (triggerType) {
     // 특정 트리거 타입만 제거
-    const filtered = reactionsNode.reactions.filter(r => r.trigger.type !== triggerType);
+    const filtered = reactionsNode.reactions.filter(r => r.trigger && r.trigger.type !== triggerType);
     reactionsNode.reactions = filtered;
   } else {
     // 전부 제거

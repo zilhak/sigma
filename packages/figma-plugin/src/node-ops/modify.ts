@@ -269,9 +269,10 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   setOpacity: {
     description: '불투명도 설정 (0~1). args: { opacity: number }',
     handler: (node, args) => {
+      if (!('opacity' in node)) throw new Error('이 노드는 opacity를 지원하지 않습니다');
       const opacity = toNum(args.opacity, 'opacity');
-      node.opacity = Math.max(0, Math.min(1, opacity));
-      return { opacity: node.opacity };
+      (node as BlendMixin).opacity = Math.max(0, Math.min(1, opacity));
+      return { opacity: (node as BlendMixin).opacity };
     },
   },
   setVisible: {
@@ -614,7 +615,8 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
           800: ['Extra Bold', 'ExtraBold', 'Ultra Bold', 'UltraBold'],
           900: ['Black', 'Heavy'],
         };
-        const candidates = weightCandidates[weight] !== undefined ? weightCandidates[weight] : ['Regular'];
+        const numWeight = weight as number;
+        const candidates = weightCandidates[numWeight] !== undefined ? weightCandidates[numWeight] : ['Regular'];
         for (const candidate of candidates) {
           targetStyle = availableStyles.find(s => s.toLowerCase().replace(/\s+/g, '') === candidate.toLowerCase().replace(/\s+/g, ''));
           if (targetStyle) break;
@@ -635,9 +637,10 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   setRotation: {
     description: '회전 각도 설정 (degree). args: { rotation: number }',
     handler: (node, args) => {
+      if (!('rotation' in node)) throw new Error('이 노드는 rotation을 지원하지 않습니다');
       const rotation = toNum(args.rotation, 'rotation');
-      node.rotation = rotation;
-      return { rotation: node.rotation };
+      (node as LayoutMixin).rotation = rotation;
+      return { rotation: (node as LayoutMixin).rotation };
     },
   },
 

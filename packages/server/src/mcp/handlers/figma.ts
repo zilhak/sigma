@@ -1940,7 +1940,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     try {
       const result = await wsServer.setExportSettings(
         args.nodeId as string,
-        args.settings as Record<string, unknown>,
+        args.settings as unknown[],
         pluginId
       );
       return jsonResponse({ success: true, message: 'Export 설정을 적용했습니다', ...result as object });

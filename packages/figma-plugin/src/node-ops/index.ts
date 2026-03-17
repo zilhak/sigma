@@ -16,7 +16,7 @@ export type { CreateRectangleResult, CreateTextResult, CreateEmptyFrameResult, C
 export { getSelection, setSelection, getViewport, setViewport } from './selection';
 export type { GetSelectionResult, SetSelectionResult, ViewportInfo, SetViewportOptions } from './selection';
 export { getLocalComponents, createComponentInstance, getInstanceOverrides, setInstanceOverrides, createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './components';
-export type { ComponentInfo, CreateInstanceResult, InstanceOverrides, SetOverridesResult, CreateComponentResult, ConvertToComponentResult, CreateComponentSetResult, AddComponentPropertyResult, EditComponentPropertyResult, DeleteComponentPropertyResult, GetComponentPropertiesResult, DetachInstanceResult, SwapComponentResult } from './components';
+export type { ComponentInfo, CreateInstanceResult, InstanceOverrides, SetOverridesResult, CreateComponentResult, ConvertToComponentResult, CreateComponentSetResult, AddComponentPropertyResult, EditComponentPropertyResult, DeleteComponentPropertyResult, ComponentPropertyDefinitions, DetachInstanceResult, SwapComponentResult } from './components';
 export { getNodeInfo, getDocumentInfo, getStyles, getNodesInfo, readMyDesign, listAvailableFonts, getNodeCSS } from './query';
 export type { NodeDetailInfo, DocumentInfo, StylesInfo, GetNodesInfoResult, ReadMyDesignResult, ListFontsResult, GetCSSResult } from './query';
 export { scanTextNodes, scanNodesByTypes, batchModify, batchDelete, setMultipleTextContents } from './batch';

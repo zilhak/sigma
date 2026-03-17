@@ -317,11 +317,12 @@ export function extractLayoutStyles(node: FrameNode, styles: ComputedStyles) {
   }
 
   // 교차축 갭 (counterAxisSpacing)
-  if (node.counterAxisSpacing !== undefined && node.counterAxisSpacing > 0) {
+  const counterSpacing = node.counterAxisSpacing;
+  if (counterSpacing !== undefined && counterSpacing !== null && counterSpacing > 0) {
     if (node.layoutMode === 'HORIZONTAL') {
-      styles.rowGap = node.counterAxisSpacing;
+      styles.rowGap = counterSpacing;
     } else {
-      styles.columnGap = node.counterAxisSpacing;
+      styles.columnGap = counterSpacing;
     }
   }
 }
@@ -442,25 +443,17 @@ export function extractEffectStyles(node: BlendMixin, styles: ComputedStyles) {
  */
 function extractSizingMode(node: FrameNode, styles: ComputedStyles) {
   // 가로 크기
-  if ('layoutSizingHorizontal' in node) {
-    const lsh = node.layoutSizingHorizontal;
-    if (lsh === 'HUG' || lsh === 'FILL') {
-      styles.width = 'auto';
-    } else {
-      styles.width = node.width;
-    }
+  const lsh = node.layoutSizingHorizontal;
+  if (lsh === 'HUG' || lsh === 'FILL') {
+    styles.width = 'auto';
   } else {
     styles.width = node.width;
   }
 
   // 세로 크기
-  if ('layoutSizingVertical' in node) {
-    const lsv = node.layoutSizingVertical;
-    if (lsv === 'HUG' || lsv === 'FILL') {
-      styles.height = 'auto';
-    } else {
-      styles.height = node.height;
-    }
+  const lsv = node.layoutSizingVertical;
+  if (lsv === 'HUG' || lsv === 'FILL') {
+    styles.height = 'auto';
   } else {
     styles.height = node.height;
   }

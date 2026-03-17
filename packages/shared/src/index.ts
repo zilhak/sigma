@@ -8,6 +8,10 @@ export type {
   ApiResponse,
   ExtractPayload,
   WebSocketMessage,
+  TreeFilter,
+  TreeNode,
+  FindNodeResult,
+  GetTreeResult,
 } from './types';
 
 // Color utilities

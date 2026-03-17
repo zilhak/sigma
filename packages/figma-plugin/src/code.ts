@@ -670,7 +670,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           fontFamily: msg.fontFamily as string | undefined,
           fontWeight: msg.fontWeight as number | undefined,
           fontColor: msg.fontColor as { r: number; g: number; b: number; a?: number } | undefined,
-          textAlignHorizontal: msg.textAlignHorizontal as string | undefined,
+          textAlignHorizontal: msg.textAlignHorizontal as 'CENTER' | 'LEFT' | 'RIGHT' | 'JUSTIFIED' | undefined,
         });
         sendResult('create-text-result', result);
       } catch (error) {
@@ -1346,8 +1346,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         const result = addComponentProperty(
           msg.nodeId as string,
           msg.propertyName as string,
-          msg.propertyType as string,
-          msg.defaultValue
+          msg.propertyType as 'TEXT' | 'BOOLEAN' | 'INSTANCE_SWAP' | 'VARIANT',
+          msg.defaultValue as string | boolean
         );
         sendResult('add-component-property-result', result);
       } catch (error) {

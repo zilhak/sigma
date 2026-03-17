@@ -67,7 +67,7 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     y: scene.y,
     width: 'width' in scene ? (scene as any).width : 0,
     height: 'height' in scene ? (scene as any).height : 0,
-    opacity: scene.opacity,
+    opacity: 'opacity' in scene ? (scene as any).opacity : 1,
   };
 
   // Fills & Strokes

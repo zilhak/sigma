@@ -116,12 +116,12 @@ export function applyLayoutMode(frame: FrameNode, styles: ComputedStyles, childr
   }
 
   // flexWrap 설정 (Auto Layout이 활성화된 경우에만)
-  if (frame.layoutMode !== 'NONE' && styles.flexWrap === 'wrap') {
+  if (frame.layoutMode !== 'NONE' as string && styles.flexWrap === 'wrap') {
     frame.layoutWrap = 'WRAP';
   }
 
   // 갭 설정 - rowGap/columnGap이 있으면 우선 사용, 없으면 gap 사용
-  if (frame.layoutMode !== 'NONE') {
+  if (frame.layoutMode !== 'NONE' as string) {
     // Figma에서 itemSpacing은 주축 방향 간격
     // counterAxisSpacing은 교차축 방향 간격 (wrap 모드에서만 유효)
     const mainAxisGap = frame.layoutMode === 'HORIZONTAL'

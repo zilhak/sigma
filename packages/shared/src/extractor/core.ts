@@ -146,8 +146,10 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
   // 혼합 인라인 콘텐츠 감지:
   // 모든 자식이 순수 텍스트 포매팅용 인라인 태그이고
   // 시각적 스타일(배경, 테두리)이 없으면 하나의 텍스트로 병합
-  if (element.children.length > 0 && isAllInlineTextContent(element)) {
-    const mergedText = getFullInlineTextContent(element);
+  // 이 시점에서 SVG 요소는 위에서 이미 early return됨
+  const htmlElement = element as HTMLElement;
+  if (htmlElement.children.length > 0 && isAllInlineTextContent(htmlElement)) {
+    const mergedText = getFullInlineTextContent(htmlElement);
     // Pseudo-elements도 포함
     const pseudoElements = extractPseudoElements(element as HTMLElement);
     const beforeElements = pseudoElements.filter(p => p.tagName === '::before');

@@ -29,9 +29,9 @@ export interface GetLibraryComponentsResult {
 export async function getLibraryComponents(libraryKey: string): Promise<GetLibraryComponentsResult> {
   if (!libraryKey) throw new Error('libraryKey가 필요합니다');
   try {
-    const components = await figma.teamLibrary.getComponentsInLibraryAsync(libraryKey);
+    const components = await (figma.teamLibrary as any).getComponentsInLibraryAsync(libraryKey);
     return {
-      components: components.map(c => ({ key: c.key, name: c.name, description: c.description })),
+      components: components.map((c: any) => ({ key: c.key, name: c.name, description: c.description })),
       count: components.length,
     };
   } catch (error) {
