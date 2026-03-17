@@ -613,10 +613,35 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
     name: 'sigma_screenshot',
     description: `Figma 노드를 이미지로 캡처하여 로컬 파일로 저장합니다.
 
-**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
 
-노드의 exportAsync()를 사용하여 PNG/SVG/JPG/PDF로 export한 후,
-~/.sigma/screenshots/ 디렉토리에 저장하고 파일 경로를 반환합니다.
+## 처리 파이프라인
+Figma exportAsync → Crop(선택) → mode별 처리 → Save
+
+## mode (토큰 제한 해결 전략 — 배타적, 하나만 선택)
+| mode | 동작 | 용도 |
+|------|------|------|
+| "auto" (기본) | 토큰 예산(22,000) 내로 자동 축소 | 일반 사용. 대부분 이것으로 충분 |
+| "thumbnail" | scale 절반 + 자동 축소 | 전체 구조 빠르게 파악 (줌인 1단계) |
+| "tile" | 축소 없이 그리드 분할 | 원본 화질 유지하며 큰 이미지 전체 보기 |
+| "manual" | manualResize 값으로 명시적 리사이즈 | 크기를 직접 결정할 때 |
+| "none" | 아무 처리 안 함 | crop 영역을 원본 해상도로 볼 때 (줌인 2단계) |
+
+## 줌 인 워크플로우 (추천)
+1단계: mode: "thumbnail"로 전체 구조 파악 → 응답의 original(원본 크기)과 resizeScale(축소 비율) 확인
+2단계: 관심 영역을 mode: "none" + crop으로 원본 해상도로 확인
+  - crop 좌표는 원본 이미지(scale 적용 후) 기준입니다
+  - 1단계 thumbnail에서 본 좌표를 원본으로 환산하려면: 좌표 / resizeScale
+
+## 응답 필드
+- original: Figma export 직후 이미지 크기 (px)
+- cropped: crop 적용 후 크기 (crop 사용 시)
+- final: 최종 저장된 이미지 크기 (px)
+- resizeScale: original 대비 축소 비율 (예: 0.25 = 25%로 축소). crop 미반영
+- resizeApplied: 실제 축소가 발생했는지
+- estimatedTokens: 최종 이미지의 추정 토큰 수
+- withinTokenLimit: Read 도구로 읽을 수 있는지 (≤25,000 토큰)
+- tiles (tile 모드): 각 타일의 filePath, 위치, 크기, 토큰 수
 
 반환된 filePath를 Read 도구로 읽으면 이미지를 직접 확인할 수 있습니다.`,
     inputSchema: {
@@ -634,16 +659,46 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
           type: 'string',
           enum: ['PNG', 'SVG', 'JPG', 'PDF'],
           default: 'PNG',
-          description: '이미지 형식 (기본값: PNG)',
+          description: '이미지 형식 (기본값: PNG). SVG/PDF는 이미지 처리(crop/resize/tile) 미지원',
         },
         scale: {
           type: 'number',
           default: 2,
-          description: 'Export 스케일 (기본값: 2, SVG/PDF에는 미적용)',
+          description: 'Figma export 스케일 (기본값: 2). 이미지의 기본 해상도를 결정. SVG/PDF에는 미적용',
         },
         filename: {
           type: 'string',
-          description: '저장할 파일명 (선택, 미지정 시 노드 이름 + 타임스탬프로 자동 생성)',
+          description: '저장할 파일명 (미지정 시 자동 생성)',
+        },
+        crop: {
+          type: 'object',
+          description: '관심 영역만 잘라냅니다. mode와 독립적으로 항상 먼저 적용됩니다. 좌표는 원본 이미지(scale 적용 후)의 좌상단(0,0) 기준 픽셀 단위.',
+          properties: {
+            x: { type: 'number', description: '좌상단 X (px)' },
+            y: { type: 'number', description: '좌상단 Y (px)' },
+            width: { type: 'number', description: '너비 (px)' },
+            height: { type: 'number', description: '높이 (px)' },
+          },
+          required: ['x', 'y', 'width', 'height'],
+        },
+        mode: {
+          type: 'string',
+          enum: ['auto', 'thumbnail', 'tile', 'manual', 'none'],
+          default: 'auto',
+          description: '토큰 제한 해결 전략. "auto": 자동 축소(기본), "thumbnail": 빠른 전체 파악, "tile": 원본 화질 분할, "manual": 명시적 크기 지정, "none": 처리 안 함',
+        },
+        manualResize: {
+          type: 'string',
+          description: 'mode가 "manual"일 때 필수. 비율("70%", "50%") 또는 긴 변 기준("800px", "1200px")으로 리사이즈',
+        },
+        tileSize: {
+          type: 'object',
+          description: 'mode가 "tile"일 때 선택. 명시적 타일 크기. 미지정 시 각 타일이 토큰 예산 내에 들도록 자동 계산 (~775x775px)',
+          properties: {
+            width: { type: 'number', description: '타일 너비 (px)' },
+            height: { type: 'number', description: '타일 높이 (px)' },
+          },
+          required: ['width', 'height'],
         },
       },
       required: ['token', 'nodeId'],

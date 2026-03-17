@@ -8,6 +8,7 @@ import {
   type ToolContext,
   type ToolResult,
 } from '../helpers.js';
+import { processImage, saveSingleScreenshot, saveTiledScreenshots, type ScreenshotMode } from '../../image/process.js';
 
 /**
  * Figma 작업 관련 핸들러 (토큰 필수)
@@ -270,7 +271,12 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const { pluginId } = access;
     const screenshotNodeId = args.nodeId as string;
     const screenshotFormat = (args.format as 'PNG' | 'SVG' | 'JPG' | 'PDF') || 'PNG';
-    const screenshotScale = (args.scale as number) || 2;
+    const userScale = (args.scale as number) || 2;
+    const mode = (args.mode as ScreenshotMode) || 'auto';
+
+    // thumbnail 모드: 플러그인에서 scale 절반으로 받아 전송량 절감
+    const isThumbnail = mode === 'thumbnail';
+    const screenshotScale = isThumbnail ? userScale * 0.5 : userScale;
 
     try {
       const exportResult = await wsServer.exportImage(
@@ -289,19 +295,79 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
       const timestamp = Date.now();
       const filename = (args.filename as string) || `${safeName}-${timestamp}.${ext}`;
 
-      // 파일 저장
-      const filePath = await storage.saveScreenshot(exportResult.base64, filename);
+      // 옵션 파싱
+      const crop = args.crop as { x: number; y: number; width: number; height: number } | undefined;
+      const manualResize = args.manualResize as string | undefined;
+      const tileSize = args.tileSize as { width: number; height: number } | undefined;
 
+      // SVG/PDF는 이미지 처리 불가 → 바이패스
+      if (screenshotFormat === 'SVG' || screenshotFormat === 'PDF') {
+        const filePath = await storage.saveScreenshot(exportResult.base64, filename);
+        return jsonResponse({
+          success: true,
+          filePath,
+          filename,
+          nodeId: exportResult.nodeId,
+          nodeName: exportResult.nodeName,
+          original: { width: exportResult.width * screenshotScale, height: exportResult.height * screenshotScale },
+          final: { width: exportResult.width * screenshotScale, height: exportResult.height * screenshotScale },
+          format: screenshotFormat,
+          mode: 'none',
+          resizeApplied: false,
+          resizeScale: 1,
+          estimatedTokens: 0,
+          withinTokenLimit: true,
+        });
+      }
+
+      // 이미지 처리 파이프라인: Crop → mode별 처리 → Save
+      const inputBuffer = Buffer.from(exportResult.base64, 'base64');
+      const processResult = await processImage(inputBuffer, screenshotFormat, {
+        crop,
+        mode,
+        manualResize,
+        tileSize,
+        thumbnailPreScaled: isThumbnail,
+      });
+
+      if (processResult.type === 'tiled') {
+        const tiles = await saveTiledScreenshots(processResult, filename, screenshotFormat);
+        return jsonResponse({
+          success: true,
+          nodeId: exportResult.nodeId,
+          nodeName: exportResult.nodeName,
+          format: screenshotFormat,
+          mode: processResult.mode,
+          original: processResult.original,
+          ...(processResult.cropped ? { cropped: processResult.cropped } : {}),
+          final: processResult.final,
+          resizeApplied: processResult.resizeApplied,
+          resizeScale: processResult.resizeScale,
+          tileSize: processResult.tileSize,
+          grid: processResult.grid,
+          tiles,
+          totalTiles: tiles.length,
+        });
+      }
+
+      // 단일 이미지
+      const saved = await saveSingleScreenshot(processResult, filename);
       return jsonResponse({
         success: true,
-        filePath,
-        filename,
+        filePath: saved.filePath,
+        filename: saved.filename,
         nodeId: exportResult.nodeId,
         nodeName: exportResult.nodeName,
-        width: exportResult.width,
-        height: exportResult.height,
         format: screenshotFormat,
-        scale: screenshotScale,
+        mode: processResult.mode,
+        original: processResult.original,
+        ...(processResult.cropped ? { cropped: processResult.cropped } : {}),
+        final: processResult.final,
+        resizeApplied: processResult.resizeApplied,
+        resizeScale: processResult.resizeScale,
+        ...(processResult.resizeIterations ? { resizeIterations: processResult.resizeIterations } : {}),
+        estimatedTokens: processResult.estimatedTokens,
+        withinTokenLimit: processResult.withinTokenLimit,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
