@@ -193,7 +193,7 @@ export function parseColor(colorStr: string): RGBA | null {
 
   // RGBA: rgba(255, 128, 0, 0.5) or rgb(255, 128, 0)
   const rgbaMatch = trimmed.match(
-    /rgba?\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+))?\s*\)/
+    /rgba?\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*(?:,\s*(-?[\d.]+))?\s*\)/
   );
   if (rgbaMatch) {
     return {
