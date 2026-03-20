@@ -234,8 +234,34 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
             }
           }
 
-          // table-cell: 행 내 공간을 균등 분배 (table-row 부모 또는 anonymous table box)
+          // block-level 자식이 부모 너비를 채우는 CSS 기본 동작 재현:
+          // VERTICAL 레이아웃에서 block/flex/grid 자식의 width가 부모 내부 width와 일치하면
+          // Figma에서 STRETCH로 설정하여 부모 너비에 맞춤.
+          // (CSS에서 block 요소는 자연스럽게 부모 너비를 채우지만, 추출 시 computed width가
+          //  고정 픽셀값으로 변환되어 이 정보가 손실됨)
+          // 단, 부모의 counter-axis(width)가 FIXED일 때만 적용.
+          // HUG 부모에 FILL 자식을 넣으면 순환 참조로 Figma API 에러 발생.
           const childStyles = child.styles;
+          if (frame.layoutMode === 'VERTICAL'
+              && frame.counterAxisSizingMode === 'FIXED'
+              && child.boundingRect && childStyles) {
+            const cd = childStyles.display;
+            const isBlockLevel = cd === 'block' || cd === 'flex' || cd === 'inline-flex'
+              || cd === 'grid' || cd === 'table' || cd === 'list-item';
+            if (isBlockLevel) {
+              const parentInnerWidth = node.boundingRect.width
+                - styles.paddingLeft - styles.paddingRight
+                - styles.borderLeftWidth - styles.borderRightWidth;
+              if (parentInnerWidth > 0 && Math.abs(child.boundingRect.width - parentInnerWidth) < 2) {
+                childFrame.layoutAlign = 'STRETCH';
+                if (childFrame.type === 'FRAME' && 'layoutSizingHorizontal' in childFrame) {
+                  childFrame.layoutSizingHorizontal = 'FILL';
+                }
+              }
+            }
+          }
+
+          // table-cell: 행 내 공간을 균등 분배 (table-row 부모 또는 anonymous table box)
           if (childStyles && childStyles.display === 'table-cell') {
             childFrame.layoutGrow = 1;
             childFrame.layoutAlign = 'STRETCH';
@@ -289,10 +315,16 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     // overflow: visible인 Auto Layout 프레임에서,
     // Figma의 균일 itemSpacing이 브라우저의 가변 간격보다 커서
     // 콘텐츠가 프레임을 초과하는 경우 HUG 모드로 전환하여 프레임이 콘텐츠를 감싸도록 함
+    // 단, min-width/min-height가 명시된 요소는 FIXED 유지 (HUG로 전환하면 명시적 크기 손실)
     if (!isRoot && frame.layoutMode !== 'NONE' &&
         styles.overflow !== 'hidden' && styles.overflow !== 'clip' &&
         styles.overflow !== 'scroll' && styles.overflow !== 'auto') {
-      frame.primaryAxisSizingMode = 'AUTO';
+      const hasExplicitMinSize = frame.layoutMode === 'HORIZONTAL'
+        ? styles.minWidth > 0
+        : styles.minHeight > 0;
+      if (!hasExplicitMinSize) {
+        frame.primaryAxisSizingMode = 'AUTO';
+      }
     }
   }
 
@@ -348,6 +380,9 @@ export function isTextOnlyElement(node: ExtractedNode): boolean {
   // flex/grid 컨테이너는 프레임으로 처리 (내부 레이아웃 정보 유지 → 시각적 정렬 보존)
   const { styles } = node;
   if (styles.display === 'flex' || styles.display === 'inline-flex' || styles.display === 'grid') return false;
+
+  // min-width가 설정된 요소는 프레임으로 처리 (TextNode는 고정 너비 표현 불가)
+  if (styles.minWidth > 0) return false;
 
   // 배경색, 패딩, 테두리가 있으면 프레임으로 처리 (TextNode는 stroke 미지원)
   if (styles.backgroundColor && styles.backgroundColor.a > 0) return false;

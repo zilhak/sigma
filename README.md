@@ -14,7 +14,7 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 **핵심 철학:** 서로 연동하면 최고의 효율, 따로따로도 사용 가능
 
-Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 84개의 MCP 도구가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
+Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 112개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
 ## 모듈 구성
 
@@ -169,7 +169,7 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 (84개):**
+**MCP 도구 (112개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
@@ -234,7 +234,25 @@ docker compose up -d
 
 ## 문서
 
-상세 구현 계획 및 아키텍처는 [CLAUDE.md](./CLAUDE.md) 참조
+| 문서 | 설명 |
+|------|------|
+| [아키텍처](docs/architecture.md) | 시스템 구조, 통신 흐름, 데이터 흐름 |
+| [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
+| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 112개 MCP 도구 전체 목록 및 파라미터 |
+| [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |
+| [Extractor 스크립트 상세](docs/scripts/extractor.md) | 추출 로직, 가시성 판단, 텍스트 병합, SVG/아이콘 처리 |
+| [Storybook 스크립트 상세](docs/scripts/storybook.md) | Channel API, SPA 전환, 추출+저장 워크플로우 |
+| [Diff 스크립트 상세](docs/scripts/diff.md) | 구조 비교 알고리즘, 스냅샷 저장소 |
+| **Figma Plugin** | |
+| [Plugin 개요](docs/plugin/overview.md) | 실행 환경, 통신 흐름, 메시지 라우팅 |
+| [변환기 (Converter)](docs/plugin/converter.md) | JSON/HTML → Figma 프레임 변환, 레이아웃 |
+| [노드 조작 (Node Ops)](docs/plugin/node-ops.md) | 73개 modify 메서드, 도형 생성, 조회, 배치 |
+| [스크린샷](docs/plugin/screenshot.md) | 이미지 export + 토큰 최적화 파이프라인 |
+| [컴포넌트/변수/스타일](docs/plugin/components.md) | 컴포넌트, 인스턴스, Team Library, 변수 |
+| [프로토타이핑/주석/페이지](docs/plugin/prototyping.md) | 인터랙션, 주석, 페이지 관리, FigJam |
+| **기타** | |
+| [설치 및 배포](docs/deployment.md) | 빌드, 설치, Docker 배포, 환경변수 |
+| [Figma Plugin 클립보드](docs/figma-plugin-clipboard.md) | Plugin iframe 클립보드 제약 사항 |
 
 ## 포트
 
