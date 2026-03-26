@@ -456,7 +456,8 @@ export class FigmaWebSocketServer {
     position?: { x: number; y: number },
     format: 'json' | 'html' = 'json',
     pluginId?: string,
-    pageId?: string
+    pageId?: string,
+    layoutMode?: 'auto' | 'absolute'
   ): Promise<void> {
     // 청킹 검사를 위해 먼저 타겟 플러그인과 페이로드 확인
     const targetPlugin = this.resolveTargetPlugin(pluginId);
@@ -478,7 +479,7 @@ export class FigmaWebSocketServer {
     // 1MB 초과 시 청킹 사용
     if (dataSize > CHUNK_THRESHOLD) {
       console.log(`[WebSocket] Large data detected (${(dataSize / 1024 / 1024).toFixed(2)}MB), using chunked transfer to ${targetPlugin.id}`);
-      return this.createFrameChunked(targetPlugin.ws, payload, name, position, format, pageId);
+      return this.createFrameChunked(targetPlugin.ws, payload, name, position, format, pageId, layoutMode);
     }
 
     // 1MB 이하: sendCommand 사용
@@ -488,6 +489,7 @@ export class FigmaWebSocketServer {
       name,
       position,
       pageId,
+      layoutMode,
     }, {
       pluginId,
       logSuffix: pageId ? ` (page: ${pageId})` : '',
@@ -501,7 +503,8 @@ export class FigmaWebSocketServer {
     name?: string,
     position?: { x: number; y: number },
     format: 'json' | 'html' = 'json',
-    pageId?: string
+    pageId?: string,
+    layoutMode?: 'auto' | 'absolute'
   ): Promise<void> {
     const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const totalChunks = Math.ceil(payload.length / CHUNK_SIZE);
@@ -531,6 +534,7 @@ export class FigmaWebSocketServer {
         name,
         position,
         pageId,
+        layoutMode,
       }));
 
       // 2. CHUNK 전송

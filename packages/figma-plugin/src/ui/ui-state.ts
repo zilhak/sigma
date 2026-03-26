@@ -9,6 +9,7 @@ export interface ChunkBuffer {
   pageId?: string;
   operation?: 'create' | 'update';
   nodeId?: string;
+  layoutMode?: 'auto' | 'absolute';
 }
 
 export interface PageInfo {

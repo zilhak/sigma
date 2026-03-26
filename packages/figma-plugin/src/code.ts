@@ -136,14 +136,16 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-from-json': {
       const position = msg.position as { x: number; y: number } | undefined;
       const pageId = msg.pageId as string | undefined;
-      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId, getTargetPage);
+      const forceAbsolute = msg.forceAbsolute as boolean | undefined;
+      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId, getTargetPage, forceAbsolute);
       break;
     }
 
     case 'create-from-html': {
       const htmlPosition = msg.position as { x: number; y: number } | undefined;
       const htmlPageId = msg.pageId as string | undefined;
-      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId, getTargetPage);
+      const htmlForceAbsolute = msg.forceAbsolute as boolean | undefined;
+      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId, getTargetPage, htmlForceAbsolute);
       break;
     }
 

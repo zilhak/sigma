@@ -22,11 +22,12 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const { pluginId, pageId } = access;
     const format = (args.format as 'json' | 'html') || 'json';
     const position = args.position as { x: number; y: number } | undefined;
+    const layoutMode = (args.layoutMode as 'auto' | 'absolute') || 'auto';
 
     if (!args.data) {
       return jsonResponse({ error: 'data 필드가 필요합니다' });
     }
-    await wsServer.createFrame(args.data, args.name as string | undefined, position, format, pluginId, pageId);
+    await wsServer.createFrame(args.data, args.name as string | undefined, position, format, pluginId, pageId, layoutMode);
 
     return jsonResponse({
       success: true,
@@ -36,6 +37,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         pageId: pageId || '(current)',
       },
       format,
+      layoutMode,
       position: position || 'auto',
     });
   },
@@ -54,7 +56,8 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     const importPosition = args.position as { x: number; y: number } | undefined;
-    await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition, 'json', pluginId, pageId);
+    const importLayoutMode = (args.layoutMode as 'auto' | 'absolute') || 'auto';
+    await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition, 'json', pluginId, pageId, importLayoutMode);
 
     return jsonResponse({
       success: true,
@@ -64,6 +67,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         pageId: pageId || '(current)',
       },
       format: 'json',
+      layoutMode: importLayoutMode,
       position: importPosition || 'auto',
     });
   },

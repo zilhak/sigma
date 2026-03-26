@@ -71,16 +71,26 @@ export function handleServerMessage(msg: ServerMessage) {
     case SERVER_MSG.CREATE_FRAME: {
       const format = msg.format || 'json';
       const pageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
+      const forceAbsolute = msg.layoutMode === 'absolute';
       log(
-        `프레임 생성 요청: ${msg.name || 'Unnamed'} (${format})${msg.position ? ` (${msg.position.x}, ${msg.position.y})` : ''}${pageInfo}`,
+        `프레임 생성 요청: ${msg.name || 'Unnamed'} (${format})${forceAbsolute ? ' [absolute]' : ''}${msg.position ? ` (${msg.position.x}, ${msg.position.y})` : ''}${pageInfo}`,
         'info'
       );
 
-      if (format === 'html') {
-        sendToPlugin('create-from-html', msg.data, msg.name, msg.position, undefined, undefined, msg.pageId);
-      } else {
-        sendToPlugin('create-from-json', msg.data, msg.name, msg.position, undefined, undefined, msg.pageId);
-      }
+      const msgType = format === 'html' ? 'create-from-html' : 'create-from-json';
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: msgType,
+            data: msg.data,
+            name: msg.name,
+            position: msg.position,
+            pageId: msg.pageId,
+            forceAbsolute,
+          },
+        },
+        '*'
+      );
 
       if (ws) ws.send(
         JSON.stringify({

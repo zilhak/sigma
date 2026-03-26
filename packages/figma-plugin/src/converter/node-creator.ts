@@ -8,8 +8,9 @@ import { createSvgNode, createImageNode, createInputNode, createPseudoElementNod
  * ExtractedNode를 Figma 노드로 변환
  * @param node - 추출된 노드 데이터
  * @param isRoot - 루트(최상위) 노드 여부 (기본값: true)
+ * @param forceAbsolute - true이면 Auto Layout 없이 boundingRect 기반 절대 배치
  */
-export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true): Promise<FrameNode | TextNode | null> {
+export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = true, forceAbsolute: boolean = false): Promise<FrameNode | TextNode | null> {
   const { styles, textContent, boundingRect } = node;
   const children = node.children || [];
 
@@ -74,7 +75,37 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     frame.opacity = styles.opacity;
   }
 
-  if (isGridContainer && children.length > 0) {
+  if (forceAbsolute && children.length > 0) {
+    // ── forceAbsolute 모드: 모든 자식을 boundingRect 기반 절대 배치 ──
+    frame.layoutMode = 'NONE';
+
+    // 부모 텍스트 콘텐츠 추가 (있는 경우)
+    if (textContent) {
+      const textNode = createTextNode(textContent, styles);
+      if (textNode) {
+        frame.appendChild(textNode);
+      }
+    }
+
+    // 자식 노드를 boundingRect 기반으로 절대 배치 (재귀적으로 forceAbsolute)
+    const parentRect = node.boundingRect;
+    for (const child of children) {
+      const childNode = await createFigmaNode(child, false, true);
+      if (childNode) {
+        frame.appendChild(childNode);
+        if (child.boundingRect) {
+          childNode.x = child.boundingRect.x - parentRect.x;
+          childNode.y = child.boundingRect.y - parentRect.y;
+          if ('resize' in childNode) {
+            childNode.resize(
+              Math.max(child.boundingRect.width, 1),
+              Math.max(child.boundingRect.height, 1)
+            );
+          }
+        }
+      }
+    }
+  } else if (isGridContainer && children.length > 0) {
     // ── CSS Grid → 중첩 Auto Layout 변환 ──
     // 패딩은 grid 부모에도 적용
     applyPadding(frame, styles);

@@ -56,7 +56,8 @@ export async function createFrameFromJSON(
   name?: string,
   position?: { x: number; y: number },
   pageId?: string,
-  getTargetPage?: (pageId?: string) => PageNode
+  getTargetPage?: (pageId?: string) => PageNode,
+  forceAbsolute?: boolean
 ): Promise<{ nodeId: string; name: string; childCount: number; pageName: string }> {
   // 대상 페이지 결정
   const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
@@ -69,7 +70,7 @@ export async function createFrameFromJSON(
   await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
 
   // 노드 생성
-  const frame = await createFigmaNode(node);
+  const frame = await createFigmaNode(node, true, forceAbsolute || false);
 
   if (!frame) {
     throw new Error('프레임 생성 실패');
@@ -116,7 +117,8 @@ export async function createFrameFromHTML(
   name?: string,
   position?: { x: number; y: number },
   pageId?: string,
-  getTargetPage?: (pageId?: string) => PageNode
+  getTargetPage?: (pageId?: string) => PageNode,
+  forceAbsolute?: boolean
 ): Promise<{ nodeId: string; name: string; childCount: number; pageName: string }> {
   // 대상 페이지 결정
   const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
@@ -135,7 +137,7 @@ export async function createFrameFromHTML(
   }
 
   // 기존 JSON 변환 로직 재사용
-  const frame = await createFigmaNode(node);
+  const frame = await createFigmaNode(node, true, forceAbsolute || false);
 
   if (!frame) {
     throw new Error('프레임 생성 실패');

@@ -144,9 +144,11 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         position?: { x: number; y: number };
         pluginId?: string;
         pageId?: string;
+        layoutMode?: 'auto' | 'absolute';
       }>();
 
       const format = body.format || 'json';
+      const layoutMode = body.layoutMode || 'auto';
       let data: unknown = null;
       let name: string | undefined = body.name;
       const position = body.position;
@@ -179,8 +181,8 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
         return c.json({ error: 'Figma Plugin이 연결되어 있지 않습니다' }, 503);
       }
 
-      // Send to Figma with optional position, pluginId, and pageId
-      await wsServer.createFrame(data, name, position, format, pluginId, pageId);
+      // Send to Figma with optional position, pluginId, pageId, and layoutMode
+      await wsServer.createFrame(data, name, position, format, pluginId, pageId, layoutMode);
 
       return c.json({
         success: true,

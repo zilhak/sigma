@@ -17,6 +17,7 @@ interface ChunkMsg {
   nodeId?: string;
   index?: number;
   data?: unknown;
+  layoutMode?: 'auto' | 'absolute';
 }
 
 // CHUNK_START 처리
@@ -35,6 +36,7 @@ export function handleChunkStart(msg: ChunkMsg) {
     pageId: msg.pageId,
     operation: (msg.operation !== undefined ? msg.operation : 'create') as 'create' | 'update',
     nodeId: msg.nodeId,
+    layoutMode: msg.layoutMode,
   });
 }
 
@@ -108,19 +110,38 @@ export function handleChunkEnd(msg: ChunkMsg) {
       // update-result를 code.ts에서 기다림
     } else {
       // CREATE_FRAME via chunks
+      const chunkForceAbsolute = chunkBuffer.layoutMode === 'absolute';
       if (chunkBuffer.format === 'html') {
         log(
-          `프레임 생성 요청 (청크/HTML): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`,
+          `프레임 생성 요청 (청크/HTML): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}${chunkForceAbsolute ? ' [absolute]' : ''}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`,
           'info'
         );
-        sendToPlugin('create-from-html', assembledData, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
+        parent.postMessage({
+          pluginMessage: {
+            type: 'create-from-html',
+            data: assembledData,
+            name: chunkBuffer.name,
+            position: chunkBuffer.position,
+            pageId: chunkBuffer.pageId,
+            forceAbsolute: chunkForceAbsolute,
+          },
+        }, '*');
       } else {
         const data = JSON.parse(assembledData);
         log(
-          `프레임 생성 요청 (청크/JSON): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`,
+          `프레임 생성 요청 (청크/JSON): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}${chunkForceAbsolute ? ' [absolute]' : ''}${chunkBuffer.pageId ? ` [page: ${chunkBuffer.pageId}]` : ''}`,
           'info'
         );
-        sendToPlugin('create-from-json', data, chunkBuffer.name, chunkBuffer.position, undefined, undefined, chunkBuffer.pageId);
+        parent.postMessage({
+          pluginMessage: {
+            type: 'create-from-json',
+            data,
+            name: chunkBuffer.name,
+            position: chunkBuffer.position,
+            pageId: chunkBuffer.pageId,
+            forceAbsolute: chunkForceAbsolute,
+          },
+        }, '*');
       }
 
       if (ws) ws.send(JSON.stringify({
