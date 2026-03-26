@@ -546,9 +546,13 @@ export function createTextNode(text: string, styles: ComputedStyles): TextNode |
       textNode.textAlignHorizontal = 'LEFT';
   }
 
-  // 텍스트 자동 리사이즈 모드 설정 (텍스트 잘림 방지)
-  // WIDTH_AND_HEIGHT: 텍스트 내용에 맞게 너비와 높이 자동 조정
-  textNode.textAutoResize = 'WIDTH_AND_HEIGHT';
+  // 텍스트 자동 리사이즈 모드 설정
+  if (styles.textOverflow === 'ellipsis') {
+    textNode.textTruncation = 'ENDING';
+    textNode.textAutoResize = 'HEIGHT';
+  } else {
+    textNode.textAutoResize = 'WIDTH_AND_HEIGHT';
+  }
 
   return textNode;
 }

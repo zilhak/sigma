@@ -148,7 +148,11 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
   // 시각적 스타일(배경, 테두리)이 없으면 하나의 텍스트로 병합
   // 이 시점에서 SVG 요소는 위에서 이미 early return됨
   const htmlElement = element as HTMLElement;
-  if (htmlElement.children.length > 0 && isAllInlineTextContent(htmlElement)) {
+  const parentDisplay = computedStyle.display;
+  const isFlexOrGrid = parentDisplay === 'flex' || parentDisplay === 'inline-flex'
+    || parentDisplay === 'grid' || parentDisplay === 'inline-grid';
+
+  if (htmlElement.children.length > 0 && !isFlexOrGrid && isAllInlineTextContent(htmlElement)) {
     const mergedText = getFullInlineTextContent(htmlElement);
     // Pseudo-elements도 포함
     const pseudoElements = extractPseudoElements(element as HTMLElement);
