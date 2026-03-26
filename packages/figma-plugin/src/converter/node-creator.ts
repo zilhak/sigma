@@ -328,6 +328,37 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     }
   }
 
+  // ── Auto Layout 형상 검증 + boundingRect fallback ──
+  // Auto Layout 적용 후 자식 노드의 실제 배치가 원본 boundingRect와 일치하는지 검증.
+  // 허용 오차(3px) 초과 시 Auto Layout 해제 → boundingRect 기반 절대 배치로 fallback.
+  if (frame.layoutMode !== 'NONE' && children.length > 0) {
+    const parentRect = node.boundingRect;
+    const childEntries: Array<{ figmaNode: SceneNode; originalRect: { x: number; y: number; width: number; height: number } }> = [];
+
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (!child.boundingRect) continue;
+
+      // 부모의 boundingRect 기준 상대 좌표로 변환
+      const relX = child.boundingRect.x - parentRect.x;
+      const relY = child.boundingRect.y - parentRect.y;
+
+      // Figma 프레임의 자식 중 대응하는 노드 찾기
+      // 텍스트 콘텐츠가 있으면 자식 인덱스가 1만큼 밀림 (부모 텍스트 노드가 먼저 추가됨)
+      const figmaIdx = textContent ? i + 1 : i;
+      if (figmaIdx < frame.children.length) {
+        childEntries.push({
+          figmaNode: frame.children[figmaIdx],
+          originalRect: { x: relX, y: relY, width: child.boundingRect.width, height: child.boundingRect.height },
+        });
+      }
+    }
+
+    if (childEntries.length > 0 && !validateLayoutFidelity(childEntries)) {
+      fallbackToAbsoluteLayout(frame, childEntries);
+    }
+  }
+
   // strokesIncludedInLayout: layoutMode가 HORIZONTAL/VERTICAL일 때만 설정 가능
   // 원본 Figma 값이 있으면 그대로 복원, 없으면 CSS box-model 기본값(true) 사용
   if (frame.layoutMode !== 'NONE' && frame.strokes.length > 0) {
@@ -339,6 +370,50 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
   applyBorderOverlays(frame, styles);
 
   return frame;
+}
+
+/**
+ * Auto Layout 적용 후 형상 검증
+ * 각 자식의 Figma 배치가 원본 boundingRect와 허용 오차(3px) 이내인지 확인
+ */
+function validateLayoutFidelity(
+  entries: Array<{ figmaNode: SceneNode; originalRect: { x: number; y: number; width: number; height: number } }>
+): boolean {
+  var TOLERANCE = 3;
+
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i];
+    var fn = entry.figmaNode;
+    var rect = entry.originalRect;
+
+    if (
+      Math.abs(fn.x - rect.x) > TOLERANCE ||
+      Math.abs(fn.y - rect.y) > TOLERANCE ||
+      Math.abs(fn.width - rect.width) > TOLERANCE ||
+      Math.abs(fn.height - rect.height) > TOLERANCE
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Auto Layout 해제 + boundingRect 기반 절대 배치로 fallback
+ */
+function fallbackToAbsoluteLayout(
+  frame: FrameNode,
+  entries: Array<{ figmaNode: SceneNode; originalRect: { x: number; y: number; width: number; height: number } }>
+): void {
+  frame.layoutMode = 'NONE';
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i];
+    var fn = entry.figmaNode;
+    var rect = entry.originalRect;
+    fn.x = rect.x;
+    fn.y = rect.y;
+    fn.resize(Math.max(rect.width, 1), Math.max(rect.height, 1));
+  }
 }
 
 /**
