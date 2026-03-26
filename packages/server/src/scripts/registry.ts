@@ -32,7 +32,7 @@ export interface PlaywrightScript {
 }
 
 /**
- * 스크립트 디렉토리 경로 결정
+ * 스크립트 디렉토리 경로 결정 (서버 내부용 — existsSync 등)
  *
  * 우선순위:
  * 1. SIGMA_SCRIPTS_DIR 환경변수
@@ -51,15 +51,40 @@ function getScriptsDir(): string {
 }
 
 /**
+ * 호스트에서 접근 가능한 스크립트 디렉토리 경로 (MCP 응답용)
+ *
+ * Docker 환경에서 서버 내부 경로(/app/...)와 호스트 경로(~/.sigma/scripts)가 다르므로,
+ * SIGMA_SCRIPTS_HOST_DIR이 설정된 경우 이를 반환하여 Playwright(호스트)에서 접근 가능하게 한다.
+ *
+ * 우선순위:
+ * 1. SIGMA_SCRIPTS_HOST_DIR 환경변수 (Docker용 호스트 경로)
+ * 2. getScriptsDir() fallback (로컬 개발 시 동일)
+ */
+function getScriptsDirForHost(): string {
+  const hostDir = process.env.SIGMA_SCRIPTS_HOST_DIR;
+  if (hostDir) {
+    return hostDir;
+  }
+  return getScriptsDir();
+}
+
+/**
  * Playwright에서 사용할 수 있는 Sigma 임베드 스크립트 목록 반환
  */
 export function getPlaywrightScripts(): PlaywrightScript[] {
   const scriptsDir = getScriptsDir();
-  const extractorPath = resolve(scriptsDir, 'extractor.standalone.js');
-  const diffPath = resolve(scriptsDir, 'diff.standalone.js');
-  const storybookPath = resolve(scriptsDir, 'storybook.standalone.js');
+  const hostDir = getScriptsDirForHost();
 
-  const enhancerPath = resolve(scriptsDir, 'enhancer.js');
+  // exists 체크는 서버 내부 경로, path 반환은 호스트 경로
+  const extractorPath = resolve(hostDir, 'extractor.standalone.js');
+  const diffPath = resolve(hostDir, 'diff.standalone.js');
+  const storybookPath = resolve(hostDir, 'storybook.standalone.js');
+  const enhancerPath = resolve(hostDir, 'enhancer.js');
+
+  const extractorExists = existsSync(resolve(scriptsDir, 'extractor.standalone.js'));
+  const diffExists = existsSync(resolve(scriptsDir, 'diff.standalone.js'));
+  const storybookExists = existsSync(resolve(scriptsDir, 'storybook.standalone.js'));
+  const enhancerExists = existsSync(resolve(scriptsDir, 'enhancer.js'));
 
   return [
     {
@@ -68,7 +93,7 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
         '웹 컴포넌트를 ExtractedNode JSON으로 추출하고, 페이지 구조 탐색 및 디자인 토큰 추출을 지원하는 통합 Sigma 임베드 스크립트. ' +
         'Playwright page.addScriptTag()로 inject 후 window.__sigma__ API 사용.',
       path: extractorPath,
-      exists: existsSync(extractorPath),
+      exists: extractorExists,
       api: [
         // === 추출 API ===
         {
@@ -103,6 +128,16 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
           returns: 'ExtractedNode[]',
           example:
             'const components = await page.evaluate(() => window.__sigma__.extractVisible());',
+        },
+
+        // === 추출 + 저장 API ===
+        {
+          method: 'window.__sigma__.extractAndSave(name, selectorOrElement, serverUrl?)',
+          description: '요소를 추출하여 Sigma 서버에 즉시 저장. Claude 컨텍스트를 거치지 않고 직접 서버 전송.',
+          params: 'name: string, selectorOrElement: string | Element, serverUrl?: string',
+          returns: 'Promise<{ success: boolean, id?: string, error?: string }>',
+          example:
+            "const result = await page.evaluate(() => window.__sigma__.extractAndSave('MyComponent', '.my-component'));",
         },
 
         // === 탐색 API ===
@@ -206,7 +241,7 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
       description:
         'ExtractedNode 비교 스크립트. 두 추출 결과의 구조적 차이를 분석하고, 스냅샷 저장/비교 기능 제공.',
       path: diffPath,
-      exists: existsSync(diffPath),
+      exists: diffExists,
       api: [
         {
           method: 'window.__sigma_diff__.compare(nodeA, nodeB)',
@@ -263,7 +298,7 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
         'Storybook 전용 Sigma 임베드 스크립트. Story 목록 조회, story 렌더링 영역 감지, 컴포넌트 추출을 지원. ' +
         'Playwright page.addScriptTag()로 inject 후 window.__sigma_storybook__ API 사용.',
       path: storybookPath,
-      exists: existsSync(storybookPath),
+      exists: storybookExists,
       api: [
         {
           method: 'window.__sigma_storybook__.getStoryRoot()',
@@ -367,7 +402,7 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
         'CDP 보강 모듈 (ESM). Playwright CDPSession과 함께 사용하여 기본 추출 결과를 보강합니다. ' +
         '실제 렌더링 폰트 감지(CSS.getPlatformFontsForNode) 등 CDP 전용 기능을 제공.',
       path: enhancerPath,
-      exists: existsSync(enhancerPath),
+      exists: enhancerExists,
       api: [
         {
           method: 'enhance(cdp, data, options)',

@@ -19,11 +19,18 @@ import {
   getPageStructure,
 } from './discovery/core';
 import type { ElementInfo, ContainerOptions, PageStructure } from './discovery/core';
+import { SERVER_URL } from './constants';
 
 declare global {
   interface Window {
     __sigma__?: SigmaAPI;
   }
+}
+
+interface SaveResult {
+  success: boolean;
+  id?: string;
+  error?: string;
 }
 
 interface SigmaAPI {
@@ -32,6 +39,7 @@ interface SigmaAPI {
   extractAt: (x: number, y: number) => ExtractedNode | null;
   extractAll: (selector: string) => ExtractedNode[];
   extractVisible: (options?: { minWidth?: number; minHeight?: number }) => ExtractedNode[];
+  extractAndSave: (name: string, selectorOrElement: string | Element, serverUrl?: string) => Promise<SaveResult>;
 
   // === 탐색 ===
   findByAlt: (altText: string) => ElementInfo | null;
@@ -91,6 +99,41 @@ if (!window.__sigma__) {
     // Bulk & viewport extraction (core로부터 직접 가져옴)
     extractAll,
     extractVisible,
+
+    /**
+     * 요소를 추출하여 Sigma 서버에 저장
+     * @param name - 컴포넌트 이름
+     * @param selectorOrElement - CSS 선택자 또는 DOM 요소
+     * @param serverUrl - Sigma 서버 URL (기본: http://localhost:19832)
+     */
+    async extractAndSave(
+      name: string,
+      selectorOrElement: string | Element,
+      serverUrl?: string
+    ): Promise<SaveResult> {
+      const extracted = this.extract(selectorOrElement);
+      if (!extracted) {
+        return { success: false, error: 'extract returned null' };
+      }
+
+      const server = serverUrl || SERVER_URL;
+      try {
+        const res = await fetch(`${server}/api/extracted`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            data: extracted,
+            format: 'json',
+            timestamp: Date.now(),
+          }),
+        });
+        const result = await res.json();
+        return { success: true, id: result.component?.id };
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
+    },
 
     // ================================================================
     // 탐색 API (Discovery)
