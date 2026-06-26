@@ -114,6 +114,74 @@ export interface SetVariableValueResult {
   set: boolean;
 }
 
+/**
+ * COLOR 값 정규화: hex 문자열("#rrggbb"/"#rgb"/"#rrggbbaa") 또는 {r,g,b,a?} 객체를 받아
+ * Figma RGBA(0~1)로 변환한다. 채널이 0~255 범위로 들어오면 자동으로 0~1 로 정규화한다.
+ */
+function toRGBA(value: unknown): RGBA {
+  if (typeof value === 'string') {
+    const hex = value.replace('#', '').trim();
+    if (hex.length !== 3 && hex.length !== 6 && hex.length !== 8) {
+      throw new Error(`COLOR hex 형식이 올바르지 않습니다: "${value}"`);
+    }
+    const full = hex.length === 3 ? hex.split('').map(c => c + c).join('') : hex;
+    const r = parseInt(full.slice(0, 2), 16) / 255;
+    const g = parseInt(full.slice(2, 4), 16) / 255;
+    const b = parseInt(full.slice(4, 6), 16) / 255;
+    const a = full.length === 8 ? parseInt(full.slice(6, 8), 16) / 255 : 1;
+    if (![r, g, b, a].every(Number.isFinite)) throw new Error(`COLOR hex 파싱 실패: "${value}"`);
+    return { r, g, b, a };
+  }
+  if (value && typeof value === 'object') {
+    const o = value as Record<string, unknown>;
+    if (!('r' in o && 'g' in o && 'b' in o)) {
+      throw new Error('COLOR 값은 {r,g,b,a} 객체 또는 hex 문자열이어야 합니다');
+    }
+    let r = Number(o.r), g = Number(o.g), b = Number(o.b);
+    let a = o.a === undefined || o.a === null ? 1 : Number(o.a);
+    if (![r, g, b, a].every(Number.isFinite)) throw new Error('COLOR 채널 값은 숫자여야 합니다');
+    // 0~255 입력 자동 정규화
+    if (r > 1 || g > 1 || b > 1) { r /= 255; g /= 255; b /= 255; }
+    if (a > 1) a /= 255;
+    return { r, g, b, a };
+  }
+  throw new Error('COLOR 값은 {r,g,b,a} 객체 또는 hex 문자열이어야 합니다');
+}
+
+/**
+ * 변수의 resolvedType 에 맞춰 입력 값을 정규화한다.
+ * MCP value 파라미터는 inputSchema 에 타입이 없어 문자열("8", "true", '{"r":..}')로
+ * 도착할 수 있으므로, STRING 이 아닌 타입에 대해서는 먼저 JSON 파싱을 시도한다.
+ */
+function coerceVariableValue(resolvedType: VariableResolvedDataType, raw: unknown): VariableValue {
+  let value = raw;
+  if (typeof value === 'string' && resolvedType !== 'STRING') {
+    try { value = JSON.parse(value.trim()); } catch { /* hex/숫자 문자열 등은 아래에서 처리 */ }
+  }
+
+  switch (resolvedType) {
+    case 'FLOAT': {
+      const n = typeof value === 'number' ? value : Number(value);
+      if (!Number.isFinite(n)) {
+        throw new Error(`FLOAT 변수에는 숫자 값이 필요합니다 (받은 값: ${JSON.stringify(raw)})`);
+      }
+      return n;
+    }
+    case 'BOOLEAN': {
+      if (typeof value === 'boolean') return value;
+      if (value === 'true' || value === 1) return true;
+      if (value === 'false' || value === 0) return false;
+      return Boolean(value);
+    }
+    case 'STRING':
+      return typeof value === 'string' ? value : String(value);
+    case 'COLOR':
+      return toRGBA(value);
+    default:
+      return value as VariableValue;
+  }
+}
+
 export function setVariableValue(options: SetVariableValueOptions): SetVariableValueResult {
   const variable = figma.variables.getVariableById(options.variableId);
   if (!variable) throw new Error(`변수를 찾을 수 없습니다: ${options.variableId}`);
@@ -121,8 +189,17 @@ export function setVariableValue(options: SetVariableValueOptions): SetVariableV
   const collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
   if (!collection) throw new Error(`컬렉션을 찾을 수 없습니다: ${variable.variableCollectionId}`);
 
-  variable.setValueForMode(options.modeId, options.value as VariableValue);
-  return { variableId: variable.id, modeId: options.modeId, set: true };
+  // modeId 검증 — 존재하지 않으면 컬렉션 기본 모드로 폴백 (잘못된 modeId 로 인한 타입 오류 방지)
+  let modeId = options.modeId;
+  if (!collection.modes.some(m => m.modeId === modeId)) {
+    modeId = collection.defaultModeId;
+  }
+
+  // resolvedType 에 맞춰 값 정규화 (문자열/0-255/hex 등 허용)
+  const value = coerceVariableValue(variable.resolvedType, options.value);
+
+  variable.setValueForMode(modeId, value);
+  return { variableId: variable.id, modeId, set: true };
 }
 
 // === Bind Variable ===
