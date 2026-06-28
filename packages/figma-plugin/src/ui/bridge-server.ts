@@ -218,6 +218,7 @@ export function handleServerMessage(msg: ServerMessage) {
             type: 'find-node',
             path: msg.path,
             typeFilter: msg.typeFilter,
+            pageId: msg.pageId,
           },
         },
         '*'
