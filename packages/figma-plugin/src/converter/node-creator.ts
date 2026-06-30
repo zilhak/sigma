@@ -264,13 +264,8 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
           // 자식의 교차축 크기가 부모 내부 교차축과 일치할 때만 적용 (실제 stretch된 경우).
           if (styles.alignItems === 'stretch' && child.boundingRect) {
             const isHorizontal = frame.layoutMode === 'HORIZONTAL';
-            const parentCross = isHorizontal ? node.boundingRect.height : node.boundingRect.width;
-            const crossPadding = isHorizontal
-              ? (styles.paddingTop + styles.paddingBottom + styles.borderTopWidth + styles.borderBottomWidth)
-              : (styles.paddingLeft + styles.paddingRight + styles.borderLeftWidth + styles.borderRightWidth);
-            const parentInnerCross = parentCross - crossPadding;
-            const childCross = isHorizontal ? child.boundingRect.height : child.boundingRect.width;
-            if (parentInnerCross > 0 && Math.abs(childCross - parentInnerCross) < 2) {
+            // STRETCH + 교차축 FILL을 적용하는 공통 처리
+            const applyStretch = function() {
               childFrame.layoutAlign = 'STRETCH';
               // layoutAlign: STRETCH만으로는 부족 — sizing도 FILL로 설정해야 실제로 늘어남
               if ('layoutSizingVertical' in childFrame) {
@@ -279,6 +274,28 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
                 } else {
                   (childFrame as any).layoutSizingHorizontal = 'FILL';
                 }
+              }
+            };
+            if (hasValidBoundingRect(children)) {
+              // 익스텐션 추출 데이터: 실측 교차축 크기가 부모 내부 교차축과
+              // 일치할 때만(실제 stretch된 경우만) 적용 — HUG/FIXED 자식 보호.
+              const parentCross = isHorizontal ? node.boundingRect.height : node.boundingRect.width;
+              const crossPadding = isHorizontal
+                ? (styles.paddingTop + styles.paddingBottom + styles.borderTopWidth + styles.borderBottomWidth)
+                : (styles.paddingLeft + styles.paddingRight + styles.borderLeftWidth + styles.borderRightWidth);
+              const parentInnerCross = parentCross - crossPadding;
+              const childCross = isHorizontal ? child.boundingRect.height : child.boundingRect.width;
+              if (parentInnerCross > 0 && Math.abs(childCross - parentInnerCross) < 2) {
+                applyStretch();
+              }
+            } else {
+              // 손-HTML(boundingRect 무효): CSS align-items:stretch 의미론을 직접 적용.
+              // CSS는 교차축 크기가 auto(미명시)인 자식만 stretch하므로,
+              // 교차축 크기가 명시된 자식은 제외한다.
+              const cs = child.styles;
+              const childCrossSize = cs ? (isHorizontal ? cs.height : cs.width) : 'auto';
+              if (typeof childCrossSize !== 'number') {
+                applyStretch();
               }
             }
           }
@@ -380,7 +397,10 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
   // ── Auto Layout 형상 검증 + boundingRect fallback ──
   // Auto Layout 적용 후 자식 노드의 실제 배치가 원본 boundingRect와 일치하는지 검증.
   // 허용 오차(3px) 초과 시 Auto Layout 해제 → boundingRect 기반 절대 배치로 fallback.
-  if (frame.layoutMode !== 'NONE' && children.length > 0) {
+  // 단, boundingRect가 실측값이 아닌 손-HTML(rect=0)에서는 (0,0,0,0) 기준 검증이
+  // 무조건 실패해 정상 Auto Layout까지 절대배치로 되돌려버리므로, 유효한 추출
+  // 데이터일 때만 검증한다. 손-HTML은 Auto Layout 결과를 그대로 신뢰한다.
+  if (frame.layoutMode !== 'NONE' && children.length > 0 && hasValidBoundingRect(children)) {
     const parentRect = node.boundingRect;
     const childEntries: Array<{ figmaNode: SceneNode; originalRect: { x: number; y: number; width: number; height: number } }> = [];
 
@@ -488,6 +508,21 @@ function hasNegativeMargins(children: ExtractedNode[]): boolean {
     if (!s) return false;
     return (s.marginLeft < 0) || (s.marginTop < 0) ||
            (s.marginRight < 0) || (s.marginBottom < 0);
+  });
+}
+
+/**
+ * 자식들의 boundingRect가 "실측된 추출 데이터"인지 판정.
+ * Sigma 익스텐션 추출 데이터는 getBoundingClientRect() 실측값을 담지만,
+ * 손으로 작성한 인라인 스타일 HTML은 대부분 boundingRect가 0이다.
+ * 하나라도 0보다 큰 width/height가 있으면 유효한 추출 데이터로 간주한다.
+ * 이 판정으로 boundingRect 의존 분기(형상검증·stretch 비교)를 게이팅하여,
+ * 익스텐션 경로는 기존대로 동작시키고 손-HTML만 CSS 의미론에 위임한다.
+ */
+function hasValidBoundingRect(children: ExtractedNode[]): boolean {
+  return children.some(function(child) {
+    if (!child.boundingRect) return false;
+    return child.boundingRect.width > 0 || child.boundingRect.height > 0;
   });
 }
 
