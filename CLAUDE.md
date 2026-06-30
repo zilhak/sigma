@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 112개 도구(sigma_* 103 + 유틸리티 9)와 65개 modify 메서드가 구현되어 있으며, 미구현 기능은 `.claude/UNIMPLEMENTED_FEATURES.md`에서 추적한다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 112개 도구(sigma_* 103 + 유틸리티 9)와 65개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -43,10 +43,6 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 - `?.` (optional chaining)은 사용 가능
 - 브라우저 API (DOM, fetch 등) 접근 불가 — 이는 `ui.ts` (iframe) 에서만 가능
 - `ui.ts` iframe에서 클립보드 사용 시 `document.execCommand('copy')` 동기 호출 필수 — 상세: [`docs/figma-plugin-clipboard.md`](docs/figma-plugin-clipboard.md)
-
-### 임시 파일 저장 규칙
-
-Claude가 생성하는 모든 임시 파일, 스크린샷, 작업 문서는 **프로젝트 루트의 `.claude/` 폴더**에 저장한다. 이 폴더는 global gitignore에 등록되어 소스코드에 포함되지 않음.
 
 ### 시각적 결과 검증 프로토콜
 
@@ -417,7 +413,6 @@ await page.evaluate((id) => window.__sigma_storybook__.navigateToStory(id), stor
 ### Playwright 기본 설정
 
 - 창 크기: 1600 x 900
-- 스크린샷 저장: `{프로젝트루트}/.claude/screenshots/`
 
 ---
 
