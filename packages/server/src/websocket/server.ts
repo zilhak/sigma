@@ -909,21 +909,21 @@ export class FigmaWebSocketServer {
   // === Create Nodes ===
 
   async createRectangle(
-    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: { r: number; g: number; b: number; a?: number }; strokeColor?: { r: number; g: number; b: number; a?: number }; strokeWeight?: number; cornerRadius?: number },
+    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: { r: number; g: number; b: number; a?: number }; strokeColor?: { r: number; g: number; b: number; a?: number }; strokeWeight?: number; cornerRadius?: number; pageId?: string },
     pluginId?: string
   ): Promise<unknown> {
     return this.sendCommand('CREATE_RECTANGLE', args, { pluginId });
   }
 
   async createTextNode(
-    args: { x: number; y: number; text: string; name?: string; parentId?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; fontColor?: { r: number; g: number; b: number; a?: number }; textAlignHorizontal?: string },
+    args: { x: number; y: number; text: string; name?: string; parentId?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; fontColor?: { r: number; g: number; b: number; a?: number }; textAlignHorizontal?: string; pageId?: string },
     pluginId?: string
   ): Promise<unknown> {
     return this.sendCommand('CREATE_TEXT', args, { pluginId });
   }
 
   async createEmptyFrame(
-    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: unknown; strokeColor?: unknown; strokeWeight?: number; layoutMode?: string; layoutWrap?: string; paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number; primaryAxisAlignItems?: string; counterAxisAlignItems?: string; layoutSizingHorizontal?: string; layoutSizingVertical?: string; itemSpacing?: number; counterAxisSpacing?: number; cornerRadius?: number },
+    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: unknown; strokeColor?: unknown; strokeWeight?: number; layoutMode?: string; layoutWrap?: string; paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number; primaryAxisAlignItems?: string; counterAxisAlignItems?: string; layoutSizingHorizontal?: string; layoutSizingVertical?: string; itemSpacing?: number; counterAxisSpacing?: number; cornerRadius?: number; pageId?: string },
     pluginId?: string
   ): Promise<unknown> {
     return this.sendCommand('CREATE_EMPTY_FRAME', args, { pluginId });
@@ -1030,9 +1030,10 @@ export class FigmaWebSocketServer {
     x: number,
     y: number,
     parentId?: string,
-    pluginId?: string
+    pluginId?: string,
+    pageId?: string
   ): Promise<unknown> {
-    return this.sendCommand('CREATE_COMPONENT_INSTANCE', { componentKey, x, y, parentId }, { pluginId });
+    return this.sendCommand('CREATE_COMPONENT_INSTANCE', { componentKey, x, y, parentId, pageId }, { pluginId });
   }
 
   async getInstanceOverrides(nodeId?: string, pluginId?: string): Promise<unknown> {
@@ -1156,8 +1157,8 @@ export class FigmaWebSocketServer {
     return this.sendCommand('CONVERT_TO_COMPONENT', { nodeId }, { pluginId });
   }
 
-  async createComponentSet(componentIds: string[], name?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_COMPONENT_SET', { componentIds, name }, { pluginId });
+  async createComponentSet(componentIds: string[], name?: string, pluginId?: string, pageId?: string): Promise<unknown> {
+    return this.sendCommand('CREATE_COMPONENT_SET', { componentIds, name, pageId }, { pluginId });
   }
 
   async addComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {

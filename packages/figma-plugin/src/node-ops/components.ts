@@ -43,6 +43,11 @@ export async function createComponentInstance(
   y: number,
   parentId?: string
 ): Promise<CreateInstanceResult> {
+  // await(importComponentByKeyAsync) 이전에 의도된 page를 캡처. await 동안 다른
+  // create 명령이 figma.currentPage를 바꾸면 createInstance()가 엉뚱한 page에
+  // 인스턴스를 생성할 수 있다(race).
+  const intendedPage = figma.currentPage;
+
   let component: ComponentNode | null = null;
 
   // 먼저 로컬 컴포넌트에서 key 또는 nodeId로 검색
@@ -59,6 +64,11 @@ export async function createComponentInstance(
   }
 
   const instance = component.createInstance();
+  // currentPage가 드리프트했으면 의도된 page로 재고정 (parentId가 있으면 이후
+  // 블록에서 해당 부모로 다시 이동하므로 무관).
+  if (figma.currentPage.id !== intendedPage.id) {
+    intendedPage.appendChild(instance);
+  }
   instance.x = x;
   instance.y = y;
 

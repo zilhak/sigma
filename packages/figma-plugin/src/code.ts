@@ -2,7 +2,7 @@ import type { ExtractedNode, TreeFilter } from '@sigma/shared';
 import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, setLastCreatedPosition } from './converter';
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
-import { getTargetPage, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage, reorderPage } from './node-ops';
+import { getTargetPage, getPageById, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage, reorderPage } from './node-ops';
 import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
 import { getFrames, deleteFrame } from './node-ops';
@@ -130,8 +130,39 @@ setInterval(() => {
   }
 }, 500);
 
+// currentPage에 의존해 노드를 생성하는 create 계열 command 집합.
+// 이들은 figma.createX()가 호출 즉시 figma.currentPage에 노드를 append하므로,
+// 디스패치 직전에 활성 page를 바인딩 page로 맞춰야 올바른 page에 생성된다.
+// create-from-json/html, create-section, find-node, get-tree 등은 자체적으로
+// pageId를 getTargetPage로 처리(currentPage를 바꾸지 않음)하므로 제외한다
+// — 포함하면 불필요한 활성 page 전환(뷰 점프)이 발생한다.
+const PAGE_SCOPED_CREATE = new Set([
+  'create-rectangle', 'create-text', 'create-empty-frame', 'create-ellipse',
+  'create-polygon', 'create-star', 'create-line', 'create-vector',
+  'create-image-node', 'create-component-instance', 'create-component',
+  'create-component-set', 'create-node-from-svg', 'create-sticky', 'create-connector',
+]);
+
 // 메시지 핸들러
 figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
+  // ── 바인딩 page 활성화 초크포인트 (옵션 A) ──
+  // create 계열 명령이 바인딩된 pageId를 갖고 있으면, switch 분기 이전에 활성
+  // page를 그 page로 1회 설정한다. 이후 모든 figma.createX()가 자동으로 올바른
+  // page에 붙는다. (await을 포함해 생성이 인터리브될 수 있는 createText/
+  //  createComponentInstance는 함수 내부에서 생성 직후 재고정으로 race를 막는다.)
+  if (PAGE_SCOPED_CREATE.has(msg.type) && typeof msg.pageId === 'string' && msg.pageId) {
+    const targetPage = getPageById(msg.pageId);
+    if (!targetPage) {
+      // 바인딩된 page가 삭제됐거나 stale → 조용한 currentPage 폴백 대신 명시적
+      // 에러로 알린다(엉뚱한 page 생성 방지).
+      sendError(`${msg.type}-result`, `바인딩된 페이지(${msg.pageId})를 찾을 수 없습니다. sigma_bind로 다시 바인딩하세요.`);
+      return;
+    }
+    if (targetPage.id !== figma.currentPage.id) {
+      figma.currentPage = targetPage;
+    }
+  }
+
   switch (msg.type) {
     case 'create-from-json': {
       const position = msg.position as { x: number; y: number } | undefined;

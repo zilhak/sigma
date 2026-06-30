@@ -73,6 +73,19 @@ bun run build
 grep -E ' \?\? ' dist/code.js && echo "ERROR: 금지된 문법 발견!"
 ```
 
+### 5. 핫 리로드 (CRITICAL)
+
+**Figma 플러그인은 핫 리로드를 지원한다. `bun run build`로 `dist/`를 갱신하면
+별도의 플러그인 재실행 없이 Figma에 새 코드가 자동 반영된다.**
+
+- 코드 수정 → 빌드만 하면 끝. 사용자에게 "플러그인을 다시 실행해 달라"고 요청하지 말 것.
+- 빌드 직후 곧바로 Sigma MCP 도구(`sigma_create_frame` 등)로 라이브 검증하면 새 코드 기준으로 동작한다.
+- 핫 리로드 시 플러그인이 재연결되며 **`pluginId`가 갱신**된다. 빌드 후 라이브 검증 전
+  `sigma_list_plugins`로 새 `pluginId`를 확인해 `sigma_bind`로 **재바인딩**해야 한다
+  (이전 토큰은 그대로 쓰되 바인딩만 갱신).
+- (주의) 이는 **Figma 플러그인** 한정이다. **Sigma MCP 서버**는 핫 리로드가 아니며,
+  재시작도 금지다(루트 `CLAUDE.md`의 "MCP 서버 재시작 금지" 참조).
+
 ## 파일 구조
 
 ```

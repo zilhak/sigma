@@ -120,9 +120,19 @@ export async function createText(options: CreateTextOptions): Promise<CreateText
   const weight = options.fontWeight !== undefined ? options.fontWeight : 400;
   const style = getStyleFromWeight(weight);
 
+  // await 이전에 의도된 page(디스패치 초크포인트가 설정한 바인딩 page)를 캡처.
+  // loadFontAsync await 동안 다른 create 명령이 인터리브되어 figma.currentPage를
+  // 바꾸면, 아래 createText()가 엉뚱한 page에 생성될 수 있다(race).
+  const intendedPage = figma.currentPage;
+
   await figma.loadFontAsync({ family, style });
 
   const text = figma.createText();
+  // currentPage가 드리프트했으면 의도된 page로 재고정 (parentId가 있으면 이후
+  // 블록에서 해당 부모로 다시 이동하므로 무관).
+  if (figma.currentPage.id !== intendedPage.id) {
+    intendedPage.appendChild(text);
+  }
   text.fontName = { family, style };
   text.characters = options.text;
   text.x = options.x;

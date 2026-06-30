@@ -520,9 +520,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createRectangle({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -546,9 +547,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createTextNode({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         text: args.text as string,
@@ -572,10 +574,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const frameArgs: Record<string, unknown> = {
         x: args.x, y: args.y, width: args.width, height: args.height,
+        pageId,
       };
       // 선택적 옵션 전달
       const optionalKeys = [
@@ -791,9 +794,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createEllipse({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -817,9 +821,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createPolygon({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -843,9 +848,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createStar({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -870,9 +876,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createLine({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         length: args.length as number,
@@ -894,9 +901,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createVector({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -1151,9 +1159,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createImageNode({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -1229,14 +1238,15 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createComponentInstance(
         args.componentKey as string,
         args.x as number,
         args.y as number,
         args.parentId as string | undefined,
-        pluginId
+        pluginId,
+        pageId
       );
       return jsonResponse({ success: true, message: '컴포넌트 인스턴스가 생성되었습니다', ...result as object });
     } catch (error) {
@@ -1601,9 +1611,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createComponent({
+        pageId,
         x: args.x as number,
         y: args.y as number,
         width: args.width as number,
@@ -1638,12 +1649,13 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createComponentSet(
         args.componentIds as string[],
         args.name as string | undefined,
-        pluginId
+        pluginId,
+        pageId
       );
       return jsonResponse({ success: true, message: '컴포넌트 세트가 생성되었습니다', ...result as object });
     } catch (error) {
@@ -1765,9 +1777,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createNodeFromSvg({
+        pageId,
         svgString: args.svgString as string,
         x: args.x as number,
         y: args.y as number,
@@ -2092,9 +2105,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createSticky({
+        pageId,
         text: args.text as string,
         x: args.x as number,
         y: args.y as number,
@@ -2112,9 +2126,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
-    const { pluginId } = access;
+    const { pluginId, pageId } = access;
     try {
       const result = await wsServer.createConnector({
+        pageId,
         startNodeId: args.startNodeId as string,
         endNodeId: args.endNodeId as string,
         strokeColor: args.strokeColor as any,
