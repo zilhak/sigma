@@ -8,22 +8,18 @@ export type { GridTrack, GridCell } from './grid';
  * Auto Layout 크기 모드 설정
  * CSS의 width/height 값에 따라 FIXED, HUG, 또는 FILL 모드 적용
  */
-export function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot: boolean) {
+export function applySizingMode(frame: FrameNode, styles: ComputedStyles, _isRoot: boolean) {
   const { width, height } = styles;
 
-  // 루트 프레임은 항상 FIXED (전체 크기 유지)
-  if (isRoot) {
-    frame.primaryAxisSizingMode = 'FIXED';
-    frame.counterAxisSizingMode = 'FIXED';
-    return;
-  }
+  // 루트/비루트 동일 규칙:
+  //   명시 크기(number) → FIXED, 미지정('auto') → HUG(콘텐츠에 맞춤)
+  // NOTE: 과거에는 루트를 무조건 FIXED로 두었으나, height 미지정 시
+  //   resize(_, max(0,1))=1px 로 고정되어 콘텐츠 전체가 1px 로 찌부되는 버그가 있었다.
+  //   루트도 'auto' 면 HUG 로 두어 자식 높이를 감싸도록 한다.
 
-  // 가로(primary/counter) 설정
-  // width: auto → HUG (콘텐츠에 맞춤)
-  // width: 100% → FILL (부모에 맞춤) - Figma에서는 layoutGrow로 처리
-  // width: number → FIXED
+  // 가로(width)
+  // width: auto → HUG (콘텐츠에 맞춤) / width: number → FIXED
   if (width === 'auto') {
-    // HORIZONTAL 레이아웃이면 primaryAxis가 width
     if (frame.layoutMode === 'HORIZONTAL') {
       frame.primaryAxisSizingMode = 'AUTO'; // HUG
     } else {
@@ -37,7 +33,7 @@ export function applySizingMode(frame: FrameNode, styles: ComputedStyles, isRoot
     }
   }
 
-  // height 설정
+  // 세로(height)
   if (height === 'auto') {
     if (frame.layoutMode === 'VERTICAL') {
       frame.primaryAxisSizingMode = 'AUTO'; // HUG
