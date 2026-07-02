@@ -1854,6 +1854,41 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
+  async sigma_rename_variable(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.renameVariable({
+        variableId: args.variableId as string,
+        name: args.name as string,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '변수 이름이 변경되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_delete_variable(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.deleteVariable({
+        variableId: args.variableId as string,
+      }, pluginId);
+      return jsonResponse({ success: true, message: '변수가 삭제되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
   // === Group E: Team Library ===
 
   async sigma_get_libraries(args, context) {

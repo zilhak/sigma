@@ -304,3 +304,36 @@ export function setVariableCodeSyntax(variableId: string, platform: string, synt
   variable.setVariableCodeSyntax(platform as CodeSyntaxPlatform, syntax);
   return { variableId, platform, syntax };
 }
+
+// === Variable Rename ===
+
+export interface RenameVariableResult {
+  variableId: string;
+  name: string;
+}
+
+export function renameVariable(variableId: string, name: string): RenameVariableResult {
+  if (!variableId) throw new Error('variableId가 필요합니다');
+  if (!name) throw new Error('name이 필요합니다');
+  const variable = figma.variables.getVariableById(variableId);
+  if (!variable) throw new Error('변수를 찾을 수 없습니다: ' + variableId);
+  variable.name = name;
+  return { variableId, name: variable.name };
+}
+
+// === Variable Delete ===
+
+export interface DeleteVariableResult {
+  variableId: string;
+  name: string;
+  deleted: boolean;
+}
+
+export function deleteVariable(variableId: string): DeleteVariableResult {
+  if (!variableId) throw new Error('variableId가 필요합니다');
+  const variable = figma.variables.getVariableById(variableId);
+  if (!variable) throw new Error('변수를 찾을 수 없습니다: ' + variableId);
+  const name = variable.name;
+  variable.remove();
+  return { variableId, name, deleted: true };
+}

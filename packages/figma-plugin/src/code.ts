@@ -18,7 +18,7 @@ import { getAnnotations, setAnnotation, setMultipleAnnotations } from './node-op
 import { getReactions, addReaction, removeReactions } from './node-ops';
 import { performBooleanOperation } from './node-ops';
 import { createPaintStyle, createTextStyle, createEffectStyle, createGridStyle, applyStyle, deleteStyle } from './node-ops';
-import { createVariableCollection, createVariable, getVariables, setVariableValue, bindVariable, addVariableMode, setVariableScopes, setVariableAlias, setVariableCodeSyntax } from './node-ops';
+import { createVariableCollection, createVariable, getVariables, setVariableValue, bindVariable, addVariableMode, setVariableScopes, setVariableAlias, setVariableCodeSyntax, renameVariable, deleteVariable } from './node-ops';
 import { createNodeFromSvg } from './node-ops';
 import { listAvailableFonts, getNodeCSS } from './node-ops';
 import { createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './node-ops';
@@ -1509,6 +1509,31 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('set-variable-code-syntax-result', errMsg);
+      }
+      break;
+    }
+
+    case 'rename-variable': {
+      try {
+        const result = renameVariable(
+          msg.variableId as string,
+          msg.name as string
+        );
+        sendResult('rename-variable-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('rename-variable-result', errMsg);
+      }
+      break;
+    }
+
+    case 'delete-variable': {
+      try {
+        const result = deleteVariable(msg.variableId as string);
+        sendResult('delete-variable-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('delete-variable-result', errMsg);
       }
       break;
     }

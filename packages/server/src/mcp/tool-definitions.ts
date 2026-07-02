@@ -2414,6 +2414,31 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       required: ['token', 'variableId', 'platform', 'syntax'],
     },
   },
+  {
+    name: 'sigma_rename_variable',
+    description: '변수의 이름을 변경합니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        variableId: { type: 'string', description: '대상 변수 ID' },
+        name: { type: 'string', description: '새 변수 이름 (예: "surface/raised")' },
+      },
+      required: ['token', 'variableId', 'name'],
+    },
+  },
+  {
+    name: 'sigma_delete_variable',
+    description: '변수를 삭제합니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        variableId: { type: 'string', description: '삭제할 변수 ID' },
+      },
+      required: ['token', 'variableId'],
+    },
+  },
 
   // === Team Library ===
   {

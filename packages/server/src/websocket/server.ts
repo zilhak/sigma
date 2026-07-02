@@ -1209,6 +1209,14 @@ export class FigmaWebSocketServer {
     return this.sendCommand('SET_VARIABLE_CODE_SYNTAX', args, { pluginId });
   }
 
+  async renameVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('RENAME_VARIABLE', args, { pluginId });
+  }
+
+  async deleteVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('DELETE_VARIABLE', args, { pluginId });
+  }
+
   // === Team Library (New) ===
 
   async getAvailableLibraries(pluginId?: string): Promise<unknown> {
