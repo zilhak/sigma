@@ -694,6 +694,21 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
+  async sigma_reorder_page(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.reorderPage(args.pageId as string, args.index as number, pluginId);
+      return jsonResponse({ success: true, message: '페이지 순서가 변경되었습니다', ...result as object });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
   // === Group / Ungroup / Flatten ===
 
   async sigma_group_nodes(args, context) {

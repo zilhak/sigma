@@ -84,6 +84,13 @@ export interface DeletePageResult {
   name: string;
 }
 
+export interface ReorderPageResult {
+  pageId: string;
+  name: string;
+  oldIndex: number;
+  newIndex: number;
+}
+
 export function createPage(name?: string): CreatePageResult {
   const page = figma.createPage();
   if (name) page.name = name;
@@ -107,6 +114,21 @@ export function switchPage(pageId: string): SwitchPageResult {
   if (!page) throw new Error(`페이지를 찾을 수 없습니다: ${pageId}`);
   figma.currentPage = page;
   return { pageId: page.id, name: page.name };
+}
+
+export function reorderPage(pageId: string, index: number): ReorderPageResult {
+  const page = figma.root.children.find(p => p.id === pageId);
+  if (!page) throw new Error(`페이지를 찾을 수 없습니다: ${pageId}`);
+  const oldIndex = figma.root.children.indexOf(page);
+  // 같은 부모 내 이동이므로 삽입 가능한 최대 인덱스는 length - 1
+  const clamped = Math.max(0, Math.min(index, figma.root.children.length - 1));
+  figma.root.insertChild(clamped, page);
+  return {
+    pageId: page.id,
+    name: page.name,
+    oldIndex,
+    newIndex: figma.root.children.indexOf(page),
+  };
 }
 
 export function deletePage(pageId: string): DeletePageResult {

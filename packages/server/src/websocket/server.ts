@@ -240,6 +240,7 @@ export class FigmaWebSocketServer {
       case 'RENAME_PAGE_RESULT':
       case 'SWITCH_PAGE_RESULT':
       case 'DELETE_PAGE_RESULT':
+      case 'REORDER_PAGE_RESULT':
       case 'GET_VIEWPORT_RESULT':
       case 'SET_VIEWPORT_RESULT':
         this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
@@ -899,6 +900,10 @@ export class FigmaWebSocketServer {
 
   async deletePage(pageId: string, pluginId?: string): Promise<unknown> {
     return this.sendCommand('DELETE_PAGE', { pageId }, { pluginId });
+  }
+
+  async reorderPage(pageId: string, index: number, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('REORDER_PAGE', { pageId, index }, { pluginId });
   }
 
   // === Create Nodes ===

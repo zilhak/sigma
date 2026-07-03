@@ -2,7 +2,7 @@ import type { ExtractedNode, TreeFilter } from '@sigma/shared';
 import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, setLastCreatedPosition } from './converter';
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
-import { getTargetPage, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage } from './node-ops';
+import { getTargetPage, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage, reorderPage } from './node-ops';
 import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
 import { getFrames, deleteFrame } from './node-ops';
@@ -581,6 +581,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-page': {
       try {
         const result = createPage(msg.name as string | undefined);
+        sendFileInfo(); // 페이지 목록 변경 → 서버 캐시(list_pages/bind용) 갱신
         sendResult('create-page-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -592,6 +593,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'rename-page': {
       try {
         const result = renamePage(msg.pageId as string, msg.name as string);
+        sendFileInfo(); // 페이지 목록 변경 → 서버 캐시(list_pages/bind용) 갱신
         sendResult('rename-page-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -614,10 +616,23 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'delete-page': {
       try {
         const result = deletePage(msg.pageId as string);
+        sendFileInfo(); // 페이지 목록 변경 → 서버 캐시(list_pages/bind용) 갱신
         sendResult('delete-page-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('delete-page-result', `페이지 삭제 실패: ${errMsg}`);
+      }
+      break;
+    }
+
+    case 'reorder-page': {
+      try {
+        const result = reorderPage(msg.pageId as string, msg.index as number);
+        sendFileInfo(); // 페이지 목록 변경 → 서버 캐시(list_pages/bind용) 갱신
+        sendResult('reorder-page-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('reorder-page-result', `페이지 순서 변경 실패: ${errMsg}`);
       }
       break;
     }

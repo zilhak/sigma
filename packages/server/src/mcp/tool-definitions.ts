@@ -1123,6 +1123,23 @@ sigma_list_pages로 pageId를 먼저 확인하세요.`,
       required: ['token', 'pageId'],
     },
   },
+  {
+    name: 'sigma_reorder_page',
+    description: `페이지의 순서(위치)를 변경합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+sigma_list_pages로 pageId를 먼저 확인하세요.
+index는 0부터 시작하며, 범위를 벗어나면 유효한 범위로 보정됩니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        pageId: { type: 'string', description: '이동할 페이지 ID' },
+        index: { type: 'number', description: '이동할 위치 인덱스 (0부터 시작)' },
+      },
+      required: ['token', 'pageId', 'index'],
+    },
+  },
 
   // === Group / Ungroup / Flatten (토큰 필수) ===
   {
