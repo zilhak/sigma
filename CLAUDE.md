@@ -61,6 +61,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 - **반영이 확실한(되돌리지 않을) 변경이 생길 때마다** 커밋한다.
 - 버그 재현·디버깅용 **임시 변경(되돌릴 예정)은 커밋하지 않는다.**
 - 커밋 메시지는 Conventional Commits + 한국어 설명 (`fix(converter): …`, `feat(plugin): …`). `Co-Authored-By` 등 트레일러는 넣지 않는다.
+- **`push`는 자동으로 하지 않는다.** 커밋까지만 하고, 원격 push는 사용자가 명시적으로 요청할 때만 수행한다.
 
 **버전 (2단계: `major.minor`)**
 - 버전은 **2단계**만 쓴다 (patch 자리 없음). 예: `1.0` → `1.1` → `1.2`.
