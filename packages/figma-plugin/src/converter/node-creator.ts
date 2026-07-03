@@ -5,6 +5,29 @@ import { applyLayoutMode, applySizingMode, applyAlignment, applyChildMargins, cr
 import { createSvgNode, createImageNode, createInputNode, createPseudoElementNode, resolveFontStyle } from './special-nodes';
 
 /**
+ * 절대 배치(forceAbsolute/fallback) 시 자식 노드 크기 보정.
+ *
+ * 텍스트 노드는 폭을 boundingRect(브라우저 계측 폭)로 강제하면 안 된다.
+ * Figma는 Inter를 쓰는데 원본 폰트(Pretendard 등)보다 글리프가 넓어,
+ * 브라우저 폭으로 고정하면 꼬리 글자가 두 번째 줄로 wrap된다(예: "override →"의 →).
+ * - WIDTH_AND_HEIGHT(자동 폭 단일 줄): 크기 강제 없이 자연 크기 유지
+ * - HEIGHT(고정 폭 래핑): 폭만 맞추고 높이는 자동(Inter가 더 넓어 줄 수가 늘 수 있음)
+ * - 그 외 노드(FRAME 등): 기존대로 boundingRect 폭·높이로 강제
+ */
+function resizeAbsoluteChild(childNode: SceneNode, rect: { width: number; height: number }): void {
+  if (childNode.type === 'TEXT') {
+    const textNode = childNode as TextNode;
+    if (textNode.textAutoResize === 'HEIGHT') {
+      textNode.resize(Math.max(rect.width, 1), textNode.height);
+    }
+    return;
+  }
+  if ('resize' in childNode) {
+    childNode.resize(Math.max(rect.width, 1), Math.max(rect.height, 1));
+  }
+}
+
+/**
  * ExtractedNode를 Figma 노드로 변환
  * @param node - 추출된 노드 데이터
  * @param isRoot - 루트(최상위) 노드 여부 (기본값: true)
@@ -96,12 +119,7 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
         if (child.boundingRect) {
           childNode.x = child.boundingRect.x - parentRect.x;
           childNode.y = child.boundingRect.y - parentRect.y;
-          if ('resize' in childNode) {
-            childNode.resize(
-              Math.max(child.boundingRect.width, 1),
-              Math.max(child.boundingRect.height, 1)
-            );
-          }
+          resizeAbsoluteChild(childNode, child.boundingRect);
         }
       }
     }
@@ -443,7 +461,7 @@ function fallbackToAbsoluteLayout(
     var rect = entry.originalRect;
     fn.x = rect.x;
     fn.y = rect.y;
-    fn.resize(Math.max(rect.width, 1), Math.max(rect.height, 1));
+    resizeAbsoluteChild(fn, rect);
   }
 }
 
@@ -547,7 +565,12 @@ export function createTextNode(text: string, styles: ComputedStyles): TextNode |
   }
 
   // 텍스트 자동 리사이즈 모드 설정
-  if (styles.textOverflow === 'ellipsis') {
+  if (styles.textWraps && typeof styles.width === 'number' && styles.width > 0) {
+    // 원본에서 여러 줄로 래핑되던 텍스트: 고정폭 + HEIGHT auto-resize 로
+    // Figma에서도 동일하게 줄바꿈시켜 박스 밖으로 삐져나가지 않게 한다.
+    textNode.textAutoResize = 'HEIGHT';
+    textNode.resize(styles.width, textNode.height);
+  } else if (styles.textOverflow === 'ellipsis') {
     textNode.textTruncation = 'ENDING';
     textNode.textAutoResize = 'HEIGHT';
   } else {

@@ -17,6 +17,193 @@ import { extractPseudoElements } from './pseudo';
 // Main Extraction Function
 // ============================================================
 
+interface TextLine {
+  text: string;
+  rect: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * 하나의 텍스트 노드를 렌더된 줄 단위로 분할한다.
+ * 여러 줄에 걸친 텍스트를 getBoundingClientRect()로 잡으면 모든 줄을 덮는
+ * 합집합 박스가 되어 위치가 어긋나므로, 줄마다 개별 조각(텍스트+위치)으로 나눈다.
+ *
+ * - 단일 줄: selectNodeContents 한 번으로 빠르게 처리 (기존 동작 유지)
+ * - 여러 줄: 문자별 rect의 top으로 줄을 그룹핑
+ */
+function splitTextNodeByLines(textNode: Text): TextLine[] {
+  const full = textNode.textContent || '';
+  const range = document.createRange();
+  range.selectNodeContents(textNode);
+  const lineCount = range.getClientRects().length;
+
+  // 단일 줄 빠른 경로
+  if (lineCount <= 1) {
+    const r = range.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return [];
+    const text = full.replace(/\s+/g, ' ').trim();
+    if (!text) return [];
+    return [{ text, rect: { x: r.x, y: r.y, width: r.width, height: r.height } }];
+  }
+
+  // 여러 줄: 문자별 rect로 줄 그룹핑
+  const groups: Array<{ text: string; top: number; left: number; right: number; bottom: number }> = [];
+  let cur: { text: string; top: number; left: number; right: number; bottom: number } | null = null;
+  for (let i = 0; i < full.length; i++) {
+    const cr = document.createRange();
+    cr.setStart(textNode, i);
+    cr.setEnd(textNode, i + 1);
+    const rect = cr.getBoundingClientRect();
+    // 줄바꿈 경계의 공백 등 렌더 크기 0 문자는 현재 줄에 흡수
+    if (rect.width === 0 && rect.height === 0) {
+      if (cur) cur.text += full[i];
+      continue;
+    }
+    if (!cur || Math.abs(rect.top - cur.top) > 1) {
+      cur = { text: full[i], top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom };
+      groups.push(cur);
+    } else {
+      cur.text += full[i];
+      if (rect.right > cur.right) cur.right = rect.right;
+      if (rect.left < cur.left) cur.left = rect.left;
+      if (rect.bottom > cur.bottom) cur.bottom = rect.bottom;
+    }
+  }
+
+  return groups
+    .map((g) => ({
+      text: g.text.replace(/\s+/g, ' ').trim(),
+      rect: { x: g.left, y: g.top, width: g.right - g.left, height: g.bottom - g.top },
+    }))
+    .filter((g) => g.text.length > 0);
+}
+
+const PURE_TEXT_INLINE_TAGS = new Set([
+  'span', 'b', 'strong', 'em', 'i', 'a', 'small', 'mark', 'code',
+  'sub', 'sup', 'u', 'abbr', 'cite', 'q', 'time', 'kbd', 'var', 'samp',
+]);
+
+/**
+ * 순수 텍스트 스타일 인라인 요소인지 판정한다.
+ * (배경/테두리/의미있는 패딩이 없는 인라인 텍스트 런 — <b>, <em>, <span> 등)
+ *
+ * true면 흐르는 텍스트 런으로 보고 줄 단위로 분해한다. 배경/테두리가 있는
+ * 인라인(뱃지/칩 등)은 false → 자체 박스 노드로 위치시킨다.
+ */
+function isPureTextInlineElement(el: HTMLElement, style: CSSStyleDeclaration): boolean {
+  if (!PURE_TEXT_INLINE_TAGS.has(el.tagName.toLowerCase())) return false;
+  const disp = style.display;
+  if (disp !== 'inline' && disp !== 'inline-block') return false;
+  if (isIconFontElement(el)) return false;
+
+  const bg = style.backgroundColor;
+  if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return false;
+  if (parseFloat(style.borderTopWidth) > 0 || parseFloat(style.borderBottomWidth) > 0 ||
+      parseFloat(style.borderLeftWidth) > 0 || parseFloat(style.borderRightWidth) > 0) return false;
+  if (parseFloat(style.paddingTop) > 2 || parseFloat(style.paddingBottom) > 2 ||
+      parseFloat(style.paddingLeft) > 2 || parseFloat(style.paddingRight) > 2) return false;
+  return true;
+}
+
+/**
+ * 혼합 콘텐츠(자식 요소 + 직접 텍스트)에서 흐르는 인라인 텍스트를
+ * 실제 렌더 위치(Range 기반)를 가진 개별 텍스트 노드로 추출한다.
+ *
+ * - 직접 텍스트 노드: 줄 단위로 분해
+ * - 순수 텍스트 인라인 요소(<b>/<span> 등): 자신의 스타일로 재귀하여 줄 단위 분해
+ *   (인라인 요소가 흐르며 여러 줄에 걸쳐도 각 줄이 올바른 위치를 갖도록)
+ * - 배경/테두리 있는 인라인(뱃지)·블록·이미지 등은 여기서 제외 → domChildren 이 박스로 처리
+ *
+ * 부모 textContent로 병합하면 위치 정보가 손실되어 겹침/어긋남이 발생하므로 분리한다.
+ */
+function extractInlineTextNodes(
+  element: HTMLElement,
+  ownStyle: CSSStyleDeclaration,
+  decomposeInlineElements: boolean
+): ExtractedNode[] {
+  const result: ExtractedNode[] = [];
+  const styles = extractStyles(ownStyle);
+  for (const child of Array.from(element.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      if (!child.textContent || !child.textContent.trim()) continue;
+      for (const line of splitTextNodeByLines(child as Text)) {
+        result.push({
+          id: generateId(),
+          tagName: 'span',
+          className: '',
+          textContent: line.text,
+          attributes: {},
+          styles,
+          boundingRect: {
+            x: line.rect.x,
+            y: line.rect.y,
+            // Figma Inter 폰트가 원본보다 미세하게 넓어 발생하는 줄바꿈 방지용 여유(4px)
+            width: Math.ceil(line.rect.width) + 4,
+            height: line.rect.height,
+          },
+          children: [],
+        });
+      }
+    } else if (decomposeInlineElements && child.nodeType === Node.ELEMENT_NODE) {
+      const el = child as HTMLElement;
+      const cs = window.getComputedStyle(el);
+      // 순수 텍스트 인라인 요소만 텍스트 런으로 분해(자신의 스타일 적용). 나머지는 domChildren 처리.
+      // 인라인 텍스트 런 내부는 항상 분해(decomposeInlineElements=true)한다.
+      if (isPureTextInlineElement(el, cs)) {
+        result.push(...extractInlineTextNodes(el, cs, true));
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * 텍스트를 폭 제약(고정폭 + HEIGHT auto-resize)으로 변환해야 하는지 판정한다.
+ *
+ * converter는 텍스트 노드를 기본 WIDTH_AND_HEIGHT(자동폭·단일줄)로 만들어, 폭 제약이
+ * 있는 박스의 텍스트가 Figma에선 한 줄로 펼쳐져 박스 밖으로 삐져나간다. 또한 Figma는
+ * Inter 폰트를 쓰는데 원본(Pretendard 등)보다 넓어, 브라우저에선 1줄이지만 Figma에선
+ * 넘치는 경우가 있다.
+ *
+ * 따라서 "현재 줄 수"만 보지 않고, 다음 중 하나면 폭 제약이 필요하다고 본다:
+ *   1) 이미 여러 줄로 렌더됨
+ *   2) 단일 줄이지만 컨테이너 content 폭에 여유(slack)가 있음 = hug가 아니라 fill 컨테이너
+ *      → 폭을 박스 폭으로 고정하면 Figma가 필요 시 리플로우 (넘침 방지)
+ * hug(내용에 딱 맞는) 요소는 제약하면 Inter 폭 증가로 오히려 깨질 수 있어 제외한다.
+ */
+function doesTextWrap(element: HTMLElement, computedStyle: CSSStyleDeclaration): boolean {
+  const ws = computedStyle.whiteSpace;
+  // nowrap/pre 는 줄바꿈하지 않음 (pre-wrap/pre-line/normal 만 래핑 가능)
+  if (ws === 'nowrap' || ws === 'pre') return false;
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const rects = range.getClientRects();
+    let lines = 0;
+    let lastTop: number | null = null;
+    let maxLineWidth = 0;
+    for (const r of Array.from(rects)) {
+      if (r.width === 0 && r.height === 0) continue;
+      // 같은 줄의 조각(인라인 자식 등)은 top 이 동일 — 1px 초과 차이만 새 줄로 카운트
+      if (lastTop === null || Math.abs(r.top - lastTop) > 1) {
+        lines++;
+        lastTop = r.top;
+      }
+      if (r.width > maxLineWidth) maxLineWidth = r.width;
+    }
+    if (lines > 1) return true;
+    if (lines === 0) return false;
+    // 단일 줄: content 폭에 여유가 있으면(fill 컨테이너) 제약 → Figma 리플로우 허용.
+    // hug 요소(폭 ≈ 텍스트 폭)는 제외해 Inter 폭 증가로 인한 오작동 방지.
+    const padX =
+      (parseFloat(computedStyle.paddingLeft) || 0) +
+      (parseFloat(computedStyle.paddingRight) || 0);
+    const contentWidth = element.clientWidth - padX;
+    return contentWidth - maxLineWidth > 20;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * DOM 요소를 ExtractedNode로 변환
  */
@@ -160,13 +347,16 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
     const afterElements = pseudoElements.filter(p => p.tagName === '::after');
     const allChildren = [...beforeElements, ...afterElements];
 
+    const mergedStyles = extractStyles(computedStyle);
+    mergedStyles.textWraps = doesTextWrap(htmlElement, computedStyle);
+
     return {
       id: generateId(),
       tagName: tagName,
       className: getClassName(element),
       textContent: mergedText,
       attributes: getAttributes(element as HTMLElement),
-      styles: extractStyles(computedStyle),
+      styles: mergedStyles,
       boundingRect: {
         x: rect.x,
         y: rect.y,
@@ -177,19 +367,36 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
     };
   }
 
-  // DOM 자식 요소 추출
+  // 흐르는(normal-flow) 컨테이너에서만 인라인 텍스트 요소를 텍스트 런으로 분해한다.
+  // flex/grid 컨테이너의 인라인 자식은 레이아웃 아이템이므로 노드로 보존.
+  const decomposeInline = !isFlexOrGrid;
+
+  // DOM 자식 요소 추출.
+  // 흐르는 컨테이너의 순수 텍스트 인라인 요소(<b>/<span> 등, 배경/테두리 없음)는
+  // extractInlineTextNodes 가 줄 단위 텍스트 런으로 처리하므로 여기서 제외한다.
+  // (박스 뱃지·블록·flex/grid 자식은 유지)
   const domChildren = Array.from(element.children)
     .filter((child): child is HTMLElement | SVGSVGElement =>
       child instanceof HTMLElement || child instanceof SVGSVGElement)
+    .filter((child) => !(decomposeInline && child instanceof HTMLElement &&
+      isPureTextInlineElement(child, window.getComputedStyle(child))))
     .map((child) => extractElement(child))
     .filter((child): child is ExtractedNode => child !== null);
+
+  // 혼합 콘텐츠(자식 요소 + 직접/인라인 텍스트) 감지:
+  // 자식 요소가 있으면서 흐르는 텍스트도 가진 경우, 텍스트를 위치 있는
+  // 개별 노드로 분리한다. (부모 textContent로 병합 시 위치 손실 → 겹침/어긋남)
+  const hasChildElements = element.children.length > 0;
+  const directTextNodes = hasChildElements
+    ? extractInlineTextNodes(element as HTMLElement, computedStyle, decomposeInline)
+    : [];
 
   // Pseudo-elements 추출
   const pseudoElements = extractPseudoElements(element as HTMLElement);
   const beforeElements = pseudoElements.filter(p => p.tagName === '::before');
   const afterElements = pseudoElements.filter(p => p.tagName === '::after');
 
-  const allChildren = [...beforeElements, ...domChildren, ...afterElements];
+  const allChildren = [...beforeElements, ...domChildren, ...directTextNodes, ...afterElements];
 
   // 자식의 실제 렌더링 위치를 기반으로 부모 boundingRect 확장
   // absolute/fixed 자식은 부모의 getBoundingClientRect()에 포함되지 않으므로
@@ -239,11 +446,19 @@ export function extractElement(element: HTMLElement | SVGElement): ExtractedNode
     extractedStyles.height = expandedHeight;
   }
 
+  // 자식 요소 없이 텍스트만 가진 요소(div 등 포함)가 여러 줄로 래핑되면 표시.
+  // converter가 고정폭 + HEIGHT auto-resize 로 만들어 원본처럼 줄바꿈되게 한다.
+  if (!hasChildElements) {
+    extractedStyles.textWraps = doesTextWrap(element as HTMLElement, computedStyle);
+  }
+
   return {
     id: generateId(),
     tagName: tagName,
     className: getClassName(element),
-    textContent: getDirectTextContent(element as HTMLElement),
+    // 자식 요소가 있으면 직접 텍스트는 directTextNodes로 분리했으므로 부모는 비운다.
+    // (자식 요소가 없는 순수 텍스트 요소만 textContent 유지)
+    textContent: hasChildElements ? '' : getDirectTextContent(element as HTMLElement),
     attributes: getAttributes(element as HTMLElement),
     styles: extractedStyles,
     boundingRect: {

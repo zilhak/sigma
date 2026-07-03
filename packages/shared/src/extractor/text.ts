@@ -66,14 +66,16 @@ export function isAllInlineTextContent(element: HTMLElement): boolean {
 }
 
 /**
- * 요소의 전체 인라인 콘텐츠를 순서대로 하나의 텍스트로 병합
- * text node, <br>, inline element 텍스트를 DOM 순서 그대로 수집
+ * 인라인 콘텐츠를 DOM 순서대로 수집(정규화 전).
+ * 각 텍스트 노드를 trim하면 인라인 요소(<b>/<span> 등)와 인접 텍스트 사이의
+ * 유의미한 공백이 사라지므로(예: "<b>foo</b> bar" → "foobar"), trim하지 않고
+ * 수평 공백만 단일 스페이스로 collapse한다. <br>은 개행으로 보존.
  */
-export function getFullInlineTextContent(element: HTMLElement): string {
+function collectInlineText(element: HTMLElement): string {
   let text = '';
   for (const node of element.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
-      const t = node.textContent?.trim();
+      const t = node.textContent?.replace(/\s+/g, ' ');
       if (t) text += t;
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node as HTMLElement;
@@ -81,9 +83,21 @@ export function getFullInlineTextContent(element: HTMLElement): string {
         text += '\n';
       } else {
         // 인라인 자식 재귀
-        text += getFullInlineTextContent(el);
+        text += collectInlineText(el);
       }
     }
   }
   return text;
+}
+
+/**
+ * 요소의 전체 인라인 콘텐츠를 순서대로 하나의 텍스트로 병합.
+ * 인라인 요소 사이 공백은 보존하되, 수평 공백 run은 단일 스페이스로 collapse하고
+ * 양끝만 정리한다. <br> 개행(\n)은 유지한다.
+ */
+export function getFullInlineTextContent(element: HTMLElement): string {
+  return collectInlineText(element)
+    .replace(/[^\S\n]+/g, ' ') // 수평 공백 run → 단일 스페이스 (개행 보존)
+    .replace(/ *\n */g, '\n')  // 개행 주변 공백 제거
+    .trim();
 }

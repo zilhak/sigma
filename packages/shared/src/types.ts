@@ -100,6 +100,8 @@ export interface ComputedStyles {
   whiteSpace: string;
   textOverflow: string;
   verticalAlign: string;
+  /** 텍스트가 실제로 여러 줄로 래핑되는지 (고정폭 + HEIGHT auto-resize 필요) */
+  textWraps?: boolean;
 
   // Grid 컨테이너 속성
   gridTemplateColumns: string;
