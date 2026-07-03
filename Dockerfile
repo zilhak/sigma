@@ -23,4 +23,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD bun --eval "fetch('http://localhost:19832/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 # Run the server
-CMD ["bun", "run", "packages/server/src/index.ts"]
+# 시작 시 임베드 스크립트를 볼륨(~/.sigma/scripts)으로 복사 — 호스트 Playwright가 최신 스크립트에 접근 가능
+CMD ["sh", "-c", "mkdir -p /root/.sigma/scripts && cp /app/packages/shared/dist/*.js /root/.sigma/scripts/ && exec bun run packages/server/src/index.ts"]

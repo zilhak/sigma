@@ -11,3 +11,5 @@ services:
     environment:
       - NODE_ENV=production
       - SIGMA_HOST_DATA_DIR=${SIGMA_DATA_DIR:-${HOME}/.sigma}  # 호스트 경로 (MCP 응답용)
+      - SIGMA_SCRIPTS_DIR=/root/.sigma/scripts  # 스크립트 exists 체크용 (컨테이너 내부, 볼륨)
+      - SIGMA_SCRIPTS_HOST_DIR=${SIGMA_DATA_DIR:-${HOME}/.sigma}/scripts  # MCP 응답용 호스트 경로
