@@ -55,6 +55,25 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 단순 속성 변경(크기, 위치 등)은 `sigma_get_tree`로 데이터 기반 확인. 스크린샷은 시각적 품질 검증이 필요할 때만 사용.
 
+### 커밋 · 버전 규칙
+
+**커밋 시점**
+- **반영이 확실한(되돌리지 않을) 변경이 생길 때마다** 커밋한다.
+- 버그 재현·디버깅용 **임시 변경(되돌릴 예정)은 커밋하지 않는다.**
+- 커밋 메시지는 Conventional Commits + 한국어 설명 (`fix(converter): …`, `feat(plugin): …`). `Co-Authored-By` 등 트레일러는 넣지 않는다.
+
+**버전 (2단계: `major.minor`)**
+- 버전은 **2단계**만 쓴다 (patch 자리 없음). 예: `1.0` → `1.1` → `1.2`.
+- 버전 추적 축은 **플러그인**(`packages/figma-plugin/package.json`)과 **서버**(`packages/server/package.json`) 둘뿐이다.
+- **커밋 1건마다 해당 축의 minor를 1씩 올린다:**
+  - 플러그인만 변경 → 플러그인 minor +1
+  - 서버만 변경 → 서버 minor +1
+  - 두 축을 함께 변경 → 두 버전 모두 +1
+  - **문서만** 변경 → 버전 변경 없음
+  - **빌드/인프라(Docker 등) 전용** 변경 → 버전 변경 없음
+- 공용 패키지(`packages/shared`) 변경은 **두 축(플러그인·서버)을 모두 +1** 한다 (shared는 양쪽에 반영되므로). `shared`·`chrome-extension`의 package.json 버전 자체는 규칙 추적 대상이 아니다.
+- 과거 버전 히스토리는 무시하고 **현재(`1.0`)부터** 시작한다.
+
 ---
 
 ## 아키텍처
