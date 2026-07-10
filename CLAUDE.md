@@ -36,6 +36,15 @@ Claude Code에서 MCP 서버를 종료하거나 재시작하면:
 
 서버 코드를 수정했다면 → 사용자에게 Claude Code 재시작을 안내하거나, 터미널에서 직접 서버 재시작 후 `/mcp`로 재연결하도록 유도.
 
+### MCP 도구 설계 규약 (도구 추가·수정 시 필참)
+
+MCP 도구를 **새로 만들거나 이름/스키마를 바꾸거나 정리(그룹화)** 할 때는 반드시
+[`docs/tool-conventions.md`](docs/tool-conventions.md)를 먼저 참조하고 그 규칙을 따른다.
+- 네이밍: 모든 도구 `sigma_` 접두사, 고정 동사 사전(`get_`/`list_`/`delete_` 등), 이름은 사실과 일치
+- 그룹화: "동질이면 묶고(`method` 패턴), 이질이면 쪼갠다". 배치 전용 도구 신설 금지(배열 입력으로)
+- 스키마: 열거 필드는 `enum` 필수, 색상 `{r,g,b,a}`, `validateFigmaAccess` 사용
+- 도구를 추가/변경하면 `docs/mcp-tools.md`·`README.md`·이 파일의 도구 표도 함께 갱신
+
 ### Figma Plugin 코드 제약
 
 Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
