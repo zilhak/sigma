@@ -35,7 +35,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_create_frame` | ExtractedNode JSON/HTML로 프레임 생성 | `token` | `data`, `html`, `format`, `name`, `position` |
-| `sigma_import_file` | 서버 저장 데이터로 프레임 생성 | `token`, `id` | `name`, `position` |
+| `sigma_import_saved` | 서버 저장 데이터로 프레임 생성 | `token`, `id` | `name`, `position` |
 | `sigma_create_rectangle` | 사각형 | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `cornerRadius`, `parentId` |
 | `sigma_create_text` | 텍스트 (폰트 자동 로드) | `token`, `x`, `y`, `text` | `name`, `fontSize`, `fontFamily`, `fontWeight`, `fontColor`, `textAlignHorizontal`, `parentId` |
 | `sigma_create_empty_frame` | 빈 프레임 (Auto Layout) | `token`, `x`, `y`, `width`, `height` | `name`, `layoutMode`, `padding*`, `itemSpacing`, `fillColor`, `cornerRadius`, `layoutWrap`, `counterAxisSpacing`, `layoutSizing*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `parentId` |
@@ -118,7 +118,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_set_selection` | 노드 선택 + 뷰포트 이동 | `token`, `nodeIds` | `zoomToFit` |
 | `sigma_get_viewport` | 뷰포트 정보 (center, zoom) | `token` | — |
 | `sigma_set_viewport` | 뷰포트 설정 | `token` | `center`, `zoom`, `nodeIds` |
-| `sigma_read_my_design` | 선택 노드 상세 정보 | `token` | — |
+| `sigma_get_selection_details` | 선택 노드 상세 정보 | `token` | — |
 | `sigma_scan_text_nodes` | 하위 텍스트 노드 스캔 | `token`, `nodeId` | — |
 | `sigma_scan_nodes_by_types` | 하위 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능 폰트 목록 | `token` | — |
@@ -154,7 +154,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 |------|------|-----------|-----------|
 | `sigma_get_reactions` | 인터랙션 목록 | `token` | `nodeId` |
 | `sigma_add_reaction` | 인터랙션 추가 | `token`, `nodeId`, `trigger`, `action` | `destinationId`, `url`, `transition`, `preserveScrollPosition` |
-| `sigma_remove_reactions` | 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
+| `sigma_delete_reactions` | 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
 
 **trigger 종류:** `ON_CLICK`, `ON_HOVER`, `ON_PRESS`, `ON_DRAG`, `MOUSE_ENTER`, `MOUSE_LEAVE`, `AFTER_TIMEOUT`
 
@@ -176,6 +176,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_rename_page` | 페이지 이름 변경 | `token`, `pageId`, `name` |
 | `sigma_switch_page` | 페이지 전환 | `token`, `pageId` |
 | `sigma_delete_page` | 페이지 삭제 (마지막 불가) | `token`, `pageId` |
+| `sigma_reorder_page` | 페이지 순서 변경 | `token`, `pageId`, `index` |
 
 ## 스타일
 
@@ -201,6 +202,8 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_set_variable_scopes` | 변수 사용 범위 설정 | `token`, `variableId`, `scopes` | — |
 | `sigma_set_variable_alias` | 변수 alias 설정 | `token`, `variableId`, `modeId`, `aliasTargetId` | — |
 | `sigma_set_variable_code_syntax` | 변수 코드 구문 설정 | `token`, `variableId`, `platform`, `syntax` | — |
+| `sigma_rename_variable` | 변수 이름 변경 | `token`, `variableId`, `name` | — |
+| `sigma_delete_variable` | 변수 삭제 | `token`, `variableId` | — |
 
 **resolvedType:** `COLOR`, `FLOAT`, `STRING`, `BOOLEAN`
 
@@ -208,9 +211,9 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 | 도구 | 설명 | 필수 인자 |
 |------|------|-----------|
-| `sigma_get_libraries` | Team Library 목록 | `token` |
-| `sigma_get_library_components` | 라이브러리 컴포넌트 목록 | `token`, `libraryKey` |
-| `sigma_get_library_variables` | 라이브러리 변수 컬렉션 | `token`, `collectionKey` |
+| `sigma_list_libraries` | Team Library 목록 | `token` |
+| `sigma_list_library_components` | 라이브러리 컴포넌트 목록 | `token`, `libraryKey` |
+| `sigma_list_library_variables` | 라이브러리 변수 컬렉션 | `token`, `collectionKey` |
 | `sigma_import_library_component` | 라이브러리 컴포넌트 임포트 | `token`, `key` |
 | `sigma_import_library_style` | 라이브러리 스타일 임포트 | `token`, `key` |
 
@@ -229,19 +232,19 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `save_extracted` | 추출 데이터 저장 | `name`, `data` | — |
-| `list_saved` | 저장된 컴포넌트 목록 | — | — |
-| `load_extracted` | 저장된 컴포넌트 로드 | `id` 또는 `name` | — |
-| `delete_extracted` | 저장된 컴포넌트 삭제 | `id` | — |
-| `save_and_import` | 저장 + 즉시 Figma 임포트 | `token`, `name` | `data`, `html`, `format` |
+| `sigma_save_extracted` | 추출 데이터 저장 | `name`, `data` | — |
+| `sigma_list_saved` | 저장된 컴포넌트 목록 | — | — |
+| `sigma_load_extracted` | 저장된 컴포넌트 로드 | `id` 또는 `name` | — |
+| `sigma_delete_extracted` | 저장된 컴포넌트 삭제 | `id` | — |
+| `sigma_save_and_import` | 저장 + 즉시 Figma 임포트 | `token`, `name` | `data`, `html`, `format` |
 
 ## 스크립트/상태
 
 | 도구 | 설명 |
 |------|------|
-| `get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
+| `sigma_get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
 | `sigma_storage_stats` | 스토리지 용량 현황 |
 | `sigma_cleanup` | 스토리지 일괄 정리 |
-| `list_screenshots` | 저장된 스크린샷 목록 |
-| `delete_screenshot` | 스크린샷 삭제 |
-| `server_status` | 서버 전체 상태 |
+| `sigma_list_screenshots` | 저장된 스크린샷 목록 |
+| `sigma_delete_screenshot` | 스크린샷 삭제 |
+| `sigma_server_status` | 서버 전체 상태 |

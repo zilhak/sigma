@@ -2,7 +2,7 @@
 export const toolDefinitions = [
   // === Storage Tools (토큰 불필요) ===
   {
-    name: 'save_extracted',
+    name: 'sigma_save_extracted',
     description: '추출된 컴포넌트 데이터를 저장합니다',
     inputSchema: {
       type: 'object',
@@ -20,7 +20,7 @@ export const toolDefinitions = [
     },
   },
   {
-    name: 'list_saved',
+    name: 'sigma_list_saved',
     description: '저장된 컴포넌트 목록을 조회합니다',
     inputSchema: {
       type: 'object',
@@ -28,7 +28,7 @@ export const toolDefinitions = [
     },
   },
   {
-    name: 'load_extracted',
+    name: 'sigma_load_extracted',
     description: '저장된 컴포넌트를 불러옵니다',
     inputSchema: {
       type: 'object',
@@ -45,7 +45,7 @@ export const toolDefinitions = [
     },
   },
   {
-    name: 'delete_extracted',
+    name: 'sigma_delete_extracted',
     description: '저장된 컴포넌트를 삭제합니다',
     inputSchema: {
       type: 'object',
@@ -219,7 +219,7 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
     },
   },
   {
-    name: 'sigma_import_file',
+    name: 'sigma_import_saved',
     description: `저장된 컴포넌트를 Figma로 가져옵니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
@@ -785,7 +785,7 @@ Figma exportAsync → Crop(선택) → mode별 처리 → Save
 
   // === Combined Tools (토큰 필수) ===
   {
-    name: 'save_and_import',
+    name: 'sigma_save_and_import',
     description: `컴포넌트를 저장하고 바로 Figma로 가져옵니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
@@ -838,7 +838,7 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
 
   // === Playwright Scripts (토큰 불필요) ===
   {
-    name: 'get_playwright_scripts',
+    name: 'sigma_get_playwright_scripts',
     description: `Playwright에서 사용할 수 있는 스크립트 목록과 경로를 반환합니다.
 
 AI Agent가 Playwright로 웹 컴포넌트를 추출할 때 사용합니다.
@@ -888,7 +888,7 @@ category로 extracted/screenshots/all 중 대상을 선택할 수 있습니다.
     },
   },
   {
-    name: 'list_screenshots',
+    name: 'sigma_list_screenshots',
     description: '저장된 스크린샷 목록을 조회합니다 (파일명, 경로, 크기, 생성일)',
     inputSchema: {
       type: 'object',
@@ -896,14 +896,14 @@ category로 extracted/screenshots/all 중 대상을 선택할 수 있습니다.
     },
   },
   {
-    name: 'delete_screenshot',
+    name: 'sigma_delete_screenshot',
     description: '저장된 스크린샷을 파일명으로 삭제합니다',
     inputSchema: {
       type: 'object',
       properties: {
         filename: {
           type: 'string',
-          description: '삭제할 스크린샷 파일명 (list_screenshots로 확인)',
+          description: '삭제할 스크린샷 파일명 (sigma_list_screenshots로 확인)',
         },
       },
       required: ['filename'],
@@ -2060,7 +2060,7 @@ sigma_get_node_info의 배치 버전으로, 여러 nodeId를 한 번에 조회�
     },
   },
   {
-    name: 'sigma_read_my_design',
+    name: 'sigma_get_selection_details',
     description: `현재 Figma에서 선택된 노드들의 상세 정보를 조회합니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
@@ -2204,7 +2204,7 @@ nodeId를 지정하지 않으면 현재 선택된 노드를 사용합니다.
     },
   },
   {
-    name: 'sigma_remove_reactions',
+    name: 'sigma_delete_reactions',
     description: `노드의 프로토타이핑 인터랙션(Reaction)을 제거합니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
@@ -2277,7 +2277,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         token: { type: 'string', description: '인증 토큰' },
         nodeId: { type: 'string', description: 'COMPONENT 또는 COMPONENT_SET 노드 ID' },
         propertyName: { type: 'string', description: '프로퍼티 이름' },
-        propertyType: { type: 'string', description: '타입: BOOLEAN, TEXT, INSTANCE_SWAP, VARIANT' },
+        propertyType: { type: 'string', enum: ['BOOLEAN', 'TEXT', 'INSTANCE_SWAP', 'VARIANT'], description: '프로퍼티 타입' },
         defaultValue: { description: '기본값' },
       },
       required: ['token', 'nodeId', 'propertyName', 'propertyType', 'defaultValue'],
@@ -2425,7 +2425,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       properties: {
         token: { type: 'string', description: '인증 토큰' },
         variableId: { type: 'string', description: '변수 ID' },
-        platform: { type: 'string', description: '플랫폼: WEB, ANDROID, iOS' },
+        platform: { type: 'string', enum: ['WEB', 'ANDROID', 'iOS'], description: '플랫폼' },
         syntax: { type: 'string', description: '코드 구문 문자열 (예: var(--color-primary))' },
       },
       required: ['token', 'variableId', 'platform', 'syntax'],
@@ -2459,7 +2459,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 
   // === Team Library ===
   {
-    name: 'sigma_get_libraries',
+    name: 'sigma_list_libraries',
     description: '사용 가능한 Team Library 목록 조회',
     inputSchema: {
       type: 'object' as const,
@@ -2470,7 +2470,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     },
   },
   {
-    name: 'sigma_get_library_components',
+    name: 'sigma_list_library_components',
     description: '라이브러리의 컴포넌트 목록 조회',
     inputSchema: {
       type: 'object' as const,
@@ -2482,7 +2482,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     },
   },
   {
-    name: 'sigma_get_library_variables',
+    name: 'sigma_list_library_variables',
     description: '라이브러리 변수 컬렉션의 변수 목록 조회',
     inputSchema: {
       type: 'object' as const,
@@ -2627,7 +2627,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 
   // === Server Status (토큰 불필요) ===
   {
-    name: 'server_status',
+    name: 'sigma_server_status',
     description: '서버 전체 상태를 확인합니다 (연결된 플러그인, 스토리지, 토큰 상태 등)',
     inputSchema: {
       type: 'object',

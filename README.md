@@ -62,7 +62,7 @@ Playwright로 브라우저를 조작할 때는 **Sigma 임베드 스크립트**(
 
 ```
 ❌ 잘못된 방법: page.evaluate()로 직접 DOM 추출 로직 작성
-✅ 올바른 방법: Sigma MCP의 get_playwright_scripts로 임베드 스크립트 경로 확인
+✅ 올바른 방법: Sigma MCP의 sigma_get_playwright_scripts로 임베드 스크립트 경로 확인
                → page.addScriptTag()로 inject
                → window.__sigma__.extract() 호출
 ```
@@ -177,7 +177,7 @@ AI Agent:
 | | `sigma_bind` / `sigma_status` | 플러그인+페이지 바인딩 / 상태 확인 |
 | 정보 | `sigma_list_plugins` / `sigma_list_pages` | 플러그인 / 페이지 목록 |
 | 생성 | `sigma_create_frame` | JSON/HTML 데이터로 프레임 생성 |
-| | `sigma_import_file` | 저장된 컴포넌트를 Figma로 가져오기 |
+| | `sigma_import_saved` | 저장된 컴포넌트를 Figma로 가져오기 |
 | | `sigma_create_rectangle` / `sigma_create_text` | 사각형 / 텍스트 노드 생성 |
 | | `sigma_create_empty_frame` / `sigma_create_section` | 빈 프레임 (Auto Layout) / Section 생성 |
 | | `sigma_create_ellipse` / `sigma_create_polygon` | 타원 / 다각형 생성 |
@@ -196,7 +196,7 @@ AI Agent:
 | | `sigma_get_node_info` / `sigma_get_nodes_info` | 노드 상세 정보 (단일/배치) |
 | | `sigma_get_frames` / `sigma_get_document_info` | 프레임 목록 / 문서 정보 |
 | | `sigma_get_styles` / `sigma_get_selection` | 스타일 / 선택 노드 조회 |
-| | `sigma_set_selection` / `sigma_read_my_design` | 노드 선택 / 선택 노드 상세 |
+| | `sigma_set_selection` / `sigma_get_selection_details` | 노드 선택 / 선택 노드 상세 |
 | | `sigma_get_viewport` / `sigma_set_viewport` | 뷰포트 조회 / 설정 |
 | | `sigma_scan_text_nodes` / `sigma_scan_nodes_by_types` | 텍스트/타입별 노드 스캔 |
 | 컴포넌트 | `sigma_get_local_components` | 로컬 컴포넌트 목록 |
@@ -204,7 +204,7 @@ AI Agent:
 | 주석 | `sigma_get_annotations` / `sigma_set_annotation` | 주석 조회/추가 |
 | | `sigma_set_multiple_annotations` | 주석 일괄 추가 |
 | 프로토타입 | `sigma_get_reactions` / `sigma_add_reaction` | 인터랙션 조회/추가 |
-| | `sigma_remove_reactions` | 인터랙션 제거 |
+| | `sigma_delete_reactions` | 인터랙션 제거 |
 | 페이지 | `sigma_create_page` / `sigma_rename_page` | 페이지 생성 / 이름 변경 |
 | | `sigma_switch_page` / `sigma_delete_page` | 페이지 전환 / 삭제 |
 | 스타일 | `sigma_create_paint_style` / `sigma_create_text_style` | Paint / Text 스타일 생성 |
@@ -215,12 +215,12 @@ AI Agent:
 | | `sigma_bind_variable` / `sigma_add_variable_mode` | 변수 바인딩 / 모드 추가 |
 | 이미지 | `sigma_screenshot` / `sigma_extract_node` | 캡처 / JSON·HTML 추출 |
 | | `sigma_test_roundtrip` | 추출→재생성 라운드트립 테스트 |
-| 데이터 | `save_extracted` / `load_extracted` | 추출 데이터 저장/로드 |
-| | `list_saved` / `delete_extracted` | 저장된 컴포넌트 목록/삭제 |
-| | `save_and_import` | 저장 + 즉시 Figma 임포트 |
-| 스크립트 | `get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
-| 관리 | `server_status` / `sigma_storage_stats` | 서버 상태 / 스토리지 현황 |
-| | `sigma_cleanup` / `list_screenshots` / `delete_screenshot` | 스토리지 정리 / 스크린샷 관리 |
+| 데이터 | `sigma_save_extracted` / `sigma_load_extracted` | 추출 데이터 저장/로드 |
+| | `sigma_list_saved` / `sigma_delete_extracted` | 저장된 컴포넌트 목록/삭제 |
+| | `sigma_save_and_import` | 저장 + 즉시 Figma 임포트 |
+| 스크립트 | `sigma_get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
+| 관리 | `sigma_server_status` / `sigma_storage_stats` | 서버 상태 / 스토리지 현황 |
+| | `sigma_cleanup` / `sigma_list_screenshots` / `sigma_delete_screenshot` | 스토리지 정리 / 스크린샷 관리 |
 
 전체 도구 목록 및 파라미터 상세는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 

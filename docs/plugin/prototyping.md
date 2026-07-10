@@ -50,7 +50,7 @@ Figma의 프로토타이핑 인터랙션(Reactions)을 조회, 추가, 제거합
 
 ### 제거
 
-**MCP 도구:** `sigma_remove_reactions(token, nodeId, triggerType?)`
+**MCP 도구:** `sigma_delete_reactions(token, nodeId, triggerType?)`
 
 - `triggerType` 지정: 해당 트리거의 인터랙션만 제거
 - 미지정: 모든 인터랙션 제거

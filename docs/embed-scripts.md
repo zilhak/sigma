@@ -5,7 +5,7 @@ AI Agent가 브라우저를 자동화할 때 DOM 추출, Storybook 탐색, 컴�
 
 ## 스크립트 경로 확인
 
-MCP 도구 `get_playwright_scripts`를 호출하면 각 스크립트의 경로와 API 정보를 반환합니다.
+MCP 도구 `sigma_get_playwright_scripts`를 호출하면 각 스크립트의 경로와 API 정보를 반환합니다.
 
 ```javascript
 // 스크립트 inject 예시
@@ -131,7 +131,7 @@ for (const story of stories) {
   );
 
   // Figma에 임포트
-  // sigma_import_file(token, savedId)
+  // sigma_import_saved(token, savedId)
 }
 ```
 

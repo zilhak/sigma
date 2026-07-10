@@ -42,7 +42,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     });
   },
 
-  async sigma_import_file(args, context) {
+  async sigma_import_saved(args, context) {
     const { wsServer } = context;
 
     // 토큰 검증만 먼저 (컴포넌트 로드 전)
@@ -1432,7 +1432,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
-  async sigma_read_my_design(args, context) {
+  async sigma_get_selection_details(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
@@ -1544,7 +1544,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
-  async sigma_remove_reactions(args, context) {
+  async sigma_delete_reactions(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
@@ -1906,7 +1906,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
   // === Group E: Team Library ===
 
-  async sigma_get_libraries(args, context) {
+  async sigma_list_libraries(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
@@ -1921,7 +1921,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
-  async sigma_get_library_components(args, context) {
+  async sigma_list_library_components(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
@@ -1936,7 +1936,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
-  async sigma_get_library_variables(args, context) {
+  async sigma_list_library_variables(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;

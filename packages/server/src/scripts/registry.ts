@@ -392,7 +392,7 @@ export function getPlaywrightScripts(): PlaywrightScript[] {
         "const result = await frame.evaluate(() => window.__sigma_storybook__.extractAndSave('Name'));",
         '',
         '// 5. 저장된 ID로 Sigma MCP로 Figma에 import',
-        '// sigma_import_file({ token, id: result.id, name: ... })',
+        '// sigma_import_saved({ token, id: result.id, name: ... })',
       ].join('\n'),
     },
 

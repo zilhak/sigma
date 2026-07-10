@@ -109,7 +109,7 @@ MCP Handler → AI Agent에 응답
 | `set-annotation` | `setAnnotation()` | node-ops/annotations | `sigma_set_annotation` |
 | `get-reactions` | `getReactions()` | node-ops/prototyping | `sigma_get_reactions` |
 | `add-reaction` | `addReaction()` | node-ops/prototyping | `sigma_add_reaction` |
-| `remove-reactions` | `removeReactions()` | node-ops/prototyping | `sigma_remove_reactions` |
+| `remove-reactions` | `removeReactions()` | node-ops/prototyping | `sigma_delete_reactions` |
 | `create-page` | `createPage()` | node-ops/page | `sigma_create_page` |
 | `rename-page` | `renamePage()` | node-ops/page | `sigma_rename_page` |
 | `switch-page` | `switchPage()` | node-ops/page | `sigma_switch_page` |

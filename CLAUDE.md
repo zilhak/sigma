@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 112개 도구(sigma_* 103 + 유틸리티 9)와 65개 modify 메서드가 구현되어 있다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 115개 도구(모두 `sigma_*` 접두사)와 65개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -149,7 +149,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_create_frame` | ExtractedNode JSON/HTML로 프레임 생성 | `token` | `data`, `html`, `format`, `name`, `position` |
-| `sigma_import_file` | 서버에 저장된 데이터로 프레임 생성 | `token`, `id` | `name`, `position` |
+| `sigma_import_saved` | 서버에 저장된 데이터로 프레임 생성 | `token`, `id` | `name`, `position` |
 | `sigma_create_rectangle` | 사각형 생성 | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `cornerRadius`, `parentId` |
 | `sigma_create_text` | 텍스트 노드 생성 (폰트 자동 로드) | `token`, `x`, `y`, `text` | `name`, `fontSize`, `fontFamily`, `fontWeight`, `fontColor`, `textAlignHorizontal`, `parentId` |
 | `sigma_create_empty_frame` | 빈 프레임 생성 (Auto Layout 지원) | `token`, `x`, `y`, `width`, `height` | `name`, `layoutMode`, `padding*`, `itemSpacing`, `fillColor`, `cornerRadius`, `layoutWrap`, `counterAxisSpacing`, `layoutSizing*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `parentId` |
@@ -208,7 +208,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_set_selection` | 특정 노드 선택 + 뷰포트 이동 | `token`, `nodeIds` | `zoomToFit` |
 | `sigma_get_viewport` | 현재 뷰포트 정보 조회 (center, zoom, bounds) | `token` | — |
 | `sigma_set_viewport` | 뷰포트 직접 설정 (center+zoom 또는 nodeIds로 이동) | `token` | `center`, `zoom`, `nodeIds` |
-| `sigma_read_my_design` | 현재 선택된 노드의 상세 정보 조회 | `token` | — |
+| `sigma_get_selection_details` | 현재 선택된 노드의 상세 정보 조회 | `token` | — |
 | `sigma_scan_text_nodes` | 하위 모든 텍스트 노드 스캔 | `token`, `nodeId` | — |
 | `sigma_scan_nodes_by_types` | 하위에서 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능한 폰트 목록 조회 | `token` | — |
@@ -244,7 +244,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 |------|------|-----------|-----------|
 | `sigma_get_reactions` | 노드의 인터랙션 목록 조회 | `token` | `nodeId` |
 | `sigma_add_reaction` | 노드에 인터랙션 추가 (클릭→이동, 호버→팝업 등) | `token`, `nodeId`, `trigger`, `action` | `destinationId`, `url`, `transition`, `preserveScrollPosition` |
-| `sigma_remove_reactions` | 노드의 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
+| `sigma_delete_reactions` | 노드의 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
 
 **trigger**: ON_CLICK, ON_HOVER, ON_PRESS, ON_DRAG, MOUSE_ENTER, MOUSE_LEAVE, AFTER_TIMEOUT
 **action**: NAVIGATE(이동), OVERLAY(팝업), BACK(뒤로), CLOSE(닫기), OPEN_URL(외부 링크), SCROLL_TO(스크롤), SWAP(교체)
@@ -265,6 +265,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_rename_page` | 페이지 이름 변경 | `token`, `pageId`, `name` | — |
 | `sigma_switch_page` | 페이지 전환 | `token`, `pageId` | — |
 | `sigma_delete_page` | 페이지 삭제 (마지막 페이지 불가) | `token`, `pageId` | — |
+| `sigma_reorder_page` | 페이지 순서 변경 | `token`, `pageId`, `index` | — |
 
 ### 스타일 (토큰 필수)
 
@@ -290,14 +291,16 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_set_variable_scopes` | 변수 사용 범위 설정 | `token`, `variableId`, `scopes` | — |
 | `sigma_set_variable_alias` | 변수 alias 설정 (다른 변수 참조) | `token`, `variableId`, `modeId`, `aliasTargetId` | — |
 | `sigma_set_variable_code_syntax` | 변수 코드 구문 설정 | `token`, `variableId`, `platform`, `syntax` | — |
+| `sigma_rename_variable` | 변수 이름 변경 | `token`, `variableId`, `name` | — |
+| `sigma_delete_variable` | 변수 삭제 | `token`, `variableId` | — |
 
 ### Team Library (토큰 필수)
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_libraries` | 사용 가능한 Team Library 목록 조회 | `token` | — |
-| `sigma_get_library_components` | 라이브러리 컴포넌트 목록 조회 | `token`, `libraryKey` | — |
-| `sigma_get_library_variables` | 라이브러리 변수 컬렉션 목록 조회 | `token`, `collectionKey` | — |
+| `sigma_list_libraries` | 사용 가능한 Team Library 목록 조회 | `token` | — |
+| `sigma_list_library_components` | 라이브러리 컴포넌트 목록 조회 | `token`, `libraryKey` | — |
+| `sigma_list_library_variables` | 라이브러리 변수 컬렉션 목록 조회 | `token`, `collectionKey` | — |
 | `sigma_import_library_component` | 라이브러리 컴포넌트 임포트 | `token`, `key` | — |
 | `sigma_import_library_style` | 라이브러리 스타일 임포트 | `token`, `key` | — |
 
@@ -323,22 +326,22 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `save_extracted` | 추출 데이터 저장 | `name`, `data` | — |
-| `list_saved` | 저장된 컴포넌트 목록 | — | — |
-| `load_extracted` | 저장된 컴포넌트 로드 | `id` 또는 `name` | — |
-| `delete_extracted` | 저장된 컴포넌트 삭제 | `id` | — |
-| `save_and_import` | 저장 + 즉시 Figma 임포트 (토큰 필수) | `token`, `name` | `data`, `html`, `format` |
+| `sigma_save_extracted` | 추출 데이터 저장 | `name`, `data` | — |
+| `sigma_list_saved` | 저장된 컴포넌트 목록 | — | — |
+| `sigma_load_extracted` | 저장된 컴포넌트 로드 | `id` 또는 `name` | — |
+| `sigma_delete_extracted` | 저장된 컴포넌트 삭제 | `id` | — |
+| `sigma_save_and_import` | 저장 + 즉시 Figma 임포트 (토큰 필수) | `token`, `name` | `data`, `html`, `format` |
 
 ### 스크립트/스토리지/상태
 
 | 도구 | 설명 |
 |------|------|
-| `get_playwright_scripts` | Sigma 임베드 스크립트 경로 + API 정보 반환 |
+| `sigma_get_playwright_scripts` | Sigma 임베드 스크립트 경로 + API 정보 반환 |
 | `sigma_storage_stats` | 스토리지 용량 현황 (카테고리별) |
 | `sigma_cleanup` | 스토리지 일괄 정리 (기간/카테고리 조건) |
-| `list_screenshots` | 저장된 스크린샷 목록 |
-| `delete_screenshot` | 스크린샷 삭제 |
-| `server_status` | 서버 전체 상태 확인 |
+| `sigma_list_screenshots` | 저장된 스크린샷 목록 |
+| `sigma_delete_screenshot` | 스크린샷 삭제 |
+| `sigma_server_status` | 서버 전체 상태 확인 |
 
 ---
 
@@ -398,7 +401,7 @@ await page.addScriptTag({ path: '.../dist/extractor.standalone.js' });
 const data = await page.evaluate(() => window.__sigma__.extract('...'));
 ```
 
-스크립트 경로는 `get_playwright_scripts` 도구로 확인한다.
+스크립트 경로는 `sigma_get_playwright_scripts` 도구로 확인한다.
 
 ---
 
@@ -407,7 +410,7 @@ const data = await page.evaluate(() => window.__sigma__.extract('...'));
 ### 일반 웹페이지
 
 ```
-1. get_playwright_scripts → extractor.standalone.js 경로 확인
+1. sigma_get_playwright_scripts → extractor.standalone.js 경로 확인
 2. Playwright로 페이지 이동
 3. addScriptTag로 스크립트 inject
 4. window.__sigma__.extract() 호출
@@ -417,7 +420,7 @@ const data = await page.evaluate(() => window.__sigma__.extract('...'));
 ### Storybook (SPA 방식 필수)
 
 ```
-1. get_playwright_scripts → storybook.standalone.js 경로 확인
+1. sigma_get_playwright_scripts → storybook.standalone.js 경로 확인
 2. 메인 Storybook 페이지 로드 (1회만)
 3. 메인 프레임에 스크립트 inject (1회만)
 4. getStories() → story 목록 조회
@@ -425,7 +428,7 @@ const data = await page.evaluate(() => window.__sigma__.extract('...'));
    a. navigateToStory(storyId) → SPA 전환
    b. iframe에 스크립트 inject
    c. extractAndSave(name) → 서버에 저장 (ID 반환)
-   d. sigma_import_file(token, id) → Figma에 생성
+   d. sigma_import_saved(token, id) → Figma에 생성
 ```
 
 **Storybook에서 절대 하지 말 것:**

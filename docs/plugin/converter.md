@@ -3,7 +3,7 @@
 ExtractedNode JSON 또는 HTML 문자열을 Figma 노드로 변환하는 모듈입니다.
 
 **소스:** `packages/figma-plugin/src/converter/`
-**MCP 도구:** `sigma_create_frame`, `sigma_import_file`, `sigma_update_frame`
+**MCP 도구:** `sigma_create_frame`, `sigma_import_saved`, `sigma_update_frame`
 
 ---
 

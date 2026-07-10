@@ -31,7 +31,7 @@ export function createMcpServer(context: ToolContext) {
         '5. 이후 모든 도구에 같은 token을 전달하면 바인딩된 대상에서 작업 수행',
         '',
         '## 도구 분류',
-        '- 바인딩 불필요: save_extracted, list_saved, load_extracted, delete_extracted, get_playwright_scripts, sigma_storage_stats 등',
+        '- 바인딩 불필요: sigma_save_extracted, sigma_list_saved, sigma_load_extracted, sigma_delete_extracted, sigma_get_playwright_scripts, sigma_storage_stats 등',
         '- 바인딩 필수: sigma_create_frame, sigma_find_node, sigma_get_tree, sigma_modify_node 등 Figma 조작 도구',
         '',
         '## 스토리지',

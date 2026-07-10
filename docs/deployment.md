@@ -114,7 +114,7 @@ Docker 모드에서는 다음 기능이 제한됩니다:
 
 ## 임베드 스크립트 설치 (.env)
 
-서버가 임베드 스크립트 경로를 알아야 `get_playwright_scripts` 도구가 동작합니다.
+서버가 임베드 스크립트 경로를 알아야 `sigma_get_playwright_scripts` 도구가 동작합니다.
 
 ```bash
 # 자동 설정 (shared 빌드 + .env에 경로 등록)

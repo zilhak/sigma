@@ -6,7 +6,7 @@ import { jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
  * 스토리지 관련 핸들러 (토큰 불필요)
  */
 export const storageHandlers: Record<string, (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>> = {
-  async save_extracted(args) {
+  async sigma_save_extracted(args) {
     const component = await storage.saveComponent(
       args.name as string,
       args.data as ExtractedNode
@@ -18,7 +18,7 @@ export const storageHandlers: Record<string, (args: Record<string, unknown>, con
     });
   },
 
-  async list_saved() {
+  async sigma_list_saved() {
     const components = await storage.listComponents();
     return jsonResponse({
       count: components.length,
@@ -30,7 +30,7 @@ export const storageHandlers: Record<string, (args: Record<string, unknown>, con
     });
   },
 
-  async load_extracted(args) {
+  async sigma_load_extracted(args) {
     let component;
     if (args.id) {
       component = await storage.getComponent(args.id as string);
@@ -50,7 +50,7 @@ export const storageHandlers: Record<string, (args: Record<string, unknown>, con
     });
   },
 
-  async delete_extracted(args) {
+  async sigma_delete_extracted(args) {
     const deleted = await storage.deleteComponent(args.id as string);
     return jsonResponse({
       success: deleted,

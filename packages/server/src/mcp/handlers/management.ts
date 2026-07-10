@@ -62,7 +62,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
     });
   },
 
-  async list_screenshots() {
+  async sigma_list_screenshots() {
     const screenshots = await storage.listScreenshots();
 
     return jsonResponse({
@@ -77,7 +77,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
     });
   },
 
-  async delete_screenshot(args) {
+  async sigma_delete_screenshot(args) {
     const filename = args.filename as string;
     const deleted = await storage.deleteScreenshot(filename);
     return jsonResponse({
@@ -86,7 +86,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
     });
   },
 
-  async server_status(_args, context) {
+  async sigma_server_status(_args, context) {
     const { wsServer } = context;
     const figmaStatus = wsServer.getStatus();
     const storageStats = await storage.getFullStorageStats();
@@ -101,7 +101,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
     });
   },
 
-  async save_and_import(args, context) {
+  async sigma_save_and_import(args, context) {
     const { wsServer } = context;
     const saveImportToken = args.token as string;
     const saveImportValidation = validateToken(saveImportToken);

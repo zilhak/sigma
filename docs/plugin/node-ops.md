@@ -118,7 +118,7 @@ Agent가 보내는 값을 정규화하는 유틸리티 함수들:
 | `getNodesInfo(nodeIds)` | `sigma_get_nodes_info` | 여러 노드 일괄 조회 |
 | `getDocumentInfo()` | `sigma_get_document_info` | 파일명, 페이지 목록 |
 | `getStyles()` | `sigma_get_styles` | 로컬 Paint/Text/Effect/Grid 스타일 |
-| `readMyDesign()` | `sigma_read_my_design` | 현재 선택된 노드의 상세 정보 |
+| `readMyDesign()` | `sigma_get_selection_details` | 현재 선택된 노드의 상세 정보 |
 | `listAvailableFonts()` | `sigma_list_fonts` | 사용 가능한 폰트 목록 |
 | `getNodeCSS(nodeId)` | `sigma_get_css` | 노드의 CSS 속성 추출 |
 

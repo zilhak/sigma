@@ -218,7 +218,7 @@ for (const story of stories) {
 
   // 4-5. Figma에 임포트 (Sigma MCP)
   if (result.success) {
-    // sigma_import_file(token, result.id)
+    // sigma_import_saved(token, result.id)
   }
 }
 ```

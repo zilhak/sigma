@@ -140,9 +140,9 @@ Team Library의 컴포넌트, 변수, 스타일을 조회하고 임포트합니�
 
 | 함수 | MCP 도구 | 설명 |
 |------|----------|------|
-| `getAvailableLibraries()` | `sigma_get_libraries` | 사용 가능한 Team Library 목록 |
-| `getLibraryComponents(libraryKey)` | `sigma_get_library_components` | 라이브러리 컴포넌트 목록 |
-| `getLibraryVariables(collectionKey)` | `sigma_get_library_variables` | 라이브러리 변수 컬렉션 |
+| `getAvailableLibraries()` | `sigma_list_libraries` | 사용 가능한 Team Library 목록 |
+| `getLibraryComponents(libraryKey)` | `sigma_list_library_components` | 라이브러리 컴포넌트 목록 |
+| `getLibraryVariables(collectionKey)` | `sigma_list_library_variables` | 라이브러리 변수 컬렉션 |
 | `importLibraryComponent(key)` | `sigma_import_library_component` | 라이브러리 컴포넌트 임포트 |
 | `importLibraryStyle(key)` | `sigma_import_library_style` | 라이브러리 스타일 임포트 |
 
@@ -150,11 +150,11 @@ Team Library의 컴포넌트, 변수, 스타일을 조회하고 임포트합니�
 
 ```
 // 1. 사용 가능한 라이브러리 확인
-sigma_get_libraries(token)
+sigma_list_libraries(token)
   → [{ name: "Design System", key: "lib-abc", ... }]
 
 // 2. 라이브러리 컴포넌트 조회
-sigma_get_library_components(token, "lib-abc")
+sigma_list_library_components(token, "lib-abc")
   → [{ name: "Button", key: "comp-123", ... }]
 
 // 3. 컴포넌트 임포트

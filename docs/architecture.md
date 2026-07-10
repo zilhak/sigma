@@ -71,7 +71,7 @@ Sigma는 4개의 모듈이 로컬 서버를 중심으로 연결되는 구조입�
 2. sigma_list_plugins → 연결된 Plugin 확인
 3. sigma_bind(token, pluginId, pageId) → 바인딩
 4. Playwright로 웹페이지 조작 + 임베드 스크립트로 추출
-5. sigma_create_frame / sigma_import_file → Figma에 생성
+5. sigma_create_frame / sigma_import_saved → Figma에 생성
 6. sigma_modify_node 등으로 추가 조작
 ```
 
