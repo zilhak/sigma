@@ -14,7 +14,7 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 **핵심 철학:** 서로 연동하면 최고의 효율, 따로따로도 사용 가능
 
-Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 112개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
+Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 115개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
 ## 모듈 구성
 
@@ -169,7 +169,7 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 (112개):**
+**MCP 도구 (115개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
@@ -184,7 +184,7 @@ AI Agent:
 | | `sigma_create_star` / `sigma_create_line` | 별 / 선 생성 |
 | | `sigma_create_vector` / `sigma_create_image` | 벡터 (SVG path) / 이미지 (base64) 생성 |
 | | `sigma_create_component_instance` | 컴포넌트 인스턴스 생성 |
-| 조작 | `sigma_modify_node` | 노드 속성 변경 (53개 메서드) |
+| 조작 | `sigma_modify_node` | 노드 속성 변경 (73개 메서드) |
 | | `sigma_batch_modify` | 여러 노드에 modify 일괄 실행 |
 | | `sigma_update_frame` | 기존 프레임 내용 교체 |
 | | `sigma_delete_frame` / `sigma_batch_delete` | 프레임 삭제 / 일괄 삭제 |
@@ -238,7 +238,7 @@ docker compose up -d
 |------|------|
 | [아키텍처](docs/architecture.md) | 시스템 구조, 통신 흐름, 데이터 흐름 |
 | [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
-| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 112개 MCP 도구 전체 목록 및 파라미터 |
+| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 115개 MCP 도구 전체 목록 및 파라미터 |
 | [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |
 | [Extractor 스크립트 상세](docs/scripts/extractor.md) | 추출 로직, 가시성 판단, 텍스트 병합, SVG/아이콘 처리 |
 | [Storybook 스크립트 상세](docs/scripts/storybook.md) | Channel API, SPA 전환, 추출+저장 워크플로우 |
