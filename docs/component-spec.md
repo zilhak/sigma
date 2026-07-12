@@ -101,9 +101,19 @@ sigma_use_component(token, alias: "ui_badge", props: {text: "완료"}, parentId:
 ```
 
 검증된 레이아웃 패턴 (라이브 테스트 PASS):
-column/row + `gap`, `padding`, `justify-content: space-between`, `align-items: center`,
-`flex-grow: 1`(잔여 공간 채움), 중첩 컨테이너, `border-width`+`border-color`,
-`box-shadow`, 부분 `border-radius`(`12px 12px 0 0`), stretch(기본값) 폭 채움.
+column/row + `gap`, `padding`, `justify-content: space-between / flex-end / center`,
+`align-items: center`, `flex-grow: 1`(잔여 공간 채움), 중첩 컨테이너,
+`border-width`+`border-color`, 개별 면 보더(`border-left-width` 액센트, 탭 밑줄),
+`box-shadow`, 부분 `border-radius`(`12px 12px 0 0`), 원형(`border-radius` = 크기/2),
+stretch(기본값) 폭 채움, 고정 열 너비 테이블(셀을 `width` 지정 div로).
+
+실전 검증 완료 컴포넌트 12종 (Playground):
+button, text_input, dropdown, checkbox, toggle, avatar, alert, tabs, progress,
+autocomplete, card, table — 전부 등록·인스턴스 생성·Auto Layout 조합(폼) PASS.
+
+참고: 스펙 루트에 배경을 지정하지 않으면 **투명**으로 유지된다
+(일반 프레임 임포트의 "루트 흰 배경 대체" 규칙은 컴포넌트에 적용되지 않음 —
+체크박스처럼 임의 배경 위에 놓이는 컴포넌트의 조합성을 위해).
 
 ## 에러 동작
 
