@@ -15,6 +15,8 @@ import { createSvgNode, createImageNode, createInputNode, createPseudoElementNod
  * - 그 외 노드(FRAME 등): 기존대로 boundingRect 폭·높이로 강제
  */
 function resizeAbsoluteChild(childNode: SceneNode, rect: { width: number; height: number }): void {
+  // rect에 크기 정보가 없으면(손-HTML) 스타일로 결정된 현재 크기를 유지
+  if (rect.width <= 0 && rect.height <= 0) return;
   if (childNode.type === 'TEXT') {
     const textNode = childNode as TextNode;
     if (textNode.textAutoResize === 'HEIGHT') {
@@ -390,14 +392,23 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
     // overflow: visible인 Auto Layout 프레임에서,
     // Figma의 균일 itemSpacing이 브라우저의 가변 간격보다 커서
     // 콘텐츠가 프레임을 초과하는 경우 HUG 모드로 전환하여 프레임이 콘텐츠를 감싸도록 함
-    // 단, min-width/min-height가 명시된 요소는 FIXED 유지 (HUG로 전환하면 명시적 크기 손실)
+    // 단:
+    // - min-width/min-height가 명시된 요소는 FIXED 유지 (HUG로 전환하면 명시적 크기 손실)
+    // - 손-HTML(실측 rect 없음)에서 주축 크기가 명시된 요소도 FIXED 유지 —
+    //   이 구제는 실측 간격과 Figma 간격의 불일치를 보정하는 추출 데이터용 휴리스틱이며,
+    //   손-HTML의 명시적 width/height를 HUG로 덮어쓰면 CSS 의미가 파괴된다.
     if (!isRoot && frame.layoutMode !== 'NONE' &&
         styles.overflow !== 'hidden' && styles.overflow !== 'clip' &&
         styles.overflow !== 'scroll' && styles.overflow !== 'auto') {
       const hasExplicitMinSize = frame.layoutMode === 'HORIZONTAL'
         ? styles.minWidth > 0
         : styles.minHeight > 0;
-      if (!hasExplicitMinSize) {
+      const primaryExplicit = frame.layoutMode === 'HORIZONTAL'
+        ? typeof styles.width === 'number'
+        : typeof styles.height === 'number';
+      const measured = node.boundingRect
+        && node.boundingRect.width > 0 && node.boundingRect.height > 0;
+      if (!hasExplicitMinSize && (measured || !primaryExplicit)) {
         frame.primaryAxisSizingMode = 'AUTO';
       }
     }

@@ -69,6 +69,13 @@ export async function buildComponentFromSpec(
     throw new Error(`스펙 루트는 프레임으로 변환되어야 합니다 (현재: ${frame.type})`);
   }
 
+  // 변환기는 페이지 임포트 가독성을 위해 루트의 투명 배경을 흰색으로 대체하지만,
+  // 컴포넌트는 임의 배경 위에 놓이므로 스펙에 배경이 없으면 투명을 유지해야 한다.
+  const rootBg = extracted.styles && extracted.styles.backgroundColor;
+  if (!rootBg || rootBg.a <= 0) {
+    frame.fills = [];
+  }
+
   targetPage.appendChild(frame);
 
   // createComponentFromNode: Auto Layout 등 모든 속성을 보존한 채 컴포넌트로 승격.

@@ -23,7 +23,19 @@ function parseSpacing(value: string): [number, number, number, number] {
 }
 
 /**
- * style 속성에서 width/height 추출
+ * style 속성에서 위치(left/top)만 boundingRect로 추출.
+ * width/height는 **의도적으로 rect에 넣지 않는다** — 크기는 styles가 전달하며,
+ * 손-HTML의 스타일 유래 크기가 rect에 들어가면 변환기의 "실측 데이터" 판정
+ * (형상 검증·stretch 휴리스틱)이 오발동해 Auto Layout이 파괴된다.
+ * (SVG는 예외 — svgString 크기 결정에 rect를 쓰므로 전체 추출 유지)
+ */
+function extractPositionFromStyle(attrsString: string): { x: number; y: number; width: number; height: number } {
+  const full = extractBoundingFromStyle(attrsString);
+  return { x: full.x, y: full.y, width: 0, height: 0 };
+}
+
+/**
+ * style 속성에서 width/height 추출 (SVG 전용)
  */
 function extractBoundingFromStyle(attrsString: string): { x: number; y: number; width: number; height: number } {
   const result = { x: 0, y: 0, width: 0, height: 0 };
@@ -248,7 +260,7 @@ function parseElement(html: string, startIndex: number): ParseResult {
       textContent: children.length === 0 ? textContent : '',
       attributes: extractAttributes(attrsString),
       styles: parseInlineStyles(attrsString),
-      boundingRect: extractBoundingFromStyle(attrsString),
+      boundingRect: extractPositionFromStyle(attrsString),
       children,
     },
     endIndex,

@@ -229,9 +229,13 @@ describe('parseHTML', () => {
 
   // === bounding rect ===
   describe('style에서 bounding rect 추출', () => {
-    test('width/height/left/top → boundingRect', () => {
+    test('left/top → boundingRect 위치만, width/height는 rect에 넣지 않음 (styles가 전달)', () => {
+      // 스타일 유래 크기가 rect에 들어가면 변환기의 "실측 데이터" 판정이 오발동해
+      // Auto Layout이 파괴되므로, 손-HTML의 rect는 위치만 담는다.
       const result = parseHTML('<div style="width: 200px; height: 100px; left: 10px; top: 20px">X</div>')!;
-      expect(result.boundingRect).toEqual({ x: 10, y: 20, width: 200, height: 100 });
+      expect(result.boundingRect).toEqual({ x: 10, y: 20, width: 0, height: 0 });
+      expect(result.styles.width).toBe(200);
+      expect(result.styles.height).toBe(100);
     });
 
     test('style 없으면 boundingRect 0', () => {
