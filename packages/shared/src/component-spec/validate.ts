@@ -5,12 +5,20 @@
  * 변환기가 손실 없이 Figma로 옮길 수 있다고 보장된 부분집합만 통과시킨다.
  * 벗어나면 조용히 근사하지 않고 **등록을 거부**하며 위반 항목을 구체적으로 알려준다.
  *
- * 주의: 이 검증기는 서버(등록 시점)용 경량 스캐너다. 실제 Figma 변환은
- * figma-plugin의 html-parser가 수행한다. 화이트리스트는 html-parser의
- * applyStyleProperty가 지원하는 속성 집합과 일치해야 한다.
+ * 검증은 두 층위:
+ * 1) 속성 화이트리스트 — 변환기(html-parser)가 지원하는 속성만
+ * 2) 값 검증 — 속성이 허용되어도 값이 변환 불가하면 거부
+ *    (예: width: 100% → parseFloat가 100px로 오변환, gradient → 투명으로 소실)
+ *
+ * 구조 규칙:
+ * - 컨테이너 태그(div, button)만 자식 요소를 가질 수 있고, 이때 display: flex 명시 필수
+ *   (스펙의 배치는 Auto Layout으로만 — 암시적 블록 배치 불가)
+ * - 텍스트 태그(span, p, h1~h6 등)는 leaf 전용 (rich text 중첩은 이후 단계)
+ * - 길이 값은 px 필수 (0만 단위 생략 허용) — %, rem, em, calc, var 불가
  */
 
 import type { ComponentParam, SpecValidationResult } from './types';
+import { parseColor } from '../colors';
 
 /** alias / 파라미터 이름 규칙 */
 export const SPEC_NAME_RE = /^[a-z][a-z0-9_]*$/;
@@ -18,29 +26,36 @@ export const SPEC_NAME_RE = /^[a-z][a-z0-9_]*$/;
 /** 스펙 HTML 최대 크기 (bytes 아님, 문자 수) */
 export const SPEC_HTML_MAX_LENGTH = 50000;
 
-/** 허용 태그 (컨테이너/텍스트 계열만 — 폼·미디어·svg는 이후 단계) */
-export const ALLOWED_TAGS = new Set([
-  'div', 'span', 'p',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'strong', 'em', 'b', 'i',
-  'button', 'a',
-  'img', 'br',
+/** 컨테이너 태그 — 자식 요소를 가질 수 있는 유일한 태그 (display: flex 필수) */
+export const CONTAINER_TAGS = new Set(['div', 'button']);
+
+/** 텍스트 태그 — leaf 전용, 변환기가 TextNode(또는 프레임+텍스트)로 변환 */
+export const TEXT_TAGS = new Set([
+  'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'strong', 'em', 'b', 'i',
 ]);
 
 /** 자기 종료(void) 태그 */
 const VOID_TAGS = new Set(['br', 'img']);
 
+/** 허용 태그 전체 */
+export const ALLOWED_TAGS = new Set([...CONTAINER_TAGS, ...TEXT_TAGS, ...VOID_TAGS]);
+
 /**
  * 허용 CSS 속성 (kebab-case) — html-parser.ts applyStyleProperty 지원 집합.
  * 여기 없는 속성이 스펙에 들어오면 등록 거부.
+ *
+ * 의도적 제외:
+ * - position/left/top: absolute 배치 표현 불가 — 배치는 Auto Layout(flex)으로만
+ * - text-align: TextNode가 hug 폭이라 정렬할 공간이 없어 무시됨 — 정렬은 부모의
+ *   justify-content/align-items로 표현
  */
 export const ALLOWED_CSS_PROPS = new Set([
   'width', 'height',
   'background-color', 'background', 'color', 'opacity',
-  'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align',
+  'font-size', 'font-weight', 'line-height', 'letter-spacing',
   'display', 'flex-direction', 'justify-content', 'align-items', 'gap',
   'flex-wrap', 'flex-grow', 'flex-shrink', 'align-self',
-  'overflow', 'position',
+  'overflow',
   'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
   'border-radius',
   'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
@@ -54,26 +69,106 @@ const ALLOWED_ATTRS = new Set(['style', 'src', 'alt', 'href']);
 /** data-sigma-* 주석 어휘 (MVP: slot만) */
 const SIGMA_ATTRS = new Set(['data-sigma-slot']);
 
-/**
- * slot을 붙일 수 있는 태그 — 변환기(node-creator isTextOnlyElement)가
- * TextNode로 변환하는 텍스트 태그와 교집합.
- */
-export const SLOT_ALLOWED_TAGS = new Set([
-  'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'strong', 'em', 'b', 'i',
-]);
+/** slot을 붙일 수 있는 태그 — 텍스트 태그와 동일 */
+export const SLOT_ALLOWED_TAGS = TEXT_TAGS;
 
 /**
- * slot 요소에 허용되는 CSS 속성 — 텍스트 속성만.
- * 배경/패딩/보더/flex가 있으면 변환기가 요소를 프레임으로 감싸
- * "slot = 단일 TextNode" 보장이 깨지므로 거부한다 (그런 장식은 부모 컨테이너에).
+ * slot 요소에 허용되는 CSS 속성 — 순수 텍스트 속성만.
+ * 배경/패딩/보더가 있으면 변환기가 요소를 프레임으로 감싸 "slot = 단일 TextNode"
+ * 보장이 깨지고, width/height는 TextNode에서 무시되므로 모두 거부한다.
  */
 export const SLOT_ALLOWED_CSS_PROPS = new Set([
-  'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align',
-  'color', 'opacity', 'width', 'height',
+  'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'opacity',
+]);
+
+// ── 값 검증 테이블 ──
+
+/** 길이: px 필수, 0만 단위 생략 허용, 음수 허용(letter-spacing 등) */
+const PX_LENGTH_RE = /^-?(0|\d*\.?\d+px)$/;
+
+/** 단일 길이 값 속성 */
+const LENGTH_PROPS = new Set([
+  'width', 'height', 'gap', 'font-size', 'line-height', 'letter-spacing',
+  'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+  'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+]);
+
+/** 1~4개 길이 값(shorthand) 속성 */
+const LENGTH_LIST_PROPS = new Set(['padding', 'border-radius', 'border-width']);
+
+/** 색상 값 속성 — parseColor로 해석 가능해야 함 */
+const COLOR_PROPS = new Set([
+  'color', 'background-color', 'background',
+  'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+]);
+
+/** 단위 없는 숫자 속성 */
+const NUMBER_PROPS = new Set(['opacity', 'flex-grow', 'flex-shrink']);
+
+/** enum 값 속성 — 변환기가 매핑을 보장하는 값만 */
+const ENUM_PROPS: Record<string, string[]> = {
+  'display': ['flex'],
+  'flex-direction': ['row', 'column'],
+  'justify-content': ['flex-start', 'center', 'flex-end', 'space-between'],
+  'align-items': ['flex-start', 'center', 'flex-end', 'stretch'],
+  'align-self': ['auto', 'flex-start', 'center', 'flex-end', 'stretch'],
+  'flex-wrap': ['nowrap', 'wrap'],
+  'overflow': ['visible', 'hidden'],
+};
+
+/** 텍스트 요소를 프레임으로 승격시키는 속성 (이게 있으면 width/height가 유효해짐) */
+const FRAME_FORCING_PROPS = new Set([
+  'background-color', 'background', 'display',
+  'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+  'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
 ]);
 
 export function isValidSpecName(name: string): boolean {
   return SPEC_NAME_RE.test(name);
+}
+
+function lengthErrorMsg(v: string): string {
+  return `길이 값은 px 단위만 허용 (0만 단위 생략 가능): "${v}" 불가 — %, rem, em, calc(), var()는 변환이 보장되지 않습니다`;
+}
+
+/** 속성 값 검증. 문제 없으면 null, 있으면 에러 메시지 반환 */
+function validateCssValue(prop: string, value: string): string | null {
+  const enumValues = ENUM_PROPS[prop];
+  if (enumValues) {
+    return enumValues.includes(value)
+      ? null
+      : `지원하지 않는 값 "${value}" (지원: ${enumValues.join(', ')})`;
+  }
+  if (prop === 'font-weight') {
+    return /^(normal|bold|[1-9]00)$/.test(value)
+      ? null
+      : `지원하지 않는 값 "${value}" (normal, bold, 100~900)`;
+  }
+  if (NUMBER_PROPS.has(prop)) {
+    return /^\d*\.?\d+$/.test(value) ? null : `단위 없는 숫자만 허용: "${value}" 불가`;
+  }
+  if (LENGTH_PROPS.has(prop)) {
+    return PX_LENGTH_RE.test(value) ? null : lengthErrorMsg(value);
+  }
+  if (LENGTH_LIST_PROPS.has(prop)) {
+    const parts = value.split(/\s+/);
+    if (parts.length < 1 || parts.length > 4) {
+      return `1~4개의 길이 값이어야 합니다: "${value}"`;
+    }
+    for (const part of parts) {
+      if (!PX_LENGTH_RE.test(part)) return lengthErrorMsg(part);
+    }
+    return null;
+  }
+  if (COLOR_PROPS.has(prop)) {
+    return parseColor(value)
+      ? null
+      : `색상으로 해석할 수 없는 값 "${value.length > 40 ? value.slice(0, 40) + '…' : value}" — hex/rgb/rgba/색상명만 지원 (gradient, var() 불가)`;
+  }
+  if (prop === 'box-shadow') {
+    return /\binset\b/.test(value) ? 'inset 그림자는 지원되지 않습니다' : null;
+  }
+  return null;
 }
 
 interface OpenElement {
@@ -82,8 +177,16 @@ interface OpenElement {
   slotName: string | null;
   /** slot 요소의 텍스트 조각 */
   slotText: string[];
-  /** 자식 요소를 가졌는지 (slot leaf 검증용) */
+  /** 자식 요소를 가졌는지 */
   hasChildElement: boolean;
+  /** 직접 텍스트를 가졌는지 */
+  hasText: boolean;
+  /** style에 선언된 속성 집합 */
+  styleProps: Set<string>;
+  /** display: flex 선언 여부 (컨테이너 필수 규칙용) */
+  hasFlexDisplay: boolean;
+  /** flex 누락 에러를 이미 냈는지 (자식마다 중복 방지) */
+  flexWarned: boolean;
 }
 
 /**
@@ -159,6 +262,7 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       return;
     }
     const current = stack[stack.length - 1];
+    current.hasText = true;
     if (current.slotName !== null) {
       current.slotText.push(trimmed);
     }
@@ -175,6 +279,11 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       parent.hasChildElement = true;
       if (parent.slotName !== null) {
         errors.push(`slot 요소(<${parent.tagName} data-sigma-slot="${parent.slotName}">)는 자식 요소를 가질 수 없습니다. 텍스트만 허용됩니다`);
+      } else if (TEXT_TAGS.has(parent.tagName)) {
+        errors.push(`텍스트 태그 <${parent.tagName}>는 자식 요소를 가질 수 없습니다 (rich text 중첩은 이후 단계). 컨테이너가 필요하면 div/button을 사용하세요`);
+      } else if (CONTAINER_TAGS.has(parent.tagName) && !parent.hasFlexDisplay && !parent.flexWarned) {
+        errors.push(`<${parent.tagName}> 컨테이너에 display: flex가 없습니다 — 자식 요소를 가진 컨테이너는 display: flex를 명시해야 합니다 (배치는 Auto Layout으로만, 암시적 블록 배치 불가)`);
+        parent.flexWarned = true;
       }
     }
 
@@ -198,9 +307,9 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       }
     }
 
-    if (attrs['style'] !== undefined) {
-      validateStyle(attrs['style'], tagName, slotName !== null);
-    }
+    const styleProps = attrs['style'] !== undefined
+      ? validateStyle(attrs['style'], tagName, slotName !== null)
+      : new Set<string>();
 
     if (slotName !== null) {
       if (!SLOT_ALLOWED_TAGS.has(tagName)) {
@@ -225,7 +334,16 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
 
     if (selfClosed) return;
 
-    stack.push({ tagName, slotName, slotText: [], hasChildElement: false });
+    stack.push({
+      tagName,
+      slotName,
+      slotText: [],
+      hasChildElement: false,
+      hasText: false,
+      styleProps,
+      hasFlexDisplay: styleProps.has('display'),
+      flexWarned: false,
+    });
   }
 
   function handleCloseTag(tagName: string) {
@@ -245,9 +363,27 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
         params.push({ name: open.slotName, type: 'text', defaultValue });
       }
     }
+
+    // 순수 텍스트 요소(TextNode로 변환됨)의 width/height는 변환기가 무시한다.
+    // 조용한 무시 대신 거부하고 대안을 안내한다.
+    if (
+      open.slotName === null &&
+      TEXT_TAGS.has(open.tagName) &&
+      !open.hasChildElement &&
+      open.hasText &&
+      (open.styleProps.has('width') || open.styleProps.has('height'))
+    ) {
+      const framePromoting = Array.from(open.styleProps).some((p) => FRAME_FORCING_PROPS.has(p));
+      if (!framePromoting) {
+        errors.push(
+          `순수 텍스트 요소 <${open.tagName}>의 width/height는 무시됩니다(TextNode로 변환됨) — 크기가 필요하면 부모 컨테이너(div)로 감싸 크기를 주세요`
+        );
+      }
+    }
   }
 
-  function validateStyle(styleStr: string, tagName: string, isSlot: boolean) {
+  function validateStyle(styleStr: string, tagName: string, isSlot: boolean): Set<string> {
+    const props = new Set<string>();
     const rules = styleStr.split(';');
     for (const rule of rules) {
       const trimmedRule = rule.trim();
@@ -263,12 +399,21 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
         errors.push(`<${tagName}> style의 값 없는 속성: "${prop}"`);
         continue;
       }
+      props.add(prop);
       if (!ALLOWED_CSS_PROPS.has(prop)) {
         errors.push(`<${tagName}> style의 허용되지 않는 CSS 속성: "${prop}" — 변환이 보장되지 않는 속성은 등록할 수 없습니다`);
-      } else if (isSlot && !SLOT_ALLOWED_CSS_PROPS.has(prop)) {
-        errors.push(`slot 요소(<${tagName}>)에는 텍스트 속성만 허용됩니다: "${prop}" 불가 — 배경/패딩/보더 등 장식은 부모 컨테이너에 두세요 (허용: ${Array.from(SLOT_ALLOWED_CSS_PROPS).join(', ')})`);
+        continue;
+      }
+      if (isSlot && !SLOT_ALLOWED_CSS_PROPS.has(prop)) {
+        errors.push(`slot 요소(<${tagName}>)에는 텍스트 속성만 허용됩니다: "${prop}" 불가 — 배경/패딩/보더/크기는 부모 컨테이너에 두세요 (허용: ${Array.from(SLOT_ALLOWED_CSS_PROPS).join(', ')})`);
+        continue;
+      }
+      const valueError = validateCssValue(prop, value);
+      if (valueError) {
+        errors.push(`<${tagName}> style의 ${prop}: ${valueError}`);
       }
     }
+    return props;
   }
 }
 

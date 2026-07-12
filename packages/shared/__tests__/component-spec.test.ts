@@ -50,7 +50,7 @@ describe('validateComponentSpecHtml — 통과 케이스', () => {
   });
 
   test('void 태그(br, img) 허용', () => {
-    const html = '<div style="padding: 8px;"><img src="x.png" alt="icon"><br></div>';
+    const html = '<div style="display: flex; padding: 8px;"><img src="x.png" alt="icon"><br></div>';
     expect(validateComponentSpecHtml(html).ok).toBe(true);
   });
 
@@ -171,7 +171,7 @@ describe('validateComponentSpecHtml — 거부 케이스', () => {
   });
 
   test('slot 요소에 텍스트 속성은 허용', () => {
-    const html = '<div><span data-sigma-slot="text" style="font-size: 12px; color: #333333; font-weight: 600;">x</span></div>';
+    const html = '<div style="display: flex;"><span data-sigma-slot="text" style="font-size: 12px; color: #333333; font-weight: 600;">x</span></div>';
     expect(validateComponentSpecHtml(html).ok).toBe(true);
   });
 
@@ -180,5 +180,103 @@ describe('validateComponentSpecHtml — 거부 케이스', () => {
     const result = validateComponentSpecHtml(html);
     expect(result.ok).toBe(false);
     expect(result.errors.join('\n')).toContain('텍스트 태그');
+  });
+});
+
+describe('validateComponentSpecHtml — 값 수준 검증', () => {
+  test('% 단위 거부', () => {
+    const result = validateComponentSpecHtml('<div style="width: 100%;"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('px');
+  });
+
+  test('rem/em 단위 거부', () => {
+    expect(validateComponentSpecHtml('<div style="width: 1.5rem;"></div>').ok).toBe(false);
+    expect(validateComponentSpecHtml('<div style="padding: 1em;"></div>').ok).toBe(false);
+  });
+
+  test('calc/var 거부', () => {
+    expect(validateComponentSpecHtml('<div style="width: calc(100px - 8px);"></div>').ok).toBe(false);
+    expect(validateComponentSpecHtml('<div style="color: var(--main);"></div>').ok).toBe(false);
+  });
+
+  test('px와 단위 없는 0은 허용', () => {
+    const html = '<div style="width: 100px; padding: 0; border-radius: 12px 12px 0 0;"></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(true);
+  });
+
+  test('gradient 배경 거부', () => {
+    const result = validateComponentSpecHtml('<div style="background: linear-gradient(90deg, #FF0000, #0000FF);"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('색상으로 해석할 수 없는');
+  });
+
+  test('hex/rgb/rgba/색상명은 허용', () => {
+    const html = '<div style="background-color: rgba(0,0,0,0.3); color: red; border-color: #1565C0;"></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(true);
+  });
+
+  test('display는 flex만 허용', () => {
+    const result = validateComponentSpecHtml('<div style="display: block;"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('display');
+  });
+
+  test('justify-content 잘못된 값 거부', () => {
+    const result = validateComponentSpecHtml('<div style="display: flex; justify-content: space-around;"></div>');
+    expect(result.ok).toBe(false);
+  });
+
+  test('text-align은 화이트리스트에서 제외 (정렬은 flex로)', () => {
+    const result = validateComponentSpecHtml('<div style="text-align: center;"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('text-align');
+  });
+
+  test('inset box-shadow 거부', () => {
+    const result = validateComponentSpecHtml('<div style="box-shadow: inset 0 2px 4px #000000;"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('inset');
+  });
+
+  test('일반 box-shadow 허용', () => {
+    const html = '<div style="box-shadow: 0 4px 12px rgba(0,0,0,0.3);"></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(true);
+  });
+
+  test('font-weight 값 검증', () => {
+    expect(validateComponentSpecHtml('<div style="display: flex;"><span style="font-weight: 600;">x</span></div>').ok).toBe(true);
+    expect(validateComponentSpecHtml('<div style="display: flex;"><span style="font-weight: 650;">x</span></div>').ok).toBe(false);
+  });
+});
+
+describe('validateComponentSpecHtml — 구조 규칙', () => {
+  test('자식을 가진 컨테이너에 display: flex 필수', () => {
+    const result = validateComponentSpecHtml('<div><span>x</span></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('display: flex');
+  });
+
+  test('텍스트 태그는 자식 요소 금지 (leaf 전용)', () => {
+    const result = validateComponentSpecHtml('<div style="display: flex;"><p>hello <strong>world</strong></p></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('자식 요소를 가질 수 없습니다');
+  });
+
+  test('순수 텍스트 요소의 width/height 거부 (TextNode에서 무시됨)', () => {
+    const result = validateComponentSpecHtml('<div style="display: flex;"><span style="width: 200px;">x</span></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('무시');
+  });
+
+  test('프레임화된 텍스트 요소(배경 있음)의 width는 허용', () => {
+    const html = '<div style="display: flex;"><span style="width: 200px; background-color: #EEEEEE;">x</span></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(true);
+  });
+
+  test('position 속성 거부 (배치는 Auto Layout으로만)', () => {
+    const result = validateComponentSpecHtml('<div style="position: absolute;"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('position');
   });
 });

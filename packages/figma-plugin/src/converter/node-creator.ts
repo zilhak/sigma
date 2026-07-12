@@ -283,7 +283,9 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
                 }
               }
             };
-            if (hasValidBoundingRect(children)) {
+            // 실측 여부는 부모 rect로 판정 (추출 데이터는 부모가 항상 실측,
+            // 손-HTML은 스타일 유래 width만 있어도 height가 0 → CSS 의미론 분기로)
+            if (node.boundingRect && node.boundingRect.width > 0 && node.boundingRect.height > 0) {
               // 익스텐션 추출 데이터: 실측 교차축 크기가 부모 내부 교차축과
               // 일치할 때만(실제 stretch된 경우만) 적용 — HUG/FIXED 자식 보호.
               const parentCross = isHorizontal ? node.boundingRect.height : node.boundingRect.width;
@@ -404,16 +406,22 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
   // ── Auto Layout 형상 검증 + boundingRect fallback ──
   // Auto Layout 적용 후 자식 노드의 실제 배치가 원본 boundingRect와 일치하는지 검증.
   // 허용 오차(3px) 초과 시 Auto Layout 해제 → boundingRect 기반 절대 배치로 fallback.
-  // 단, boundingRect가 실측값이 아닌 손-HTML(rect=0)에서는 (0,0,0,0) 기준 검증이
-  // 무조건 실패해 정상 Auto Layout까지 절대배치로 되돌려버리므로, 유효한 추출
-  // 데이터일 때만 검증한다. 손-HTML은 Auto Layout 결과를 그대로 신뢰한다.
-  if (frame.layoutMode !== 'NONE' && children.length > 0 && hasValidBoundingRect(children)) {
+  // 단, 이 검증은 **완전 실측 데이터**(부모와 자식 rect가 모두 w>0 && h>0)에서만 수행한다.
+  // 손-HTML은 rect가 0이거나, inline style의 width만 rect에 부분 반영되는 경우가 있어
+  // (extractBoundingFromStyle) "일부 자식만 width>0"인 혼합 상태가 생기는데, 이를
+  // 실측으로 오판해 검증하면 정상 Auto Layout 전체가 절대배치로 파괴된다.
+  // → 부모 rect가 완전 실측일 때만 검증하고, 비교 대상도 완전 실측 자식으로 한정한다.
+  const parentFullyMeasured = node.boundingRect
+    && node.boundingRect.width > 0 && node.boundingRect.height > 0;
+  if (frame.layoutMode !== 'NONE' && children.length > 0 && parentFullyMeasured) {
     const parentRect = node.boundingRect;
     const childEntries: Array<{ figmaNode: SceneNode; originalRect: { x: number; y: number; width: number; height: number } }> = [];
 
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
       if (!child.boundingRect) continue;
+      // 부분 실측(스타일 유래 width만 있는 등) 자식은 비교 대상에서 제외
+      if (!(child.boundingRect.width > 0 && child.boundingRect.height > 0)) continue;
 
       // 부모의 boundingRect 기준 상대 좌표로 변환
       const relX = child.boundingRect.x - parentRect.x;
@@ -515,21 +523,6 @@ function hasNegativeMargins(children: ExtractedNode[]): boolean {
     if (!s) return false;
     return (s.marginLeft < 0) || (s.marginTop < 0) ||
            (s.marginRight < 0) || (s.marginBottom < 0);
-  });
-}
-
-/**
- * 자식들의 boundingRect가 "실측된 추출 데이터"인지 판정.
- * Sigma 익스텐션 추출 데이터는 getBoundingClientRect() 실측값을 담지만,
- * 손으로 작성한 인라인 스타일 HTML은 대부분 boundingRect가 0이다.
- * 하나라도 0보다 큰 width/height가 있으면 유효한 추출 데이터로 간주한다.
- * 이 판정으로 boundingRect 의존 분기(형상검증·stretch 비교)를 게이팅하여,
- * 익스텐션 경로는 기존대로 동작시키고 손-HTML만 CSS 의미론에 위임한다.
- */
-function hasValidBoundingRect(children: ExtractedNode[]): boolean {
-  return children.some(function(child) {
-    if (!child.boundingRect) return false;
-    return child.boundingRect.width > 0 || child.boundingRect.height > 0;
   });
 }
 

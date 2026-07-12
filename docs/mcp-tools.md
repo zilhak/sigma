@@ -127,13 +127,17 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 ## 컴포넌트 스펙 (스펙 기반 컴포넌트)
 
 엄격한 규칙의 HTML로 컴포넌트를 등록하고, alias + props만으로 인스턴스를 삽입하는 시스템.
+**전체 규칙·근거는 [component-spec.md](component-spec.md) 참조.**
 
-**스펙 HTML 규칙:**
+**스펙 HTML 규칙 요약:**
 - 단일 루트 요소, inline `style=""`만 허용 (`<style>` 블록·class 셀렉터 불가)
-- CSS는 화이트리스트만 통과: flexbox 계열(display/flex-direction/justify-content/align-items/gap 등),
-  padding, border-radius, border-width/color, background-color, color, font-size/weight,
-  line-height, letter-spacing, text-align, width/height, opacity, box-shadow, overflow
-- 텍스트 파라미터: `<span data-sigma-slot="이름">기본값</span>` — 텍스트 태그에만, 텍스트 속성만 허용
+- 컨테이너(div/button)만 자식 보유 가능, 자식이 있으면 `display: flex` **명시 필수**.
+  텍스트 태그(span/p/h1~h6 등)는 leaf 전용
+- CSS는 속성 화이트리스트 + **값 검증** 통과 필요:
+  길이는 **px만**(%, rem, em, calc, var 거부), 색상은 단색만(gradient 거부),
+  enum 속성은 지원 값만(`display: flex`, `justify-content: space-between` 등)
+- `position`·`text-align` 불가 — 배치·정렬은 Auto Layout(flex) 속성으로만
+- 텍스트 파라미터: `<span data-sigma-slot="이름">기본값</span>` — 텍스트 태그에만, 순수 텍스트 속성만 허용
 - 위반 시 조용히 근사하지 않고 위반 목록과 함께 등록 거부
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |

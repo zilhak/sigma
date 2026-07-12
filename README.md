@@ -242,6 +242,7 @@ docker compose up -d
 | [아키텍처](docs/architecture.md) | 시스템 구조, 통신 흐름, 데이터 흐름 |
 | [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
 | [MCP 도구 레퍼런스](docs/mcp-tools.md) | 119개 MCP 도구 전체 목록 및 파라미터 |
+| [컴포넌트 스펙](docs/component-spec.md) | HTML 기반 컴포넌트 정의 규칙 (화이트리스트·값 검증·slot) |
 | [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |
 | [Extractor 스크립트 상세](docs/scripts/extractor.md) | 추출 로직, 가시성 판단, 텍스트 병합, SVG/아이콘 처리 |
 | [Storybook 스크립트 상세](docs/scripts/storybook.md) | Channel API, SPA 전환, 추출+저장 워크플로우 |
