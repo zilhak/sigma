@@ -1,4 +1,4 @@
-import type { ExtractedNode, TreeFilter } from '@sigma/shared';
+import type { ExtractedNode, TreeFilter, ComponentParam } from '@sigma/shared';
 import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, setLastCreatedPosition } from './converter';
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
@@ -22,6 +22,7 @@ import { createVariableCollection, createVariable, getVariables, setVariableValu
 import { createNodeFromSvg } from './node-ops';
 import { listAvailableFonts, getNodeCSS } from './node-ops';
 import { createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './node-ops';
+import { buildComponentFromSpec, useComponentSpec } from './node-ops';
 import { getAvailableLibraries, getLibraryComponents, getLibraryVariables, importLibraryComponent, importLibraryStyle } from './node-ops';
 import { setExportSettings, getExportSettings } from './node-ops';
 import { createSticky, createConnector } from './node-ops';
@@ -141,6 +142,7 @@ const PAGE_SCOPED_CREATE = new Set([
   'create-polygon', 'create-star', 'create-line', 'create-vector',
   'create-image-node', 'create-component-instance', 'create-component',
   'create-component-set', 'create-node-from-svg', 'create-sticky', 'create-connector',
+  'build-component-from-spec', 'use-component-spec',
 ]);
 
 // 메시지 핸들러
@@ -1371,6 +1373,49 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('convert-to-component-result', errMsg);
+      }
+      break;
+    }
+
+    // === Component Spec System (스펙 기반 컴포넌트) ===
+
+    case 'build-component-from-spec': {
+      try {
+        const result = await buildComponentFromSpec(
+          {
+            html: msg.html as string,
+            alias: msg.alias as string,
+            params: msg.params as ComponentParam[],
+            position: msg.position as { x: number; y: number } | undefined,
+            pageId: msg.pageId as string | undefined,
+          },
+          getTargetPage
+        );
+        sendResult('build-component-from-spec-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('build-component-from-spec-result', errMsg);
+      }
+      break;
+    }
+
+    case 'use-component-spec': {
+      try {
+        const result = await useComponentSpec(
+          {
+            componentNodeId: msg.componentNodeId as string,
+            alias: msg.alias as string,
+            props: msg.props as Record<string, string> | undefined,
+            position: msg.position as { x: number; y: number } | undefined,
+            parentId: msg.parentId as string | undefined,
+            pageId: msg.pageId as string | undefined,
+          },
+          getTargetPage
+        );
+        sendResult('use-component-spec-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('use-component-spec-result', errMsg);
       }
       break;
     }

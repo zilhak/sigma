@@ -2225,6 +2225,78 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     },
   },
 
+  // === Component Spec System (스펙 기반 컴포넌트) ===
+  {
+    name: 'sigma_define_component',
+    description:
+      '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수). ' +
+      'HTML은 단일 루트 + inline style만 허용, CSS는 화이트리스트(flexbox/padding/border-radius/색상/폰트 계열)만 통과합니다. ' +
+      '텍스트 파라미터는 <span data-sigma-slot="이름">기본값</span>으로 선언하면 Figma TEXT 속성으로 승격됩니다. ' +
+      '등록 후 sigma_use_component로 alias + props만으로 인스턴스를 삽입할 수 있습니다. 규칙 위반 시 위반 목록과 함께 거부됩니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        alias: { type: 'string', description: '의미론적 식별자 (소문자 시작, [a-z0-9_]). 예: ui_badge' },
+        description: { type: 'string', description: '컴포넌트 용도 설명 — 카탈로그에서 선택 근거가 됨' },
+        html: { type: 'string', description: '스펙 HTML (단일 루트, inline style, data-sigma-slot으로 텍스트 파라미터 선언)' },
+        position: {
+          type: 'object',
+          properties: { x: { type: 'number' }, y: { type: 'number' } },
+          description: '(선택) 컴포넌트 배치 위치. 미지정 시 자동 배치',
+        },
+        overwrite: { type: 'boolean', description: '(선택) 같은 alias가 있으면 교체. 기본 false' },
+      },
+      required: ['token', 'alias', 'description', 'html'],
+    },
+  },
+  {
+    name: 'sigma_list_components',
+    description:
+      '등록된 컴포넌트 스펙 카탈로그를 조회합니다 (토큰 불필요). ' +
+      '기본은 alias + 설명 + param 목록만 (토큰 절약형), alias 인자를 주면 해당 스펙의 HTML 원문 포함 상세를 반환합니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        alias: { type: 'string', description: '(선택) 상세 조회할 컴포넌트 alias' },
+      },
+    },
+  },
+  {
+    name: 'sigma_use_component',
+    description:
+      '등록된 스펙 컴포넌트의 인스턴스를 생성합니다 (바인딩 필수). ' +
+      'Figma 내부를 탐색할 필요 없이 alias + props만으로 삽입됩니다. ' +
+      '예: alias: "ui_badge", props: {text: "완료"}. 사용 가능한 alias와 param은 sigma_list_components로 확인하세요.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        alias: { type: 'string', description: '등록된 컴포넌트 alias' },
+        props: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: '(선택) 파라미터 값 매핑. 예: {text: "haha"}. 미지정 param은 기본값 유지',
+        },
+        x: { type: 'number', description: '(선택) X 좌표. 미지정 시 자동 배치' },
+        y: { type: 'number', description: '(선택) Y 좌표' },
+        parentId: { type: 'string', description: '(선택) 부모 노드 ID (Auto Layout 프레임에 삽입 가능)' },
+      },
+      required: ['token', 'alias'],
+    },
+  },
+  {
+    name: 'sigma_delete_component_spec',
+    description: '레지스트리에서 컴포넌트 스펙을 삭제합니다 (토큰 불필요). Figma의 컴포넌트 노드는 유지됩니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        alias: { type: 'string', description: '삭제할 컴포넌트 alias' },
+      },
+      required: ['alias'],
+    },
+  },
+
   // === Component System ===
   {
     name: 'sigma_create_component',

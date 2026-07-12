@@ -14,7 +14,7 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 **핵심 철학:** 서로 연동하면 최고의 효율, 따로따로도 사용 가능
 
-Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 115개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
+Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 119개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
 ## 모듈 구성
 
@@ -169,7 +169,7 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 (115개):**
+**MCP 도구 (119개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
@@ -199,6 +199,9 @@ AI Agent:
 | | `sigma_set_selection` / `sigma_get_selection_details` | 노드 선택 / 선택 노드 상세 |
 | | `sigma_get_viewport` / `sigma_set_viewport` | 뷰포트 조회 / 설정 |
 | | `sigma_scan_text_nodes` / `sigma_scan_nodes_by_types` | 텍스트/타입별 노드 스캔 |
+| 컴포넌트 스펙 | `sigma_define_component` | 스펙 HTML로 컴포넌트 등록 |
+| | `sigma_list_components` / `sigma_use_component` | 스펙 카탈로그 / alias+props로 인스턴스 생성 |
+| | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 |
 | 컴포넌트 | `sigma_get_local_components` | 로컬 컴포넌트 목록 |
 | | `sigma_get_instance_overrides` / `sigma_set_instance_overrides` | 인스턴스 오버라이드 |
 | 주석 | `sigma_get_annotations` / `sigma_set_annotation` | 주석 조회/추가 |
@@ -238,7 +241,7 @@ docker compose up -d
 |------|------|
 | [아키텍처](docs/architecture.md) | 시스템 구조, 통신 흐름, 데이터 흐름 |
 | [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
-| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 115개 MCP 도구 전체 목록 및 파라미터 |
+| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 119개 MCP 도구 전체 목록 및 파라미터 |
 | [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |
 | [Extractor 스크립트 상세](docs/scripts/extractor.md) | 추출 로직, 가시성 판단, 텍스트 병합, SVG/아이콘 처리 |
 | [Storybook 스크립트 상세](docs/scripts/storybook.md) | Channel API, SPA 전환, 추출+저장 워크플로우 |

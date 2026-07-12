@@ -17,6 +17,22 @@ export type {
 // Color utilities
 export { parseColor, rgbaToString } from './colors';
 
+// Component Spec (컴포넌트 스펙 시스템)
+export type {
+  ComponentParam,
+  ComponentSpecRecord,
+  SpecValidationResult,
+  ComponentSpecStamp,
+} from './component-spec';
+export {
+  validateComponentSpecHtml,
+  isValidSpecName,
+  ALLOWED_CSS_PROPS,
+  ALLOWED_TAGS,
+  SPEC_NAME_RE,
+  SPEC_HTML_MAX_LENGTH,
+} from './component-spec';
+
 // Constants
 export {
   VERSION,

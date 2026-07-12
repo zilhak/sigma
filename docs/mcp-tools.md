@@ -1,6 +1,6 @@
 # MCP 도구 레퍼런스
 
-Sigma MCP 서버가 제공하는 115개 도구의 전체 목록입니다.
+Sigma MCP 서버가 제공하는 119개 도구의 전체 목록입니다.
 
 ## 사용 흐름
 
@@ -123,6 +123,32 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_scan_nodes_by_types` | 하위 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능 폰트 목록 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
+
+## 컴포넌트 스펙 (스펙 기반 컴포넌트)
+
+엄격한 규칙의 HTML로 컴포넌트를 등록하고, alias + props만으로 인스턴스를 삽입하는 시스템.
+
+**스펙 HTML 규칙:**
+- 단일 루트 요소, inline `style=""`만 허용 (`<style>` 블록·class 셀렉터 불가)
+- CSS는 화이트리스트만 통과: flexbox 계열(display/flex-direction/justify-content/align-items/gap 등),
+  padding, border-radius, border-width/color, background-color, color, font-size/weight,
+  line-height, letter-spacing, text-align, width/height, opacity, box-shadow, overflow
+- 텍스트 파라미터: `<span data-sigma-slot="이름">기본값</span>` — 텍스트 태그에만, 텍스트 속성만 허용
+- 위반 시 조용히 근사하지 않고 위반 목록과 함께 등록 거부
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_define_component` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description`, `html` | `position`, `overwrite` |
+| `sigma_list_components` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias` |
+| `sigma_use_component` | alias + props로 인스턴스 생성 | `token`, `alias` | `props`, `x`, `y`, `parentId` |
+| `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 | `alias` | — |
+
+```
+등록: sigma_define_component(token, alias: "ui_badge", description: "상태 뱃지",
+      html: '<div style="display: flex; padding: 2px 8px; background-color: #E3F2FD; border-radius: 10px;">
+               <span data-sigma-slot="text" style="font-size: 12px; color: #1565C0;">Badge</span></div>')
+사용: sigma_use_component(token, alias: "ui_badge", props: {text: "완료"}, x: 100, y: 100)
+```
 
 ## 컴포넌트
 

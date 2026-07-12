@@ -59,7 +59,14 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
 
   // 텍스트만 있는 요소 (자식 없고 텍스트만)
   if (isTextOnlyElement(node)) {
-    return createTextNode(textContent, styles);
+    const textNode = createTextNode(textContent, styles);
+    // 컴포넌트 스펙의 slot 마커: data-sigma-slot → pluginData로 보존
+    // (빌드 후 slot 이름 → TextNode 매핑에 사용)
+    const slotName = node.attributes ? node.attributes['data-sigma-slot'] : undefined;
+    if (textNode && slotName) {
+      textNode.setPluginData('sigma-slot', slotName);
+    }
+    return textNode;
   }
 
   // 프레임 생성

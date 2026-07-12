@@ -1153,6 +1153,16 @@ export class FigmaWebSocketServer {
     return this.sendCommand('CREATE_COMPONENT', args, { pluginId });
   }
 
+  // === Component Spec System (스펙 기반 컴포넌트) ===
+
+  async buildComponentFromSpec(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('BUILD_COMPONENT_FROM_SPEC', args, { pluginId });
+  }
+
+  async useComponentSpec(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('USE_COMPONENT_SPEC', args, { pluginId });
+  }
+
   async convertToComponent(nodeId: string, pluginId?: string): Promise<unknown> {
     return this.sendCommand('CONVERT_TO_COMPONENT', { nodeId }, { pluginId });
   }

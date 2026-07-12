@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 115개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 119개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -213,6 +213,19 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_scan_nodes_by_types` | 하위에서 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능한 폰트 목록 조회 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
+
+### 컴포넌트 스펙 (스펙 기반 컴포넌트)
+
+엄격한 규칙의 HTML(단일 루트, inline style, CSS 화이트리스트)로 컴포넌트를 등록하면,
+에이전트가 Figma 내부를 탐색하지 않고 alias + props만으로 인스턴스를 삽입할 수 있다.
+텍스트 파라미터는 `<span data-sigma-slot="이름">기본값</span>`으로 선언 → Figma TEXT 속성으로 승격.
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_define_component` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부) | `token`, `alias`, `description`, `html` | `position`, `overwrite` |
+| `sigma_list_components` | 스펙 카탈로그 조회 (alias 지정 시 HTML 원문 포함 상세) | — | `alias` |
+| `sigma_use_component` | alias + props로 인스턴스 생성 | `token`, `alias` | `props`, `x`, `y`, `parentId` |
+| `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지) | `alias` | — |
 
 ### 컴포넌트 (토큰 필수)
 
@@ -491,6 +504,7 @@ packages/
 │       │   ├── batch.ts       # 배치 작업 (스캔/일괄수정/일괄삭제)
 │       │   ├── selection.ts   # 선택 관리 (get/set) + 뷰포트
 │       │   ├── components.ts  # 컴포넌트/인스턴스 관리
+│       │   ├── component-spec.ts # 스펙 기반 컴포넌트 빌드/사용
 │       │   ├── annotations.ts # 주석 관리
 │       │   ├── prototyping.ts # 프로토타이핑/인터랙션
 │       │   ├── frames.ts      # 프레임 목록/삭제
@@ -524,9 +538,11 @@ packages/
 │       │       ├── figma.ts   # Figma 프레임/노드 조작
 │       │       ├── storage.ts # 데이터 저장/조회
 │       │       ├── scripts.ts # 스크립트 정보
-│       │       └── management.ts # 스토리지/상태 관리
+│       │       ├── management.ts # 스토리지/상태 관리
+│       │       └── component-spec.ts # 컴포넌트 스펙 등록/사용
 │       ├── scripts/registry.ts # 임베드 스크립트 레지스트리
 │       ├── storage/index.ts   # 파일 스토리지
+│       ├── storage/component-specs.ts # 컴포넌트 스펙 레지스트리 (~/.sigma/component-specs)
 │       └── auth/token.ts      # 토큰 관리
 │
 └── shared/                    # 공유 패키지
@@ -547,6 +563,10 @@ packages/
     │   ├── diff/              # 컴포넌트 비교
     │   │   ├── core.ts        # diffNodes, diffSummary
     │   │   ├── snapshots.ts   # 스냅샷 저장/비교
+    │   │   └── index.ts
+    │   ├── component-spec/    # 컴포넌트 스펙 시스템
+    │   │   ├── types.ts       # ComponentSpecRecord, ComponentParam 등
+    │   │   ├── validate.ts    # 스펙 HTML 검증 (CSS 화이트리스트, slot 규칙)
     │   │   └── index.ts
     │   ├── extractor-standalone-entry.ts  # → dist/extractor.standalone.js
     │   ├── storybook-standalone-entry.ts  # → dist/storybook.standalone.js

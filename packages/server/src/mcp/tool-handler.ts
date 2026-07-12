@@ -3,6 +3,7 @@ import { authHandlers } from './handlers/auth.js';
 import { figmaHandlers } from './handlers/figma.js';
 import { scriptsHandlers } from './handlers/scripts.js';
 import { managementHandlers } from './handlers/management.js';
+import { componentSpecHandlers } from './handlers/component-spec.js';
 import { jsonResponse, type ToolContext, type ToolResult } from './helpers.js';
 
 /**
@@ -14,6 +15,7 @@ const handlers: Record<string, (args: Record<string, unknown>, context: ToolCont
   ...figmaHandlers,
   ...scriptsHandlers,
   ...managementHandlers,
+  ...componentSpecHandlers,
 };
 
 /**
