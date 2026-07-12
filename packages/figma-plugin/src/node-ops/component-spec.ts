@@ -176,6 +176,15 @@ export async function useComponentSpec(
   }
   const component = node as ComponentNode;
 
+  // Figma는 메인 컴포넌트를 삭제해도 기존 인스턴스 보호를 위해 limbo 상태로
+  // 유지한다 (getNodeById로 여전히 조회됨, parent만 null). 삭제된 컴포넌트로
+  // 조용히 인스턴스를 만들지 않고 명시적으로 실패한다.
+  if (!component.parent) {
+    throw new Error(
+      `계약 위반: 컴포넌트 "${options.alias}"의 노드(${options.componentNodeId})가 Figma에서 삭제되었습니다 — sigma_define_component로 다시 등록하세요`
+    );
+  }
+
   const stampRaw = component.getPluginData(SPEC_STAMP_KEY);
   if (!stampRaw) {
     throw new Error('계약 위반: 컴포넌트에 sigma-spec 스탬프가 없습니다 — MCP로 등록된 컴포넌트가 아니거나 스탬프가 유실되었습니다. 다시 등록하세요');
