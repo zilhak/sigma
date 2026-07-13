@@ -2230,9 +2230,11 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     name: 'sigma_create_component_spec',
     description:
       '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수). ' +
-      'HTML은 단일 루트 + inline style만 허용, CSS는 화이트리스트(flexbox/padding/border-radius/색상/폰트 계열)만 통과합니다. ' +
-      '텍스트 파라미터는 <span data-sigma-slot="이름">기본값</span>으로 선언하면 Figma TEXT 속성으로 승격됩니다. ' +
-      '등록 후 sigma_create_component_spec_instance로 alias + props만으로 인스턴스를 삽입할 수 있습니다. 규칙 위반 시 위반 목록과 함께 거부됩니다.',
+      '핵심 규칙: 단일 루트 + inline style만, 컨테이너(div/button)에 자식이 있으면 display: flex 필수, ' +
+      '길이는 px만(%·rem·em 불가), 색상은 단색만(gradient 불가), position·text-align 불가(배치·정렬은 flex로). ' +
+      '텍스트 파라미터: <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> → Figma TEXT 속성으로 승격. ' +
+      '고정폭 컨테이너 안의 slot에 text-overflow: ellipsis를 주면 긴 값이 …처리됩니다. ' +
+      'overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파됩니다. 규칙 위반 시 위반 목록과 함께 거부됩니다.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -2240,12 +2242,13 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         alias: { type: 'string', description: '의미론적 식별자 (소문자 시작, [a-z0-9_]). 예: ui_badge' },
         description: { type: 'string', description: '컴포넌트 용도 설명 — 카탈로그에서 선택 근거가 됨' },
         html: { type: 'string', description: '스펙 HTML (단일 루트, inline style, data-sigma-slot으로 텍스트 파라미터 선언)' },
+        namespace: { type: 'string', description: '(선택) 스타일 체계 구분용 네임스페이스 (소문자 시작, [a-z0-9_]). 예: plan(기획), design(디자인). 기본 "default". 유일성 키는 namespace+alias' },
         position: {
           type: 'object',
           properties: { x: { type: 'number' }, y: { type: 'number' } },
           description: '(선택) 컴포넌트 배치 위치. 미지정 시 자동 배치',
         },
-        overwrite: { type: 'boolean', description: '(선택) 같은 alias가 있으면 교체. 기본 false' },
+        overwrite: { type: 'boolean', description: '(선택) 같은 namespace+alias가 있으면 in-place 갱신(인스턴스 전파). 기본 false' },
       },
       required: ['token', 'alias', 'description', 'html'],
     },
@@ -2254,11 +2257,13 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     name: 'sigma_list_component_specs',
     description:
       '등록된 컴포넌트 스펙 카탈로그를 조회합니다 (토큰 불필요). ' +
-      '기본은 alias + 설명 + param 목록만 (토큰 절약형), alias 인자를 주면 해당 스펙의 HTML 원문 포함 상세를 반환합니다.',
+      '기본은 alias/설명/params/size/sizing (토큰 절약형) — sizing의 hug 축은 내용에 따라 늘어나고 fixed 축은 고정입니다. ' +
+      'alias 인자를 주면 해당 스펙의 HTML 원문 포함 상세를 반환합니다.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         alias: { type: 'string', description: '(선택) 상세 조회할 컴포넌트 alias' },
+        namespace: { type: 'string', description: '(선택) 네임스페이스 필터 (alias 지정 시엔 모호성 해소용)' },
       },
     },
   },
@@ -2273,6 +2278,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       properties: {
         token: { type: 'string', description: '인증 토큰' },
         alias: { type: 'string', description: '등록된 컴포넌트 alias' },
+        namespace: { type: 'string', description: '(선택) 네임스페이스 — alias가 여러 네임스페이스에 있으면 필수' },
         props: {
           type: 'object',
           additionalProperties: { type: 'string' },
@@ -2292,6 +2298,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       type: 'object' as const,
       properties: {
         alias: { type: 'string', description: '삭제할 컴포넌트 alias' },
+        namespace: { type: 'string', description: '(선택) 네임스페이스 — alias가 여러 네임스페이스에 있으면 필수' },
       },
       required: ['alias'],
     },

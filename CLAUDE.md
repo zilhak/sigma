@@ -222,10 +222,10 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부) | `token`, `alias`, `description`, `html` | `position`, `overwrite` |
-| `sigma_list_component_specs` | 스펙 카탈로그 조회 (alias 지정 시 HTML 원문 포함 상세) | — | `alias` |
-| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 | `token`, `alias` | `props`, `x`, `y`, `parentId` |
-| `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지) | `alias` | — |
+| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부) | `token`, `alias`, `description`, `html` | `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파) |
+| `sigma_list_component_specs` | 스펙 카탈로그 조회 (alias 지정 시 HTML 원문 포함 상세) | — | `alias`, `namespace` |
+| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `parentId` |
+| `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지) | `alias` | `namespace` |
 
 ### 컴포넌트 (토큰 필수)
 

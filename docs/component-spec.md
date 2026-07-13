@@ -4,12 +4,29 @@
 `alias + props`만으로 인스턴스를 삽입하는 시스템.
 
 ```
-등록:  sigma_create_component_spec(token, alias, description, html)
-조회:  sigma_list_component_specs()            → alias + 설명 + params (카탈로그)
+등록:  sigma_create_component_spec(token, alias, description, html, namespace?, overwrite?)
+조회:  sigma_list_component_specs(namespace?)  → alias/설명/params/size/sizing (카탈로그)
        sigma_list_component_specs(alias)       → HTML 원문 포함 상세
-사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId)
-삭제:  sigma_delete_component_spec(alias) → 레지스트리만 삭제 (Figma 노드 유지)
+사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId, namespace?)
+삭제:  sigma_delete_component_spec(alias, namespace?) → 레지스트리만 삭제 (Figma 노드 유지)
 ```
+
+## 핵심 동작
+
+- **네임스페이스**: 유일성 키는 `(namespace, alias)`. 같은 역할·다른 스타일 체계
+  (기획 `plan` vs 디자인 `design`, 페이지별 테마)를 네임스페이스로 구분한다.
+  미지정 시 `default`. use 시 alias가 여러 네임스페이스에 있으면 명시를 요구한다.
+- **overwrite = in-place 갱신**: 기존 ComponentNode의 내용을 교체하므로 nodeId가
+  유지되고 **기존 인스턴스에 자동 전파**된다. TEXT 속성은 이름으로 매칭해 재사용하므로
+  인스턴스의 props 오버라이드도 유지된다. (노드가 삭제된 경우에만 신규 빌드로 폴백)
+- **파일 스코프**: 등록 시 파일 ID(`figma.root` pluginData `sigma-file-id`, 최초 1회
+  발급)를 레코드에 기록하고, use 시 현재 파일과 대조한다. 다른 파일에서 등록된
+  컴포넌트를 쓰려 하면 출처 파일명을 알려주며 거부한다.
+- **size / sizing**: 카탈로그의 `size`는 기본 상태 크기, `sizing`은 축별 동작 —
+  `hug`(내용에 따라 늘어남, 뱃지처럼) / `fixed`(스펙에 width/height 명시, 인풋처럼).
+  스펙 루트의 크기 명시 여부에서 유도된다.
+- **넘침 경고**: fixed 축 컴포넌트에 긴 props를 넣어 텍스트가 컴포넌트 영역을
+  벗어나면 use 응답에 `warnings`로 알려준다 (조용한 삐져나옴 방지).
 
 ## 설계 원칙
 
@@ -73,16 +90,33 @@
 ### 텍스트 파라미터 (slot)
 
 ```html
-<span data-sigma-slot="text" style="font-size: 12px; color: #1565C0;">기본값</span>
+<span data-sigma-slot="text" data-sigma-desc="버튼에 표시할 라벨"
+      style="font-size: 12px; color: #1565C0;">기본값</span>
 ```
 
 - `data-sigma-slot="이름"` — 빌드 시 Figma 네이티브 **TEXT 컴포넌트 속성**으로 승격.
+- `data-sigma-desc="설명"` — (선택) 카탈로그에 노출되는 파라미터 설명. slot 요소에만 허용.
 - slot 이름: `^[a-z][a-z0-9_]*$`, 스펙 내 중복 불가.
 - **텍스트 태그에만**, **루트 불가**, 자식 요소 불가, 기본 텍스트 필수.
 - slot 요소에는 순수 텍스트 속성만 허용: `font-size`, `font-weight`, `line-height`,
-  `letter-spacing`, `color`, `opacity`.
+  `letter-spacing`, `color`, `opacity`, `text-overflow`(아래).
   배경/패딩/보더/크기는 부모 컨테이너에 둔다 — slot이 프레임으로 승격되면
   "slot = 단일 TextNode" 계약이 깨지기 때문.
+
+### 긴 텍스트 처리 (ellipsis)
+
+고정폭 컨테이너 안의 slot은 긴 값이 들어오면 글자가 박스 밖으로 삐져나온다.
+**`text-overflow: ellipsis`** 를 slot에 주면 빌드 시 텍스트가 컨테이너를 채우도록
+(FILL) 설정되고, 넘치는 값은 단일 행 `…`으로 잘린다.
+
+```html
+<div style="display: flex; width: 220px; padding: 8px 12px; ...">
+  <span data-sigma-slot="value" style="font-size: 14px; text-overflow: ellipsis;">Select</span>
+</div>
+```
+
+- ellipsis slot은 **직계 부모 컨테이너에 width 명시 필수** (hug 부모에서는 무의미 + 거부).
+- ellipsis가 없는 fixed 컴포넌트에 긴 값을 넣으면 use 응답의 `warnings`로 넘침을 알려준다.
 
 ## 예시
 

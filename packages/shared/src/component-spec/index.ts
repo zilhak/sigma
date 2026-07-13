@@ -1,5 +1,6 @@
 export type {
   ComponentParam,
+  ComponentSizing,
   ComponentSpecRecord,
   SpecValidationResult,
   ComponentSpecStamp,

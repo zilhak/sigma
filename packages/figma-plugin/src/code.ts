@@ -1388,6 +1388,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
             params: msg.params as ComponentParam[],
             position: msg.position as { x: number; y: number } | undefined,
             pageId: msg.pageId as string | undefined,
+            existingNodeId: msg.existingNodeId as string | undefined,
           },
           getTargetPage
         );
@@ -1409,6 +1410,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
             position: msg.position as { x: number; y: number } | undefined,
             parentId: msg.parentId as string | undefined,
             pageId: msg.pageId as string | undefined,
+            expectedFileId: msg.expectedFileId as string | undefined,
+            specFileName: msg.specFileName as string | undefined,
           },
           getTargetPage
         );

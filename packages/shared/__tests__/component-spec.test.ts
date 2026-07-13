@@ -280,3 +280,62 @@ describe('validateComponentSpecHtml — 구조 규칙', () => {
     expect(result.errors.join('\n')).toContain('position');
   });
 });
+
+describe('validateComponentSpecHtml — sizing 유도', () => {
+  test('루트 width/height 명시 → fixed', () => {
+    const result = validateComponentSpecHtml('<div style="width: 200px; height: 40px;"></div>');
+    expect(result.sizing).toEqual({ horizontal: 'fixed', vertical: 'fixed' });
+  });
+
+  test('루트 크기 미지정 → hug', () => {
+    const result = validateComponentSpecHtml('<div style="display: flex;"><span>x</span></div>');
+    expect(result.sizing).toEqual({ horizontal: 'hug', vertical: 'hug' });
+  });
+
+  test('width만 명시 → 가로 fixed, 세로 hug', () => {
+    const result = validateComponentSpecHtml('<div style="width: 220px;"></div>');
+    expect(result.sizing).toEqual({ horizontal: 'fixed', vertical: 'hug' });
+  });
+});
+
+describe('validateComponentSpecHtml — param 설명(data-sigma-desc)과 ellipsis', () => {
+  test('data-sigma-desc → param.description', () => {
+    const html = '<div style="display: flex;"><span data-sigma-slot="text" data-sigma-desc="버튼에 표시할 라벨">OK</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(true);
+    expect(result.params[0].description).toBe('버튼에 표시할 라벨');
+  });
+
+  test('slot 없는 요소의 data-sigma-desc 거부', () => {
+    const result = validateComponentSpecHtml('<div data-sigma-desc="x"></div>');
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('data-sigma-desc');
+  });
+
+  test('고정폭 부모 안의 ellipsis slot → truncates: true', () => {
+    const html = '<div style="display: flex; width: 220px;"><span data-sigma-slot="value" style="text-overflow: ellipsis;">Select</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.params[0].truncates).toBe(true);
+  });
+
+  test('hug 부모 안의 ellipsis slot 거부', () => {
+    const html = '<div style="display: flex;"><span data-sigma-slot="value" style="text-overflow: ellipsis;">Select</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('width가 명시');
+  });
+
+  test('slot 아닌 요소의 text-overflow 거부', () => {
+    const html = '<div style="display: flex; width: 100px;"><span style="text-overflow: ellipsis;">x</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('slot 요소에서만');
+  });
+
+  test('ellipsis 값 외 거부', () => {
+    const html = '<div style="display: flex; width: 100px;"><span data-sigma-slot="v" style="text-overflow: clip;">x</span></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(false);
+  });
+});

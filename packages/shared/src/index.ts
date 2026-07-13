@@ -20,6 +20,7 @@ export { parseColor, rgbaToString } from './colors';
 // Component Spec (컴포넌트 스펙 시스템)
 export type {
   ComponentParam,
+  ComponentSizing,
   ComponentSpecRecord,
   SpecValidationResult,
   ComponentSpecStamp,

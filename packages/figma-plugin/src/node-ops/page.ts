@@ -1,5 +1,20 @@
 // Plugin Data Key
 export const PLUGIN_DATA_KEY = 'sigma-file-key';
+const FILE_ID_KEY = 'sigma-file-id';
+
+/**
+ * Sigma 파일 ID — 파일별 안정 식별자.
+ * figma.fileKey가 없는 드래프트에서도 동작하도록 root pluginData에 최초 1회 발급.
+ * .fig 파일과 함께 이동하며, 컴포넌트 스펙 레지스트리의 파일 스코프 대조에 쓴다.
+ */
+export function getOrCreateFileId(): string {
+  let id = figma.root.getPluginData(FILE_ID_KEY);
+  if (!id) {
+    id = 'file-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    figma.root.setPluginData(FILE_ID_KEY, id);
+  }
+  return id;
+}
 
 // 저장된 fileKey 가져오기
 export function getStoredFileKey(): string | null {

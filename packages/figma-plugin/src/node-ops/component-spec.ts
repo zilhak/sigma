@@ -1,6 +1,8 @@
 import type { ComponentParam, ComponentSpecStamp } from '@sigma/shared';
 import { parseHTML } from '../converter/html-parser';
 import { createFigmaNode } from '../converter/node-creator';
+import { updateExistingFrame } from '../converter/frame';
+import { getOrCreateFileId } from './page';
 
 /**
  * 컴포넌트 스펙 시스템 — 스펙(HTML)으로 컴포넌트 빌드 + alias 기반 인스턴스 생성
@@ -9,6 +11,8 @@ import { createFigmaNode } from '../converter/node-creator';
  * - 빌드된 ComponentNode에는 pluginData('sigma-spec')로 스탬프가 심어진다
  *   (alias, params, propertyIds). 스탬프는 .fig 파일과 함께 이동하는 파일 내장 진실.
  * - 사용(use) 시 스탬프를 검증하고, 어긋나면 조용히 진행하지 않고 명시적 에러를 낸다.
+ * - overwrite 재등록은 **기존 ComponentNode를 in-place 갱신**한다 —
+ *   nodeId가 유지되므로 기존 인스턴스들이 자동으로 새 형상을 따라간다.
  */
 
 const SPEC_STAMP_KEY = 'sigma-spec';
@@ -28,6 +32,11 @@ export interface BuildComponentFromSpecOptions {
   params: ComponentParam[];
   position?: { x: number; y: number };
   pageId?: string;
+  /**
+   * overwrite 시 기존 컴포넌트 nodeId — 존재하면 in-place 갱신 (인스턴스 전파),
+   * 소실/limbo면 신규 빌드로 폴백.
+   */
+  existingNodeId?: string;
 }
 
 export interface BuildComponentFromSpecResult {
@@ -41,11 +50,97 @@ export interface BuildComponentFromSpecResult {
   pageName: string;
   /** param 이름 → Figma component property id */
   propertyIds: Record<string, string>;
+  /** 기존 컴포넌트를 in-place 갱신했는지 (true면 기존 인스턴스에 전파됨) */
+  updated: boolean;
+  /** 이 파일의 Sigma 파일 ID (레지스트리 파일 스코프용) */
+  fileId: string;
+  fileName: string;
+}
+
+/**
+ * slot 마커가 심어진 TextNode들을 찾아 TEXT 컴포넌트 속성과 연결한다.
+ * 기존 속성은 이름으로 매칭해 재사용(기본값 갱신)하고, 스펙에서 사라진 속성은 삭제 —
+ * in-place 갱신 시 인스턴스의 기존 오버라이드가 유지되도록 하기 위함.
+ */
+function bindSlots(component: ComponentNode, params: ComponentParam[]): Record<string, string> {
+  // 기존 TEXT 속성: baseName → full key ("text#12:3")
+  const defs = component.componentPropertyDefinitions;
+  const existingTextProps: Record<string, string> = {};
+  for (const key of Object.keys(defs)) {
+    if (defs[key].type !== 'TEXT') continue;
+    const hashIdx = key.lastIndexOf('#');
+    const base = hashIdx === -1 ? key : key.slice(0, hashIdx);
+    existingTextProps[base] = key;
+  }
+
+  const slotTextNodes = component.findAll(
+    (n) => n.type === 'TEXT' && n.getPluginData(SLOT_MARK_KEY) !== ''
+  ) as TextNode[];
+
+  const propertyIds: Record<string, string> = {};
+
+  for (const param of params) {
+    const textNode = slotTextNodes.find((t) => t.getPluginData(SLOT_MARK_KEY) === param.name);
+    if (!textNode) {
+      throw new Error(
+        `slot "${param.name}"에 해당하는 텍스트 노드를 찾지 못했습니다 — 변환기가 slot 요소를 TextNode로 만들지 않았습니다 (스펙 검증기와 변환기의 불일치, 버그 신고 필요)`
+      );
+    }
+
+    let propKey = existingTextProps[param.name];
+    if (propKey) {
+      // 재사용: 기본값만 갱신 (인스턴스 오버라이드 유지)
+      propKey = component.editComponentProperty(propKey, { defaultValue: param.defaultValue });
+      delete existingTextProps[param.name];
+    } else {
+      propKey = component.addComponentProperty(param.name, 'TEXT', param.defaultValue);
+    }
+    textNode.componentPropertyReferences = { characters: propKey };
+    propertyIds[param.name] = propKey;
+
+    // ellipsis slot: 고정폭 부모를 FILL로 채우고 넘치면 …처리 (단일 행)
+    if (param.truncates) {
+      try {
+        textNode.layoutSizingHorizontal = 'FILL';
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`ellipsis slot "${param.name}"의 FILL 설정 실패 (부모가 Auto Layout 고정폭이어야 함): ${msg}`);
+      }
+      textNode.textTruncation = 'ENDING';
+      textNode.maxLines = 1;
+    }
+  }
+
+  // 스펙에서 사라진 TEXT 속성 정리
+  for (const base of Object.keys(existingTextProps)) {
+    component.deleteComponentProperty(existingTextProps[base]);
+  }
+
+  return propertyIds;
+}
+
+/** 스펙 루트에 배경이 없으면 투명 유지 (변환기의 루트 흰 배경 대체를 되돌림) */
+function restoreTransparentRoot(component: ComponentNode, html: string): void {
+  const extracted = parseHTML(html);
+  const rootBg = extracted && extracted.styles ? extracted.styles.backgroundColor : null;
+  if (!rootBg || rootBg.a <= 0) {
+    component.fills = [];
+  }
+}
+
+function stampComponent(
+  component: ComponentNode,
+  alias: string,
+  params: ComponentParam[],
+  propertyIds: Record<string, string>
+): void {
+  const stamp: ComponentSpecStamp = { alias, params, propertyIds };
+  component.setPluginData(SPEC_STAMP_KEY, JSON.stringify(stamp));
 }
 
 /**
  * 스펙 HTML로 Figma 컴포넌트를 빌드한다.
- * HTML → 프레임 변환(기존 변환기) → 컴포넌트 승격 → slot을 TEXT 속성으로 연결 → 스탬프.
+ * existingNodeId가 유효하면 in-place 갱신(인스턴스 전파), 아니면 신규 빌드.
  */
 export async function buildComponentFromSpec(
   options: BuildComponentFromSpecOptions,
@@ -53,6 +148,43 @@ export async function buildComponentFromSpec(
 ): Promise<BuildComponentFromSpecResult> {
   const targetPage = getTargetPage ? getTargetPage(options.pageId) : figma.currentPage;
 
+  // ── in-place 갱신 경로 ──
+  if (options.existingNodeId) {
+    const existing = figma.getNodeById(options.existingNodeId);
+    if (existing && existing.type === 'COMPONENT' && existing.parent) {
+      const component = existing as ComponentNode;
+
+      // 내용 전체 교체 (루트 스타일 + 자식 재구성, 폰트 로드 포함)
+      await updateExistingFrame(component.id, 'html', options.html);
+      restoreTransparentRoot(component, options.html);
+      component.name = options.alias;
+
+      const propertyIds = bindSlots(component, options.params);
+      stampComponent(component, options.alias, options.params, propertyIds);
+
+      const pageName = component.parent && component.parent.type === 'PAGE'
+        ? (component.parent as PageNode).name
+        : targetPage.name;
+
+      return {
+        nodeId: component.id,
+        key: component.key,
+        name: component.name,
+        x: component.x,
+        y: component.y,
+        width: component.width,
+        height: component.height,
+        pageName,
+        propertyIds,
+        updated: true,
+        fileId: getOrCreateFileId(),
+        fileName: figma.root.name,
+      };
+    }
+    // 기존 노드 소실/limbo → 신규 빌드로 폴백
+  }
+
+  // ── 신규 빌드 경로 ──
   await loadDefaultFonts();
 
   const extracted = parseHTML(options.html);
@@ -69,13 +201,6 @@ export async function buildComponentFromSpec(
     throw new Error(`스펙 루트는 프레임으로 변환되어야 합니다 (현재: ${frame.type})`);
   }
 
-  // 변환기는 페이지 임포트 가독성을 위해 루트의 투명 배경을 흰색으로 대체하지만,
-  // 컴포넌트는 임의 배경 위에 놓이므로 스펙에 배경이 없으면 투명을 유지해야 한다.
-  const rootBg = extracted.styles && extracted.styles.backgroundColor;
-  if (!rootBg || rootBg.a <= 0) {
-    frame.fills = [];
-  }
-
   targetPage.appendChild(frame);
 
   // createComponentFromNode: Auto Layout 등 모든 속성을 보존한 채 컴포넌트로 승격.
@@ -87,6 +212,13 @@ export async function buildComponentFromSpec(
   const component = figma.createComponentFromNode(frame);
   component.name = options.alias;
 
+  // 변환기는 페이지 임포트 가독성을 위해 루트의 투명 배경을 흰색으로 대체하지만,
+  // 컴포넌트는 임의 배경 위에 놓이므로 스펙에 배경이 없으면 투명을 유지해야 한다.
+  const rootBg = extracted.styles && extracted.styles.backgroundColor;
+  if (!rootBg || rootBg.a <= 0) {
+    component.fills = [];
+  }
+
   if (options.position) {
     component.x = options.position.x;
     component.y = options.position.y;
@@ -96,32 +228,8 @@ export async function buildComponentFromSpec(
     component.y = autoPos.y;
   }
 
-  // slot 마커(pluginData 'sigma-slot')가 심어진 TextNode를 찾아 TEXT 속성으로 연결
-  const propertyIds: Record<string, string> = {};
-  const slotTextNodes = component.findAll(
-    (n) => n.type === 'TEXT' && n.getPluginData(SLOT_MARK_KEY) !== ''
-  ) as TextNode[];
-
-  for (const param of options.params) {
-    const textNode = slotTextNodes.find((t) => t.getPluginData(SLOT_MARK_KEY) === param.name);
-    if (!textNode) {
-      component.remove();
-      throw new Error(
-        `slot "${param.name}"에 해당하는 텍스트 노드를 찾지 못했습니다 — 변환기가 slot 요소를 TextNode로 만들지 않았습니다 (스펙 검증기와 변환기의 불일치, 버그 신고 필요)`
-      );
-    }
-    const propertyName = component.addComponentProperty(param.name, 'TEXT', param.defaultValue);
-    textNode.componentPropertyReferences = { characters: propertyName };
-    propertyIds[param.name] = propertyName;
-  }
-
-  // 파일 내장 계약 스탬프
-  const stamp: ComponentSpecStamp = {
-    alias: options.alias,
-    params: options.params,
-    propertyIds,
-  };
-  component.setPluginData(SPEC_STAMP_KEY, JSON.stringify(stamp));
+  const propertyIds = bindSlots(component, options.params);
+  stampComponent(component, options.alias, options.params, propertyIds);
 
   if (targetPage.id === figma.currentPage.id) {
     figma.currentPage.selection = [component];
@@ -138,6 +246,9 @@ export async function buildComponentFromSpec(
     height: component.height,
     pageName: targetPage.name,
     propertyIds,
+    updated: false,
+    fileId: getOrCreateFileId(),
+    fileName: figma.root.name,
   };
 }
 
@@ -148,6 +259,10 @@ export interface UseComponentSpecOptions {
   position?: { x: number; y: number };
   parentId?: string;
   pageId?: string;
+  /** 레지스트리에 기록된 파일 ID — 현재 파일과 불일치하면 거부 */
+  expectedFileId?: string;
+  /** 레지스트리에 기록된 파일 이름 (에러 안내용) */
+  specFileName?: string;
 }
 
 export interface UseComponentSpecResult {
@@ -160,11 +275,13 @@ export interface UseComponentSpecResult {
   height: number;
   appliedProps: string[];
   pageName: string;
+  /** 텍스트 넘침 등 품질 경고 (없으면 생략) */
+  warnings?: string[];
 }
 
 /**
  * 등록된 스펙 컴포넌트의 인스턴스를 생성하고 props(TEXT 속성)를 적용한다.
- * 스탬프 검증에 실패하면 명시적 에러 — 조용히 이상한 결과를 만들지 않는다.
+ * 스탬프/파일 검증에 실패하면 명시적 에러 — 조용히 이상한 결과를 만들지 않는다.
  */
 export async function useComponentSpec(
   options: UseComponentSpecOptions,
@@ -172,10 +289,21 @@ export async function useComponentSpec(
 ): Promise<UseComponentSpecResult> {
   const targetPage = getTargetPage ? getTargetPage(options.pageId) : figma.currentPage;
 
+  // 파일 스코프 검증: 다른 파일에서 등록된 컴포넌트는 이 파일에서 못 쓴다
+  if (options.expectedFileId) {
+    const currentFileId = getOrCreateFileId();
+    if (currentFileId !== options.expectedFileId) {
+      const origin = options.specFileName ? `"${options.specFileName}" 파일` : '다른 파일';
+      throw new Error(
+        `컴포넌트 "${options.alias}"는 ${origin}에서 등록되었습니다 — 현재 파일(${figma.root.name})에서는 사용할 수 없습니다. 이 파일에서 다시 등록하세요`
+      );
+    }
+  }
+
   const node = figma.getNodeById(options.componentNodeId);
   if (!node) {
     throw new Error(
-      `계약 위반: 컴포넌트 노드(${options.componentNodeId})가 존재하지 않습니다. Figma에서 삭제된 것으로 보입니다 — sigma_define_component로 다시 등록하세요`
+      `계약 위반: 컴포넌트 노드(${options.componentNodeId})가 존재하지 않습니다. Figma에서 삭제된 것으로 보입니다 — sigma_create_component_spec으로 다시 등록하세요`
     );
   }
   if (node.type !== 'COMPONENT') {
@@ -188,7 +316,7 @@ export async function useComponentSpec(
   // 조용히 인스턴스를 만들지 않고 명시적으로 실패한다.
   if (!component.parent) {
     throw new Error(
-      `계약 위반: 컴포넌트 "${options.alias}"의 노드(${options.componentNodeId})가 Figma에서 삭제되었습니다 — sigma_define_component로 다시 등록하세요`
+      `계약 위반: 컴포넌트 "${options.alias}"의 노드(${options.componentNodeId})가 Figma에서 삭제되었습니다 — sigma_create_component_spec으로 다시 등록하세요`
     );
   }
 
@@ -262,7 +390,29 @@ export async function useComponentSpec(
     instance.setProperties(propertyValues);
   }
 
-  return {
+  // 텍스트 넘침 감지: 고정폭 축에서 텍스트가 컴포넌트 영역을 벗어나면 경고
+  // (hug 축은 함께 늘어나므로 넘치지 않는다. ellipsis slot은 …처리되어 안 넘친다)
+  const warnings: string[] = [];
+  const instBounds = instance.absoluteBoundingBox;
+  if (instBounds) {
+    const texts = instance.findAll((n) => n.type === 'TEXT') as TextNode[];
+    for (const t of texts) {
+      const b = t.absoluteBoundingBox;
+      if (!b) continue;
+      const overX = Math.round(b.x + b.width - (instBounds.x + instBounds.width));
+      const overY = Math.round(b.y + b.height - (instBounds.y + instBounds.height));
+      if (overX > 1 || overY > 1) {
+        const slot = t.getPluginData(SLOT_MARK_KEY);
+        const which = slot ? `param "${slot}"의 텍스트` : `텍스트 "${t.characters.slice(0, 20)}"`;
+        const dir = overX > 1 ? `가로 ${overX}px` : `세로 ${overY}px`;
+        warnings.push(
+          `${which}가 컴포넌트 영역을 ${dir} 넘칩니다 — 더 짧은 값을 쓰거나, 스펙의 해당 slot에 text-overflow: ellipsis를 고려하세요`
+        );
+      }
+    }
+  }
+
+  const result: UseComponentSpecResult = {
     nodeId: instance.id,
     name: instance.name,
     alias: options.alias,
@@ -273,6 +423,10 @@ export async function useComponentSpec(
     appliedProps: propKeys,
     pageName: targetPage.name,
   };
+  if (warnings.length > 0) {
+    result.warnings = warnings;
+  }
+  return result;
 }
 
 /**

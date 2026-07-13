@@ -17,7 +17,7 @@
  * - 길이 값은 px 필수 (0만 단위 생략 허용) — %, rem, em, calc, var 불가
  */
 
-import type { ComponentParam, SpecValidationResult } from './types';
+import type { ComponentParam, ComponentSizing, SpecValidationResult } from './types';
 import { parseColor } from '../colors';
 
 /** alias / 파라미터 이름 규칙 */
@@ -61,13 +61,14 @@ export const ALLOWED_CSS_PROPS = new Set([
   'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
   'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
   'box-shadow',
+  'text-overflow',
 ]);
 
 /** 허용 HTML 속성 (style, data-sigma-* 외에는 최소한만) */
 const ALLOWED_ATTRS = new Set(['style', 'src', 'alt', 'href']);
 
-/** data-sigma-* 주석 어휘 (MVP: slot만) */
-const SIGMA_ATTRS = new Set(['data-sigma-slot']);
+/** data-sigma-* 주석 어휘 */
+const SIGMA_ATTRS = new Set(['data-sigma-slot', 'data-sigma-desc']);
 
 /** slot을 붙일 수 있는 태그 — 텍스트 태그와 동일 */
 export const SLOT_ALLOWED_TAGS = TEXT_TAGS;
@@ -79,6 +80,8 @@ export const SLOT_ALLOWED_TAGS = TEXT_TAGS;
  */
 export const SLOT_ALLOWED_CSS_PROPS = new Set([
   'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'opacity',
+  // ellipsis: 고정폭 컨테이너 안에서 넘치는 텍스트를 …으로 처리 (slot 전용)
+  'text-overflow',
 ]);
 
 // ── 값 검증 테이블 ──
@@ -114,6 +117,7 @@ const ENUM_PROPS: Record<string, string[]> = {
   'align-self': ['auto', 'flex-start', 'center', 'flex-end', 'stretch'],
   'flex-wrap': ['nowrap', 'wrap'],
   'overflow': ['visible', 'hidden'],
+  'text-overflow': ['ellipsis'],
 };
 
 /** 텍스트 요소를 프레임으로 승격시키는 속성 (이게 있으면 width/height가 유효해짐) */
@@ -175,6 +179,8 @@ interface OpenElement {
   tagName: string;
   /** data-sigma-slot 값 (slot 요소인 경우) */
   slotName: string | null;
+  /** data-sigma-desc 값 (slot 파라미터 설명) */
+  slotDesc: string | null;
   /** slot 요소의 텍스트 조각 */
   slotText: string[];
   /** 자식 요소를 가졌는지 */
@@ -197,17 +203,20 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
   const errors: string[] = [];
   const params: ComponentParam[] = [];
   const seenSlotNames = new Set<string>();
+  // 루트 스타일에서 유도하는 축별 크기 동작 (width/height 명시 → fixed, 아니면 hug)
+  const sizing: ComponentSizing = { horizontal: 'hug', vertical: 'hug' };
 
   let source = html.replace(/<!--[\s\S]*?-->/g, '').trim();
 
   if (!source) {
-    return { ok: false, errors: ['HTML이 비어 있습니다'], params: [] };
+    return { ok: false, errors: ['HTML이 비어 있습니다'], params: [], sizing };
   }
   if (source.length > SPEC_HTML_MAX_LENGTH) {
     return {
       ok: false,
       errors: [`HTML이 너무 큽니다 (${source.length}자 > 최대 ${SPEC_HTML_MAX_LENGTH}자)`],
       params: [],
+      sizing,
     };
   }
   if (/<!DOCTYPE/i.test(source) || /<(html|head|body|style|script)\b/i.test(source)) {
@@ -252,7 +261,7 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     errors.push(`루트 요소는 1개여야 합니다 (현재 ${rootCount}개)`);
   }
 
-  return { ok: errors.length === 0, errors, params };
+  return { ok: errors.length === 0, errors, params, sizing };
 
   function handleText(raw: string) {
     const trimmed = raw.trim();
@@ -293,9 +302,12 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     }
 
     let slotName: string | null = null;
+    let slotDesc: string | null = null;
     for (const name of Object.keys(attrs)) {
       if (name === 'data-sigma-slot') {
         slotName = attrs[name];
+      } else if (name === 'data-sigma-desc') {
+        slotDesc = attrs[name];
       } else if (name.startsWith('data-sigma-')) {
         if (!SIGMA_ATTRS.has(name)) {
           errors.push(`알 수 없는 data-sigma-* 속성: ${name} (지원: ${Array.from(SIGMA_ATTRS).join(', ')})`);
@@ -311,7 +323,25 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       ? validateStyle(attrs['style'], tagName, slotName !== null)
       : new Set<string>();
 
+    // 첫 루트 요소의 width/height 명시 여부 → 컴포넌트 크기 동작(sizing)
+    if (stack.length === 0 && rootCount === 1) {
+      sizing.horizontal = styleProps.has('width') ? 'fixed' : 'hug';
+      sizing.vertical = styleProps.has('height') ? 'fixed' : 'hug';
+    }
+
+    if (slotDesc !== null && slotName === null) {
+      errors.push('data-sigma-desc는 data-sigma-slot이 있는 요소에만 붙일 수 있습니다 (파라미터 설명용)');
+    }
+
     if (slotName !== null) {
+      // ellipsis slot은 직계 부모 컨테이너가 고정폭이어야 동작
+      // (텍스트를 FILL로 늘려 잘라내므로 hug 부모에서는 무의미 + Figma 순환 참조 에러)
+      if (styleProps.has('text-overflow')) {
+        const parent = stack.length > 0 ? stack[stack.length - 1] : null;
+        if (!parent || !parent.styleProps.has('width')) {
+          errors.push(`text-overflow: ellipsis slot("${slotName}")은 직계 부모 컨테이너에 width가 명시되어야 합니다 — 고정폭 안에서만 …처리가 가능합니다`);
+        }
+      }
       if (!SLOT_ALLOWED_TAGS.has(tagName)) {
         errors.push(`data-sigma-slot은 텍스트 태그에만 붙일 수 있습니다: <${tagName}> 불가 (허용: ${Array.from(SLOT_ALLOWED_TAGS).join(', ')})`);
       }
@@ -337,6 +367,7 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     stack.push({
       tagName,
       slotName,
+      slotDesc,
       slotText: [],
       hasChildElement: false,
       hasText: false,
@@ -360,7 +391,14 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       if (!defaultValue) {
         errors.push(`slot "${open.slotName}" 요소에 기본 텍스트가 없습니다. 기본값으로 쓸 텍스트를 넣으세요`);
       } else {
-        params.push({ name: open.slotName, type: 'text', defaultValue });
+        const param: ComponentParam = { name: open.slotName, type: 'text', defaultValue };
+        if (open.slotDesc && open.slotDesc.trim()) {
+          param.description = open.slotDesc.trim();
+        }
+        if (open.styleProps.has('text-overflow')) {
+          param.truncates = true;
+        }
+        params.push(param);
       }
     }
 
@@ -402,6 +440,10 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       props.add(prop);
       if (!ALLOWED_CSS_PROPS.has(prop)) {
         errors.push(`<${tagName}> style의 허용되지 않는 CSS 속성: "${prop}" — 변환이 보장되지 않는 속성은 등록할 수 없습니다`);
+        continue;
+      }
+      if (prop === 'text-overflow' && !isSlot) {
+        errors.push(`text-overflow는 data-sigma-slot 요소에서만 허용됩니다 (<${tagName}>는 slot이 아님)`);
         continue;
       }
       if (isSlot && !SLOT_ALLOWED_CSS_PROPS.has(prop)) {

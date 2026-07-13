@@ -360,6 +360,9 @@ function applyStyleProperty(styles: ComputedStyles, prop: string, value: string)
     case 'textAlign':
       styles.textAlign = value;
       break;
+    case 'textOverflow':
+      styles.textOverflow = value;
+      break;
     case 'display':
       styles.display = value;
       break;
