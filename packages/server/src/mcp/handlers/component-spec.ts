@@ -100,7 +100,7 @@ export const componentSpecHandlers: Record<
     }
 
     if (!args.token) {
-      return jsonResponse({ error: '토큰이 필요합니다 (검증만 하려면 validateOnly: true)' });
+      return jsonResponse({ error: '토큰이 필요합니다 — sigma_login으로 발급 후 sigma_bind로 바인딩하세요 (등록 없이 검증만 하려면 validateOnly: true)' });
     }
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
@@ -175,6 +175,7 @@ export const componentSpecHandlers: Record<
         params: validation.params,
         sizing: validation.sizing,
         ...result,
+        hint: `sigma_create_component_spec_instance(alias: "${alias}", props: {...})로 삽입하세요. 미리보기: sigma_screenshot(nodeId: "${result.nodeId}")`,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

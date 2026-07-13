@@ -2241,7 +2241,8 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '텍스트 태그에만, 루트 불가, 기본 텍스트 필수, 순수 텍스트 속성만 허용. ' +
       '고정폭 직계 부모 안의 slot에 text-overflow: ellipsis를 주면 긴 값이 …처리됩니다. ' +
       '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
-      'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용).',
+      'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
+      '등록 후 sigma_create_component_spec_instance로 삽입, 카탈로그는 sigma_list_component_specs.',
     inputSchema: {
       type: 'object' as const,
       properties: {

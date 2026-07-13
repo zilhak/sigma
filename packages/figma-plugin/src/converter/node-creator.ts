@@ -303,9 +303,12 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
               // 손-HTML(boundingRect 무효): CSS align-items:stretch 의미론을 직접 적용.
               // CSS는 교차축 크기가 auto(미명시)인 자식만 stretch하므로,
               // 교차축 크기가 명시된 자식은 제외한다.
+              // TEXT 노드도 제외 — CSS에서 인라인 텍스트의 stretch는 시각 효과가 없고,
+              // Figma에서 텍스트에 FILL을 걸면 textAutoResize가 바뀌어 폭이 굳고
+              // 긴 값이 늘어나는 대신 줄바꿈되는 부작용이 생긴다.
               const cs = child.styles;
               const childCrossSize = cs ? (isHorizontal ? cs.height : cs.width) : 'auto';
-              if (typeof childCrossSize !== 'number') {
+              if (typeof childCrossSize !== 'number' && childNode.type !== 'TEXT') {
                 applyStretch();
               }
             }
