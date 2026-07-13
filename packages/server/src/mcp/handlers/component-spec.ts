@@ -67,8 +67,7 @@ export const componentSpecHandlers: Record<
 > = {
   async sigma_create_component_spec(args, context) {
     const { wsServer } = context;
-    const access = validateFigmaAccess(args.token as string, wsServer);
-    if (access.error) return access.error;
+    const validateOnly = args.validateOnly as boolean | undefined;
 
     const alias = args.alias as string;
     const namespace = (args.namespace as string | undefined) || DEFAULT_NAMESPACE;
@@ -87,6 +86,24 @@ export const componentSpecHandlers: Record<
     if (!html) {
       return jsonResponse({ error: 'html은 필수입니다' });
     }
+
+    // validateOnly: Figma 연결·토큰 없이 규칙 검증만 (사전 점검용 dry-run)
+    if (validateOnly) {
+      const dryRun = validateComponentSpecHtml(html);
+      return jsonResponse({
+        validateOnly: true,
+        ok: dryRun.ok,
+        ...(dryRun.ok
+          ? { message: '스펙이 규칙을 통과했습니다 — validateOnly를 빼고 호출하면 등록됩니다', params: dryRun.params, sizing: dryRun.sizing }
+          : { error: '스펙 HTML이 규칙을 위반했습니다', violations: dryRun.errors }),
+      });
+    }
+
+    if (!args.token) {
+      return jsonResponse({ error: '토큰이 필요합니다 (검증만 하려면 validateOnly: true)' });
+    }
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
 
     // 중복 확인 (같은 namespace 내 alias)
     const existing = await getComponentSpec(namespace, alias);
@@ -178,8 +195,24 @@ export const componentSpecHandlers: Record<
 
     // 기본: 토큰 절약형 카탈로그
     const records = await listComponentSpecs(namespace);
+    // 빈 카탈로그 = 처음 쓰는 에이전트일 가능성 → 스펙 작성 규칙 요약을 함께 안내
+    const bootstrapRules = records.length === 0
+      ? {
+          specRules: [
+            '단일 루트 + inline style만 (<style>·class 불가)',
+            '컨테이너는 div/button만, 자식이 있으면 display: flex 명시 필수',
+            '텍스트 태그(span/p/h1~h6/a/strong/em/b/i)는 leaf 전용, img/br은 void',
+            '길이는 px만(0만 단위 생략), 색상은 단색만(gradient·var 불가)',
+            'position·text-align 불가 — 배치·정렬은 flex 속성(justify-content/align-items)으로',
+            '텍스트 파라미터: <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> (텍스트 태그에만, 루트 불가)',
+            '고정폭 직계 부모 안의 slot에 text-overflow: ellipsis → 긴 값 …처리',
+            '사전 점검: sigma_create_component_spec에 validateOnly: true (Figma 연결 불필요)',
+          ],
+        }
+      : {};
     return jsonResponse({
       count: records.length,
+      ...bootstrapRules,
       components: records.map((r) => ({
         alias: r.alias,
         namespace: r.namespace,

@@ -2229,16 +2229,23 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   {
     name: 'sigma_create_component_spec',
     description:
-      '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수). ' +
-      '핵심 규칙: 단일 루트 + inline style만, 컨테이너(div/button)에 자식이 있으면 display: flex 필수, ' +
-      '길이는 px만(%·rem·em 불가), 색상은 단색만(gradient 불가), position·text-align 불가(배치·정렬은 flex로). ' +
-      '텍스트 파라미터: <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> → Figma TEXT 속성으로 승격. ' +
-      '고정폭 컨테이너 안의 slot에 text-overflow: ellipsis를 주면 긴 값이 …처리됩니다. ' +
-      'overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파됩니다. 규칙 위반 시 위반 목록과 함께 거부됩니다.',
+      '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수, validateOnly는 예외). ' +
+      '[구조] 단일 루트, inline style만(<style>·class 불가). 컨테이너 태그는 div/button뿐이며 자식이 있으면 display: flex 명시 필수. ' +
+      '텍스트 태그(span/p/h1~h6/a/strong/em/b/i)는 자식 없는 leaf 전용. void는 img/br. 허용 HTML 속성: style, src, alt, href, data-sigma-*. ' +
+      '[CSS] 화이트리스트: display/flex-direction/justify-content/align-items/align-self/gap/flex-wrap/flex-grow/flex-shrink/overflow, ' +
+      'width/height, padding(개별 포함), background-color/background/color/opacity, border-width·color(개별)·radius, ' +
+      'font-size/font-weight/line-height/letter-spacing, box-shadow(inset 불가). ' +
+      '[값] 길이는 px만(0만 단위 생략, %·rem·em·calc·var 불가), 색상은 단색만(hex/rgb/rgba/색상명, gradient 불가), ' +
+      'position·text-align 불가 — 배치·정렬은 flex 속성으로. 순수 텍스트 요소의 width/height 불가(부모 div로 감싸기). ' +
+      '[slot] <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> → Figma TEXT 속성으로 승격. ' +
+      '텍스트 태그에만, 루트 불가, 기본 텍스트 필수, 순수 텍스트 속성만 허용. ' +
+      '고정폭 직계 부모 안의 slot에 text-overflow: ellipsis를 주면 긴 값이 …처리됩니다. ' +
+      '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
+      'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용).',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        token: { type: 'string', description: '인증 토큰' },
+        token: { type: 'string', description: '인증 토큰 (validateOnly: true면 생략 가능)' },
         alias: { type: 'string', description: '의미론적 식별자 (소문자 시작, [a-z0-9_]). 예: ui_badge' },
         description: { type: 'string', description: '컴포넌트 용도 설명 — 카탈로그에서 선택 근거가 됨' },
         html: { type: 'string', description: '스펙 HTML (단일 루트, inline style, data-sigma-slot으로 텍스트 파라미터 선언)' },
@@ -2249,8 +2256,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
           description: '(선택) 컴포넌트 배치 위치. 미지정 시 자동 배치',
         },
         overwrite: { type: 'boolean', description: '(선택) 같은 namespace+alias가 있으면 in-place 갱신(인스턴스 전파). 기본 false' },
+        validateOnly: { type: 'boolean', description: '(선택) true면 등록 없이 HTML 규칙 검증만 수행 — Figma 연결·토큰 불필요. 결과로 ok/violations/params/sizing 반환' },
       },
-      required: ['token', 'alias', 'description', 'html'],
+      required: ['alias', 'description', 'html'],
     },
   },
   {

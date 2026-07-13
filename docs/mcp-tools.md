@@ -142,7 +142,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description`, `html` | `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파) |
+| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description`, `html` | `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
 | `sigma_list_component_specs` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias`, `namespace` |
 | `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `parentId` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 | `alias` | `namespace` |

@@ -4,6 +4,8 @@
 `alias + props`만으로 인스턴스를 삽입하는 시스템.
 
 ```
+검증:  sigma_create_component_spec(alias, description, html, validateOnly: true)
+       → Figma 연결·토큰 없이 규칙 검증만 (사전 점검 dry-run)
 등록:  sigma_create_component_spec(token, alias, description, html, namespace?, overwrite?)
 조회:  sigma_list_component_specs(namespace?)  → alias/설명/params/size/sizing (카탈로그)
        sigma_list_component_specs(alias)       → HTML 원문 포함 상세
@@ -27,7 +29,11 @@
   스펙 루트의 크기 명시 여부에서 유도된다.
 - **넘침 경고**: fixed 축 컴포넌트에 긴 props를 넣어 텍스트가 컴포넌트 영역을
   벗어나거나(가로 삐져나옴), 줄바꿈으로 인스턴스 높이가 기본의 1.5배를 넘으면
-  use 응답에 `warnings`로 알려준다 (조용한 삐져나옴·변형 방지).
+  use 응답에 `warnings`로 알려준다 (조용한 삐져나옴·변형 방지). hug 축은 컴포넌트가
+  함께 늘어나므로 검사하지 않는다.
+- **외부 에이전트 온보딩**: 규칙 전문이 `sigma_create_component_spec` 도구 설명에
+  요약돼 있고, 빈 카탈로그 조회 시 `specRules`로 안내되며, `validateOnly: true`로
+  등록 없이 사전 검증할 수 있다 — 이 저장소의 문서 없이도 MCP만으로 사용 가능.
 
 ## 설계 원칙
 
