@@ -244,7 +244,25 @@ export const componentSpecHandlers: Record<
         },
         pluginId
       );
-      return jsonResponse({ success: true, ...(result as object) });
+
+      // 조용한 변형 감지: 고정폭 컴포넌트에서 긴 텍스트가 줄바꿈되면 높이가 급증한다
+      // (영역 밖 침범이 아니라 플러그인의 넘침 경고에는 안 걸림)
+      const r = result as { height?: number; warnings?: string[] };
+      const warnings = r.warnings ? [...r.warnings] : [];
+      if (
+        spec.sizing && spec.sizing.horizontal === 'fixed' && spec.size &&
+        typeof r.height === 'number' && r.height > spec.size.height * 1.5
+      ) {
+        warnings.push(
+          `인스턴스 높이가 기본 ${spec.size.height}px에서 ${r.height}px로 늘었습니다 — 긴 텍스트가 줄바꿈된 것으로 보입니다. 더 짧은 값을 쓰거나 스펙 slot에 text-overflow: ellipsis를 고려하세요`
+        );
+      }
+
+      return jsonResponse({
+        success: true,
+        ...(result as object),
+        ...(warnings.length > 0 ? { warnings } : {}),
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return jsonResponse({ error: errorMessage });
