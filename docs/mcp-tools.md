@@ -142,16 +142,16 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_define_component` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description`, `html` | `position`, `overwrite` |
-| `sigma_list_components` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias` |
-| `sigma_use_component` | alias + props로 인스턴스 생성 | `token`, `alias` | `props`, `x`, `y`, `parentId` |
+| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description`, `html` | `position`, `overwrite` |
+| `sigma_list_component_specs` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias` |
+| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 | `token`, `alias` | `props`, `x`, `y`, `parentId` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 | `alias` | — |
 
 ```
-등록: sigma_define_component(token, alias: "ui_badge", description: "상태 뱃지",
+등록: sigma_create_component_spec(token, alias: "ui_badge", description: "상태 뱃지",
       html: '<div style="display: flex; padding: 2px 8px; background-color: #E3F2FD; border-radius: 10px;">
                <span data-sigma-slot="text" style="font-size: 12px; color: #1565C0;">Badge</span></div>')
-사용: sigma_use_component(token, alias: "ui_badge", props: {text: "완료"}, x: 100, y: 100)
+사용: sigma_create_component_spec_instance(token, alias: "ui_badge", props: {text: "완료"}, x: 100, y: 100)
 ```
 
 ## 컴포넌트

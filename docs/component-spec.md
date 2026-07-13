@@ -4,10 +4,10 @@
 `alias + props`만으로 인스턴스를 삽입하는 시스템.
 
 ```
-등록:  sigma_define_component(token, alias, description, html)
-조회:  sigma_list_components()            → alias + 설명 + params (카탈로그)
-       sigma_list_components(alias)       → HTML 원문 포함 상세
-사용:  sigma_use_component(token, alias, props, x, y, parentId)
+등록:  sigma_create_component_spec(token, alias, description, html)
+조회:  sigma_list_component_specs()            → alias + 설명 + params (카탈로그)
+       sigma_list_component_specs(alias)       → HTML 원문 포함 상세
+사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId)
 삭제:  sigma_delete_component_spec(alias) → 레지스트리만 삭제 (Figma 노드 유지)
 ```
 
@@ -96,8 +96,8 @@
 ```
 
 ```
-sigma_define_component(token, alias: "ui_badge", description: "상태 표시용 뱃지", html: ...)
-sigma_use_component(token, alias: "ui_badge", props: {text: "완료"}, parentId: "12:34")
+sigma_create_component_spec(token, alias: "ui_badge", description: "상태 표시용 뱃지", html: ...)
+sigma_create_component_spec_instance(token, alias: "ui_badge", props: {text: "완료"}, parentId: "12:34")
 ```
 
 검증된 레이아웃 패턴 (라이브 테스트 PASS):

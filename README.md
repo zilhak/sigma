@@ -199,8 +199,8 @@ AI Agent:
 | | `sigma_set_selection` / `sigma_get_selection_details` | 노드 선택 / 선택 노드 상세 |
 | | `sigma_get_viewport` / `sigma_set_viewport` | 뷰포트 조회 / 설정 |
 | | `sigma_scan_text_nodes` / `sigma_scan_nodes_by_types` | 텍스트/타입별 노드 스캔 |
-| 컴포넌트 스펙 | `sigma_define_component` | 스펙 HTML로 컴포넌트 등록 |
-| | `sigma_list_components` / `sigma_use_component` | 스펙 카탈로그 / alias+props로 인스턴스 생성 |
+| 컴포넌트 스펙 | `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 |
+| | `sigma_list_component_specs` / `sigma_create_component_spec_instance` | 스펙 카탈로그 / alias+props로 인스턴스 생성 |
 | | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 |
 | 컴포넌트 | `sigma_get_local_components` | 로컬 컴포넌트 목록 |
 | | `sigma_get_instance_overrides` / `sigma_set_instance_overrides` | 인스턴스 오버라이드 |

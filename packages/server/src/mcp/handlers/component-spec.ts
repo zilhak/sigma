@@ -23,7 +23,7 @@ export const componentSpecHandlers: Record<
   string,
   (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>
 > = {
-  async sigma_define_component(args, context) {
+  async sigma_create_component_spec(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
@@ -99,7 +99,7 @@ export const componentSpecHandlers: Record<
     }
   },
 
-  async sigma_list_components(args, _context) {
+  async sigma_list_component_specs(args, _context) {
     const alias = args.alias as string | undefined;
 
     // alias 지정 시: HTML 원문 포함 상세 (계층화 노출의 2단계)
@@ -120,11 +120,11 @@ export const componentSpecHandlers: Record<
         description: r.description,
         params: r.params.map((p) => ({ name: p.name, type: p.type, defaultValue: p.defaultValue })),
       })),
-      hint: '특정 컴포넌트의 HTML 원문은 alias 인자로 조회, 삽입은 sigma_use_component',
+      hint: '특정 컴포넌트의 HTML 원문은 alias 인자로 조회, 삽입은 sigma_create_component_spec_instance',
     });
   },
 
-  async sigma_use_component(args, context) {
+  async sigma_create_component_spec_instance(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;

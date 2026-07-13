@@ -2227,12 +2227,12 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 
   // === Component Spec System (스펙 기반 컴포넌트) ===
   {
-    name: 'sigma_define_component',
+    name: 'sigma_create_component_spec',
     description:
       '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수). ' +
       'HTML은 단일 루트 + inline style만 허용, CSS는 화이트리스트(flexbox/padding/border-radius/색상/폰트 계열)만 통과합니다. ' +
       '텍스트 파라미터는 <span data-sigma-slot="이름">기본값</span>으로 선언하면 Figma TEXT 속성으로 승격됩니다. ' +
-      '등록 후 sigma_use_component로 alias + props만으로 인스턴스를 삽입할 수 있습니다. 규칙 위반 시 위반 목록과 함께 거부됩니다.',
+      '등록 후 sigma_create_component_spec_instance로 alias + props만으로 인스턴스를 삽입할 수 있습니다. 규칙 위반 시 위반 목록과 함께 거부됩니다.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -2251,7 +2251,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     },
   },
   {
-    name: 'sigma_list_components',
+    name: 'sigma_list_component_specs',
     description:
       '등록된 컴포넌트 스펙 카탈로그를 조회합니다 (토큰 불필요). ' +
       '기본은 alias + 설명 + param 목록만 (토큰 절약형), alias 인자를 주면 해당 스펙의 HTML 원문 포함 상세를 반환합니다.',
@@ -2263,11 +2263,11 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     },
   },
   {
-    name: 'sigma_use_component',
+    name: 'sigma_create_component_spec_instance',
     description:
       '등록된 스펙 컴포넌트의 인스턴스를 생성합니다 (바인딩 필수). ' +
       'Figma 내부를 탐색할 필요 없이 alias + props만으로 삽입됩니다. ' +
-      '예: alias: "ui_badge", props: {text: "완료"}. 사용 가능한 alias와 param은 sigma_list_components로 확인하세요.',
+      '예: alias: "ui_badge", props: {text: "완료"}. 사용 가능한 alias와 param은 sigma_list_component_specs로 확인하세요.',
     inputSchema: {
       type: 'object' as const,
       properties: {
