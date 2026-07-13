@@ -1,7 +1,6 @@
 import type { ComponentParam, ComponentSpecStamp } from '@sigma/shared';
 import { parseHTML } from '../converter/html-parser';
 import { createFigmaNode } from '../converter/node-creator';
-import { updateExistingFrame } from '../converter/frame';
 import { getOrCreateFileId } from './page';
 
 /**
@@ -119,6 +118,43 @@ function bindSlots(component: ComponentNode, params: ComponentParam[]): Record<s
   return propertyIds;
 }
 
+/** fresh 빌드된 루트 프레임의 레이아웃/시각 속성을 기존 컴포넌트 루트로 복사 */
+function copyRootFrameProps(target: ComponentNode, source: FrameNode): void {
+  target.layoutMode = source.layoutMode;
+  if (source.layoutMode !== 'NONE') {
+    target.primaryAxisSizingMode = source.primaryAxisSizingMode;
+    target.counterAxisSizingMode = source.counterAxisSizingMode;
+    target.primaryAxisAlignItems = source.primaryAxisAlignItems;
+    target.counterAxisAlignItems = source.counterAxisAlignItems;
+    target.itemSpacing = source.itemSpacing;
+    target.layoutWrap = source.layoutWrap;
+    if (source.layoutWrap === 'WRAP') {
+      target.counterAxisSpacing = source.counterAxisSpacing;
+    }
+  }
+  target.paddingTop = source.paddingTop;
+  target.paddingRight = source.paddingRight;
+  target.paddingBottom = source.paddingBottom;
+  target.paddingLeft = source.paddingLeft;
+  target.clipsContent = source.clipsContent;
+  target.fills = source.fills;
+  target.strokes = source.strokes;
+  target.strokeAlign = source.strokeAlign;
+  target.strokeTopWeight = source.strokeTopWeight;
+  target.strokeRightWeight = source.strokeRightWeight;
+  target.strokeBottomWeight = source.strokeBottomWeight;
+  target.strokeLeftWeight = source.strokeLeftWeight;
+  target.topLeftRadius = source.topLeftRadius;
+  target.topRightRadius = source.topRightRadius;
+  target.bottomRightRadius = source.bottomRightRadius;
+  target.bottomLeftRadius = source.bottomLeftRadius;
+  target.effects = source.effects;
+  target.opacity = source.opacity;
+  if (target.layoutMode !== 'NONE' && target.strokes.length > 0) {
+    target.strokesIncludedInLayout = source.strokesIncludedInLayout;
+  }
+}
+
 /** 스펙 루트에 배경이 없으면 투명 유지 (변환기의 루트 흰 배경 대체를 되돌림) */
 function restoreTransparentRoot(component: ComponentNode, html: string): void {
   const extracted = parseHTML(html);
@@ -149,13 +185,52 @@ export async function buildComponentFromSpec(
   const targetPage = getTargetPage ? getTargetPage(options.pageId) : figma.currentPage;
 
   // ── in-place 갱신 경로 ──
+  // fresh 빌드와 동일한 결과를 보장하기 위해, 스펙을 신규 프레임으로 완전 변환한 뒤
+  // 루트 속성을 복사하고 자식을 통째로 이주한다 (자식의 FILL/STRETCH 설정 보존).
+  // 간이 재구성(updateExistingFrame)은 루트 자식의 stretch 후처리를 재현하지 못해
+  // fresh 빌드와 형상이 달라지는 문제가 있었다.
   if (options.existingNodeId) {
     const existing = figma.getNodeById(options.existingNodeId);
     if (existing && existing.type === 'COMPONENT' && existing.parent) {
       const component = existing as ComponentNode;
 
-      // 내용 전체 교체 (루트 스타일 + 자식 재구성, 폰트 로드 포함)
-      await updateExistingFrame(component.id, 'html', options.html);
+      await loadDefaultFonts();
+      const parsed = parseHTML(options.html);
+      if (!parsed) {
+        throw new Error('스펙 HTML 파싱 실패');
+      }
+      const fresh = await createFigmaNode(parsed, true, false);
+      if (!fresh || fresh.type !== 'FRAME') {
+        if (fresh) fresh.remove();
+        throw new Error('스펙 HTML → 프레임 변환 실패');
+      }
+
+      // 자식 이주 전에 크기·사이징 모드를 캡처 (이주 후 fresh는 hug가 붕괴됨)
+      const freshWidth = fresh.width;
+      const freshHeight = fresh.height;
+      const freshPrimarySizing = fresh.layoutMode !== 'NONE' ? fresh.primaryAxisSizingMode : null;
+      const freshCounterSizing = fresh.layoutMode !== 'NONE' ? fresh.counterAxisSizingMode : null;
+
+      // 1) 루트 레이아웃/시각 속성 복사 (자식 이주 전에 — FILL 자식이 유효하도록)
+      copyRootFrameProps(component, fresh);
+      // 2) 기존 자식 제거
+      for (let i = component.children.length - 1; i >= 0; i--) {
+        component.children[i].remove();
+      }
+      // 3) 크기 동기화 후 사이징 모드 복원
+      //    (resize()는 Figma UI와 동일하게 hug 축을 FIXED로 뒤집으므로 되돌려야 한다)
+      component.resize(freshWidth, freshHeight);
+      if (component.layoutMode !== 'NONE' && freshPrimarySizing && freshCounterSizing) {
+        component.primaryAxisSizingMode = freshPrimarySizing;
+        component.counterAxisSizingMode = freshCounterSizing;
+      }
+      // 4) 새 자식 이주 (fresh 빌드에서 적용된 모든 자식 설정 보존)
+      const freshChildren = [...fresh.children];
+      for (const child of freshChildren) {
+        component.appendChild(child);
+      }
+      fresh.remove();
+
       restoreTransparentRoot(component, options.html);
       component.name = options.alias;
 
@@ -390,17 +465,27 @@ export async function useComponentSpec(
     instance.setProperties(propertyValues);
   }
 
-  // 텍스트 넘침 감지: 고정폭 축에서 텍스트가 컴포넌트 영역을 벗어나면 경고
-  // (hug 축은 함께 늘어나므로 넘치지 않는다. ellipsis slot은 …처리되어 안 넘친다)
+  // 텍스트 넘침 감지: **고정(fixed) 축에서만** 텍스트가 컴포넌트 영역을 벗어나면 경고.
+  // hug 축은 컴포넌트가 함께 늘어나므로 검사하지 않는다 (재계산 과도기의 오탐 방지).
+  // ellipsis slot은 …처리되어 안 넘친다.
+  // setProperties 직후에는 Auto Layout 재계산이 끝나지 않아 bounds가 낡으므로
+  // 잠시 양보해 레이아웃을 플러시한 뒤 측정한다.
+  await new Promise<void>((resolve) => setTimeout(resolve, 50));
   const warnings: string[] = [];
+  const horizontalFixed = instance.layoutMode === 'NONE' || instance.layoutSizingHorizontal !== 'HUG';
+  const verticalFixed = instance.layoutMode === 'NONE' || instance.layoutSizingVertical !== 'HUG';
   const instBounds = instance.absoluteBoundingBox;
-  if (instBounds) {
+  if (instBounds && (horizontalFixed || verticalFixed)) {
     const texts = instance.findAll((n) => n.type === 'TEXT') as TextNode[];
     for (const t of texts) {
       const b = t.absoluteBoundingBox;
       if (!b) continue;
-      const overX = Math.round(b.x + b.width - (instBounds.x + instBounds.width));
-      const overY = Math.round(b.y + b.height - (instBounds.y + instBounds.height));
+      const overX = horizontalFixed
+        ? Math.round(b.x + b.width - (instBounds.x + instBounds.width))
+        : 0;
+      const overY = verticalFixed
+        ? Math.round(b.y + b.height - (instBounds.y + instBounds.height))
+        : 0;
       if (overX > 1 || overY > 1) {
         const slot = t.getPluginData(SLOT_MARK_KEY);
         const which = slot ? `param "${slot}"의 텍스트` : `텍스트 "${t.characters.slice(0, 20)}"`;
