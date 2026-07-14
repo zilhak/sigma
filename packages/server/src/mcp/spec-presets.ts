@@ -49,6 +49,19 @@ const ANNOTATION_PRESET: SpecPreset = {
 </div>`,
     },
     {
+      alias: 'legend',
+      description:
+        '범례 행 — 번호 배지(marker와 동일 스타일) + 설명 텍스트(자동 줄바꿈). ' +
+        '화면에 찍은 anno/marker들의 설명을 별도 구역에 목록으로 나열할 때 사용. ' +
+        '여러 행을 세로 Auto Layout 프레임에 담으면 범례 패널이 됨',
+      html: `<div style="display: flex; align-items: flex-start; gap: 8px; width: 320px;">
+  <div style="display: flex; justify-content: center; align-items: center; width: 20px; height: 20px; background-color: #E53935; border-radius: 10px;">
+    <span data-sigma-slot="n" data-sigma-desc="마커 번호 (화면의 marker와 일치시킬 것)" style="font-size: 11px; font-weight: 700; color: #FFFFFF;">1</span>
+  </div>
+  <span data-sigma-slot="desc" data-sigma-desc="해당 마커 지점에 대한 설명" style="font-size: 12px; line-height: 17px; color: #37474F; white-space: normal;">설명</span>
+</div>`,
+    },
+    {
       alias: 'label',
       description: '라벨 칩 — 진회색 배경의 짧은 텍스트 태그 (이름표/상태 표시용)',
       html: `<div style="display: flex; align-items: center; padding: 2px 8px; background-color: #37474F; border-radius: 3px;">

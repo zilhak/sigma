@@ -146,7 +146,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_list_component_specs` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias`, `namespace` |
 | `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
 | `sigma_set_component_spec_instance_props` | 기존 인스턴스의 param 재설정 | `token`, `nodeId`, `props` | — |
-| `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/3종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
+| `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/4종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 | `alias` | `namespace` |
 
 ```

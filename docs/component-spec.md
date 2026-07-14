@@ -144,7 +144,7 @@ sigma가 미리 정의한 스펙 팩을 `sigma_import_spec_preset(token, preset)
 
 | preset | namespace | 구성 |
 |--------|-----------|------|
-| `annotation` | `anno` | `region`(영역 강조 사각형 — 투명 배경+보더+라벨 칩), `marker`(번호 마커 ①), `label`(라벨 칩) |
+| `annotation` | `anno` | `region`(영역 강조 사각형), `marker`(번호 마커 ①), `legend`(범례 행 — 번호+줄바꿈 설명), `label`(라벨 칩) |
 | `wireframe` | `wire` | `box`(placeholder), `section_title`, `item`(목록 행), `kv`(설정 행, ellipsis), `note`(메모, wrap) |
 
 - 이미 등록된 항목은 건너뛴다 (`overwrite: true`면 in-place 갱신 → 인스턴스 전파).
