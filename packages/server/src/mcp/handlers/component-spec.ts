@@ -270,6 +270,8 @@ export const componentSpecHandlers: Record<
             typeof args.x === 'number' && typeof args.y === 'number'
               ? { x: args.x as number, y: args.y as number }
               : undefined,
+          width: args.width as number | undefined,
+          height: args.height as number | undefined,
           parentId: args.parentId as string | undefined,
           pageId,
           // 파일 스코프: 다른 파일에서 등록된 컴포넌트의 오사용 차단
@@ -297,6 +299,30 @@ export const componentSpecHandlers: Record<
         ...(result as object),
         ...(warnings.length > 0 ? { warnings } : {}),
       });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
+  async sigma_set_component_spec_instance_props(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const nodeId = args.nodeId as string;
+    const props = args.props as Record<string, string> | undefined;
+    if (!nodeId) {
+      return jsonResponse({ error: 'nodeId는 필수입니다' });
+    }
+    if (!props || Object.keys(props).length === 0) {
+      return jsonResponse({ error: 'props는 필수입니다 — 재설정할 파라미터 값 매핑. 예: {text: "새 값"}' });
+    }
+
+    const { pluginId } = access;
+    try {
+      const result = await wsServer.setComponentSpecInstanceProps({ nodeId, props }, pluginId);
+      return jsonResponse({ success: true, ...(result as object) });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return jsonResponse({ error: errorMessage });

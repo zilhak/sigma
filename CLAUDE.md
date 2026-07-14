@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 119개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 120개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -224,7 +224,8 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 |------|------|-----------|-----------|
 | `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부) | `token`, `alias`, `description`, `html` | `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
 | `sigma_list_component_specs` | 스펙 카탈로그 조회 (alias 지정 시 HTML 원문 포함 상세) | — | `alias`, `namespace` |
-| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `parentId` |
+| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
+| `sigma_set_component_spec_instance_props` | 기존 인스턴스의 param 재설정 | `token`, `nodeId`, `props` | — |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지) | `alias` | `namespace` |
 
 ### 컴포넌트 (토큰 필수)

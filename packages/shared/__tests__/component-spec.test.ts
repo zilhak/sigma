@@ -338,4 +338,37 @@ describe('validateComponentSpecHtml — param 설명(data-sigma-desc)과 ellipsi
     const html = '<div style="display: flex; width: 100px;"><span data-sigma-slot="v" style="text-overflow: clip;">x</span></div>';
     expect(validateComponentSpecHtml(html).ok).toBe(false);
   });
+
+  test('고정폭 부모 안의 wrap slot → wraps: true', () => {
+    const html = '<div style="display: flex; width: 260px;"><span data-sigma-slot="note" style="white-space: normal;">memo</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.errors).toEqual([]);
+    expect(result.params[0].wraps).toBe(true);
+  });
+
+  test('white-space: nowrap은 no-op (wraps 미설정)', () => {
+    const html = '<div style="display: flex; width: 260px;"><span data-sigma-slot="note" style="white-space: nowrap;">memo</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(true);
+    expect(result.params[0].wraps).toBeUndefined();
+  });
+
+  test('hug 부모 안의 wrap slot 거부', () => {
+    const html = '<div style="display: flex;"><span data-sigma-slot="note" style="white-space: normal;">memo</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('width가 명시');
+  });
+
+  test('ellipsis + wrap 동시 선언 거부', () => {
+    const html = '<div style="display: flex; width: 260px;"><span data-sigma-slot="v" style="text-overflow: ellipsis; white-space: normal;">x</span></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('함께 쓸 수 없습니다');
+  });
+
+  test('slot 아닌 요소의 white-space 거부', () => {
+    const html = '<div style="display: flex; width: 100px;"><span style="white-space: normal;">x</span></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(false);
+  });
 });

@@ -62,6 +62,7 @@ export const ALLOWED_CSS_PROPS = new Set([
   'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
   'box-shadow',
   'text-overflow',
+  'white-space',
 ]);
 
 /** 허용 HTML 속성 (style, data-sigma-* 외에는 최소한만) */
@@ -80,8 +81,10 @@ export const SLOT_ALLOWED_TAGS = TEXT_TAGS;
  */
 export const SLOT_ALLOWED_CSS_PROPS = new Set([
   'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'opacity',
-  // ellipsis: 고정폭 컨테이너 안에서 넘치는 텍스트를 …으로 처리 (slot 전용)
+  // ellipsis: 고정폭 컨테이너 안에서 넘치는 텍스트를 …으로 처리 (slot 전용, 단일 행)
   'text-overflow',
+  // wrap: 고정폭 컨테이너 안에서 줄바꿈되는 다중 행 텍스트 (slot 전용)
+  'white-space',
 ]);
 
 // ── 값 검증 테이블 ──
@@ -118,6 +121,7 @@ const ENUM_PROPS: Record<string, string[]> = {
   'flex-wrap': ['nowrap', 'wrap'],
   'overflow': ['visible', 'hidden'],
   'text-overflow': ['ellipsis'],
+  'white-space': ['normal', 'nowrap'],
 };
 
 /** 텍스트 요소를 프레임으로 승격시키는 속성 (이게 있으면 width/height가 유효해짐) */
@@ -181,6 +185,8 @@ interface OpenElement {
   slotName: string | null;
   /** data-sigma-desc 값 (slot 파라미터 설명) */
   slotDesc: string | null;
+  /** white-space: normal (wrap) 선언 여부 */
+  slotWraps: boolean;
   /** slot 요소의 텍스트 조각 */
   slotText: string[];
   /** 자식 요소를 가졌는지 */
@@ -333,13 +339,22 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       errors.push('data-sigma-desc는 data-sigma-slot이 있는 요소에만 붙일 수 있습니다 (파라미터 설명용)');
     }
 
+    // white-space: normal 선언 여부 (wrap — nowrap은 기본 동작이라 no-op)
+    const slotWraps = attrs['style'] !== undefined
+      && /white-space\s*:\s*normal/i.test(attrs['style']);
+
     if (slotName !== null) {
-      // ellipsis slot은 직계 부모 컨테이너가 고정폭이어야 동작
-      // (텍스트를 FILL로 늘려 잘라내므로 hug 부모에서는 무의미 + Figma 순환 참조 에러)
-      if (styleProps.has('text-overflow')) {
+      // ellipsis(단일 행 …)와 wrap(다중 행 줄바꿈)은 상호배타
+      if (styleProps.has('text-overflow') && slotWraps) {
+        errors.push(`slot "${slotName}"에 text-overflow: ellipsis와 white-space: normal을 함께 쓸 수 없습니다 — 단일 행 …처리 또는 다중 행 줄바꿈 중 하나만`);
+      }
+      // ellipsis/wrap slot은 직계 부모 컨테이너가 고정폭이어야 동작
+      // (텍스트를 FILL로 늘리므로 hug 부모에서는 무의미 + Figma 순환 참조 에러)
+      if (styleProps.has('text-overflow') || slotWraps) {
         const parent = stack.length > 0 ? stack[stack.length - 1] : null;
         if (!parent || !parent.styleProps.has('width')) {
-          errors.push(`text-overflow: ellipsis slot("${slotName}")은 직계 부모 컨테이너에 width가 명시되어야 합니다 — 고정폭 안에서만 …처리가 가능합니다`);
+          const mode = slotWraps ? 'white-space: normal(wrap)' : 'text-overflow: ellipsis';
+          errors.push(`${mode} slot("${slotName}")은 직계 부모 컨테이너에 width가 명시되어야 합니다 — 고정폭 안에서만 동작합니다`);
         }
       }
       if (!SLOT_ALLOWED_TAGS.has(tagName)) {
@@ -368,6 +383,7 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       tagName,
       slotName,
       slotDesc,
+      slotWraps,
       slotText: [],
       hasChildElement: false,
       hasText: false,
@@ -397,6 +413,9 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
         }
         if (open.styleProps.has('text-overflow')) {
           param.truncates = true;
+        }
+        if (open.slotWraps) {
+          param.wraps = true;
         }
         params.push(param);
       }
@@ -442,8 +461,8 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
         errors.push(`<${tagName}> style의 허용되지 않는 CSS 속성: "${prop}" — 변환이 보장되지 않는 속성은 등록할 수 없습니다`);
         continue;
       }
-      if (prop === 'text-overflow' && !isSlot) {
-        errors.push(`text-overflow는 data-sigma-slot 요소에서만 허용됩니다 (<${tagName}>는 slot이 아님)`);
+      if ((prop === 'text-overflow' || prop === 'white-space') && !isSlot) {
+        errors.push(`${prop}는 data-sigma-slot 요소에서만 허용됩니다 (<${tagName}>는 slot이 아님)`);
         continue;
       }
       if (isSlot && !SLOT_ALLOWED_CSS_PROPS.has(prop)) {

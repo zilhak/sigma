@@ -16,8 +16,8 @@ export type { CreateRectangleResult, CreateTextResult, CreateEmptyFrameResult, C
 export { getSelection, setSelection, getViewport, setViewport } from './selection';
 export type { GetSelectionResult, SetSelectionResult, ViewportInfo, SetViewportOptions } from './selection';
 export { getLocalComponents, createComponentInstance, getInstanceOverrides, setInstanceOverrides, createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './components';
-export { buildComponentFromSpec, useComponentSpec } from './component-spec';
-export type { BuildComponentFromSpecOptions, BuildComponentFromSpecResult, UseComponentSpecOptions, UseComponentSpecResult } from './component-spec';
+export { buildComponentFromSpec, useComponentSpec, setComponentSpecInstanceProps } from './component-spec';
+export type { BuildComponentFromSpecOptions, BuildComponentFromSpecResult, UseComponentSpecOptions, UseComponentSpecResult, SetComponentSpecInstancePropsOptions, SetComponentSpecInstancePropsResult } from './component-spec';
 export type { ComponentInfo, CreateInstanceResult, InstanceOverrides, SetOverridesResult, CreateComponentResult, ConvertToComponentResult, CreateComponentSetResult, AddComponentPropertyResult, EditComponentPropertyResult, DeleteComponentPropertyResult, ComponentPropertyDefinitions, DetachInstanceResult, SwapComponentResult } from './components';
 export { getNodeInfo, getDocumentInfo, getStyles, getNodesInfo, readMyDesign, listAvailableFonts, getNodeCSS } from './query';
 export type { NodeDetailInfo, DocumentInfo, StylesInfo, GetNodesInfoResult, ReadMyDesignResult, ListFontsResult, GetCSSResult } from './query';

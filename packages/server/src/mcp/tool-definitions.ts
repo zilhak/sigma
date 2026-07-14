@@ -2239,7 +2239,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       'position·text-align 불가 — 배치·정렬은 flex 속성으로. 순수 텍스트 요소의 width/height 불가(부모 div로 감싸기). ' +
       '[slot] <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> → Figma TEXT 속성으로 승격. ' +
       '텍스트 태그에만, 루트 불가, 기본 텍스트 필수, 순수 텍스트 속성만 허용. ' +
-      '고정폭 직계 부모 안의 slot에 text-overflow: ellipsis를 주면 긴 값이 …처리됩니다. ' +
+      '고정폭 직계 부모 안의 slot에 text-overflow: ellipsis(단일 행 …처리) 또는 white-space: normal(다중 행 줄바꿈)을 줄 수 있습니다. ' +
       '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
       'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
       '등록 후 sigma_create_component_spec_instance로 삽입, 카탈로그는 sigma_list_component_specs.',
@@ -2295,9 +2295,31 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         },
         x: { type: 'number', description: '(선택) X 좌표. 미지정 시 자동 배치' },
         y: { type: 'number', description: '(선택) Y 좌표' },
+        width: { type: 'number', description: '(선택) 인스턴스 너비 — 생성 직후 resize (hug 축은 FIXED로 전환, placeholder 용도)' },
+        height: { type: 'number', description: '(선택) 인스턴스 높이 — 생성 직후 resize' },
         parentId: { type: 'string', description: '(선택) 부모 노드 ID (Auto Layout 프레임에 삽입 가능)' },
       },
       required: ['token', 'alias'],
+    },
+  },
+  {
+    name: 'sigma_set_component_spec_instance_props',
+    description:
+      '기존 스펙 인스턴스의 파라미터(TEXT 속성)를 재설정합니다 (바인딩 필수). ' +
+      '인스턴스 nodeId + param 이름만으로 텍스트를 바꿉니다 — 삭제 후 재생성 불필요. ' +
+      '스펙 인스턴스가 아니면 거부되며, 넘침 시 warnings를 반환합니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        nodeId: { type: 'string', description: '스펙 인스턴스 nodeId (sigma_create_component_spec_instance의 반환값)' },
+        props: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description: '재설정할 파라미터 값 매핑. 예: {text: "새 값"}. 미지정 param은 유지',
+        },
+      },
+      required: ['token', 'nodeId', 'props'],
     },
   },
   {

@@ -9,7 +9,10 @@
 등록:  sigma_create_component_spec(token, alias, description, html, namespace?, overwrite?)
 조회:  sigma_list_component_specs(namespace?)  → alias/설명/params/size/sizing (카탈로그)
        sigma_list_component_specs(alias)       → HTML 원문 포함 상세
-사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId, namespace?)
+사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId, namespace?, width?, height?)
+       → width/height: 생성 직후 resize (hug 축은 FIXED로 전환 — placeholder 용도)
+수정:  sigma_set_component_spec_instance_props(token, nodeId, props)
+       → 기존 인스턴스의 param 재설정 (삭제 후 재생성 불필요, 넘침 시 warnings)
 삭제:  sigma_delete_component_spec(alias, namespace?) → 레지스트리만 삭제 (Figma 노드 유지)
 ```
 
@@ -110,20 +113,28 @@
   배경/패딩/보더/크기는 부모 컨테이너에 둔다 — slot이 프레임으로 승격되면
   "slot = 단일 TextNode" 계약이 깨지기 때문.
 
-### 긴 텍스트 처리 (ellipsis)
+### 긴 텍스트 처리 (ellipsis / wrap)
 
 고정폭 컨테이너 안의 slot은 긴 값이 들어오면 글자가 박스 밖으로 삐져나온다.
-**`text-overflow: ellipsis`** 를 slot에 주면 빌드 시 텍스트가 컨테이너를 채우도록
-(FILL) 설정되고, 넘치는 값은 단일 행 `…`으로 잘린다.
+두 가지 처리 모드를 slot에 선언할 수 있다 (상호배타):
+
+| 선언 | 동작 | 용도 |
+|------|------|------|
+| `text-overflow: ellipsis` | 단일 행, 넘치면 `…` | 드롭다운 값, 목록 항목 |
+| `white-space: normal` | 다중 행 줄바꿈 (높이 성장) | 주석, 본문 문단 |
 
 ```html
-<div style="display: flex; width: 220px; padding: 8px 12px; ...">
-  <span data-sigma-slot="value" style="font-size: 14px; text-overflow: ellipsis;">Select</span>
+<div style="display: flex; width: 220px; ...">
+  <span data-sigma-slot="value" style="text-overflow: ellipsis;">Select</span>
+</div>
+<div style="display: flex; width: 260px; ...">
+  <span data-sigma-slot="note" style="white-space: normal;">주석 내용</span>
 </div>
 ```
 
-- ellipsis slot은 **직계 부모 컨테이너에 width 명시 필수** (hug 부모에서는 무의미 + 거부).
-- ellipsis가 없는 fixed 컴포넌트에 긴 값을 넣으면 use 응답의 `warnings`로 넘침을 알려준다.
+- 두 모드 모두 **직계 부모 컨테이너에 width 명시 필수** (hug 부모에서는 무의미 + 거부).
+- 둘 다 없는 fixed 컴포넌트에 긴 값을 넣으면 use 응답의 `warnings`로 넘침을 알려준다.
+- 카탈로그 param에 `truncates: true` / `wraps: true`로 노출된다.
 
 ## 예시
 

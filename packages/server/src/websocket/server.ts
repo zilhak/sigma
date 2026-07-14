@@ -1163,6 +1163,10 @@ export class FigmaWebSocketServer {
     return this.sendCommand('USE_COMPONENT_SPEC', args, { pluginId });
   }
 
+  async setComponentSpecInstanceProps(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
+    return this.sendCommand('SET_COMPONENT_SPEC_INSTANCE_PROPS', args, { pluginId });
+  }
+
   async convertToComponent(nodeId: string, pluginId?: string): Promise<unknown> {
     return this.sendCommand('CONVERT_TO_COMPONENT', { nodeId }, { pluginId });
   }

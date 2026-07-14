@@ -108,6 +108,17 @@ function bindSlots(component: ComponentNode, params: ComponentParam[]): Record<s
       textNode.textTruncation = 'ENDING';
       textNode.maxLines = 1;
     }
+
+    // wrap slot: 고정폭 부모를 FILL로 채우고 넘치면 줄바꿈 (다중 행, 주석/본문용)
+    if (param.wraps) {
+      try {
+        textNode.layoutSizingHorizontal = 'FILL';
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`wrap slot "${param.name}"의 FILL 설정 실패 (부모가 Auto Layout 고정폭이어야 함): ${msg}`);
+      }
+      textNode.textAutoResize = 'HEIGHT';
+    }
   }
 
   // 스펙에서 사라진 TEXT 속성 정리
@@ -332,6 +343,9 @@ export interface UseComponentSpecOptions {
   alias: string;
   props?: Record<string, string>;
   position?: { x: number; y: number };
+  /** 생성 직후 인스턴스 크기 지정 — hug 축은 FIXED로 전환됨 (placeholder 용도) */
+  width?: number;
+  height?: number;
   parentId?: string;
   pageId?: string;
   /** 레지스트리에 기록된 파일 ID — 현재 파일과 불일치하면 거부 */
@@ -450,6 +464,14 @@ export async function useComponentSpec(
     instance.y = autoPos.y;
   }
 
+  // 크기 지정 (미지정 축은 현재 크기 유지)
+  if (typeof options.width === 'number' || typeof options.height === 'number') {
+    instance.resize(
+      typeof options.width === 'number' ? options.width : instance.width,
+      typeof options.height === 'number' ? options.height : instance.height
+    );
+  }
+
   // TEXT 속성 적용 (텍스트 변경이므로 인스턴스 내 폰트 선로드)
   if (propKeys.length > 0) {
     const textNodes = instance.findAll((n) => n.type === 'TEXT') as TextNode[];
@@ -465,11 +487,33 @@ export async function useComponentSpec(
     instance.setProperties(propertyValues);
   }
 
-  // 텍스트 넘침 감지: **고정(fixed) 축에서만** 텍스트가 컴포넌트 영역을 벗어나면 경고.
-  // hug 축은 컴포넌트가 함께 늘어나므로 검사하지 않는다 (재계산 과도기의 오탐 방지).
-  // ellipsis slot은 …처리되어 안 넘친다.
-  // setProperties 직후에는 Auto Layout 재계산이 끝나지 않아 bounds가 낡으므로
-  // 잠시 양보해 레이아웃을 플러시한 뒤 측정한다.
+  const warnings = await collectTextOverflowWarnings(instance);
+
+  const result: UseComponentSpecResult = {
+    nodeId: instance.id,
+    name: instance.name,
+    alias: options.alias,
+    x: instance.x,
+    y: instance.y,
+    width: instance.width,
+    height: instance.height,
+    appliedProps: propKeys,
+    pageName: targetPage.name,
+  };
+  if (warnings.length > 0) {
+    result.warnings = warnings;
+  }
+  return result;
+}
+
+/**
+ * 텍스트 넘침 감지: **고정(fixed) 축에서만** 텍스트가 인스턴스 영역을 벗어나면 경고.
+ * hug 축은 인스턴스가 함께 늘어나므로 검사하지 않는다 (재계산 과도기의 오탐 방지).
+ * ellipsis/wrap slot은 각각 …처리/줄바꿈되어 안 넘친다.
+ * setProperties 직후에는 Auto Layout 재계산이 끝나지 않아 bounds가 낡으므로
+ * 잠시 양보해 레이아웃을 플러시한 뒤 측정한다.
+ */
+async function collectTextOverflowWarnings(instance: InstanceNode): Promise<string[]> {
   await new Promise<void>((resolve) => setTimeout(resolve, 50));
   const warnings: string[] = [];
   const horizontalFixed = instance.layoutMode === 'NONE' || instance.layoutSizingHorizontal !== 'HUG';
@@ -491,22 +535,94 @@ export async function useComponentSpec(
         const which = slot ? `param "${slot}"의 텍스트` : `텍스트 "${t.characters.slice(0, 20)}"`;
         const dir = overX > 1 ? `가로 ${overX}px` : `세로 ${overY}px`;
         warnings.push(
-          `${which}가 컴포넌트 영역을 ${dir} 넘칩니다 — 더 짧은 값을 쓰거나, 스펙의 해당 slot에 text-overflow: ellipsis를 고려하세요`
+          `${which}가 컴포넌트 영역을 ${dir} 넘칩니다 — 더 짧은 값을 쓰거나, 스펙의 해당 slot에 text-overflow: ellipsis 또는 white-space: normal(wrap)을 고려하세요`
         );
       }
     }
   }
+  return warnings;
+}
 
-  const result: UseComponentSpecResult = {
+export interface SetComponentSpecInstancePropsOptions {
+  nodeId: string;
+  props: Record<string, string>;
+}
+
+export interface SetComponentSpecInstancePropsResult {
+  nodeId: string;
+  alias: string;
+  appliedProps: string[];
+  width: number;
+  height: number;
+  warnings?: string[];
+}
+
+/**
+ * 기존 스펙 인스턴스의 파라미터(TEXT 속성)를 재설정한다.
+ * 인스턴스의 메인 컴포넌트 스탬프에서 param 이름 → property id를 해소하므로
+ * 에이전트는 param 이름만 알면 된다.
+ */
+export async function setComponentSpecInstanceProps(
+  options: SetComponentSpecInstancePropsOptions
+): Promise<SetComponentSpecInstancePropsResult> {
+  const node = figma.getNodeById(options.nodeId);
+  if (!node) {
+    throw new Error(`노드를 찾을 수 없습니다: ${options.nodeId}`);
+  }
+  if (node.type !== 'INSTANCE') {
+    throw new Error(`INSTANCE가 아닙니다 (현재: ${node.type}) — 스펙 인스턴스의 nodeId를 지정하세요`);
+  }
+  const instance = node as InstanceNode;
+
+  const main = instance.mainComponent;
+  if (!main) {
+    throw new Error('인스턴스의 메인 컴포넌트를 찾을 수 없습니다');
+  }
+  const stampRaw = main.getPluginData(SPEC_STAMP_KEY);
+  if (!stampRaw) {
+    throw new Error('스펙 컴포넌트의 인스턴스가 아닙니다 (sigma-spec 스탬프 없음) — sigma_set_instance_overrides를 사용하세요');
+  }
+  let stamp: ComponentSpecStamp;
+  try {
+    stamp = JSON.parse(stampRaw) as ComponentSpecStamp;
+  } catch (e) {
+    throw new Error('계약 위반: sigma-spec 스탬프가 손상되었습니다 — 컴포넌트를 다시 등록하세요');
+  }
+
+  const propKeys = Object.keys(options.props);
+  if (propKeys.length === 0) {
+    throw new Error('변경할 props가 없습니다');
+  }
+  for (const key of propKeys) {
+    if (!stamp.propertyIds[key]) {
+      const available = Object.keys(stamp.propertyIds);
+      throw new Error(
+        `알 수 없는 파라미터: "${key}" (사용 가능: ${available.length > 0 ? available.join(', ') : '없음'})`
+      );
+    }
+  }
+
+  // 텍스트 변경이므로 인스턴스 내 폰트 선로드
+  const textNodes = instance.findAll((n) => n.type === 'TEXT') as TextNode[];
+  for (const t of textNodes) {
+    if (t.fontName !== figma.mixed) {
+      await figma.loadFontAsync(t.fontName as FontName);
+    }
+  }
+  const propertyValues: Record<string, string> = {};
+  for (const key of propKeys) {
+    propertyValues[stamp.propertyIds[key]] = options.props[key];
+  }
+  instance.setProperties(propertyValues);
+
+  const warnings = await collectTextOverflowWarnings(instance);
+
+  const result: SetComponentSpecInstancePropsResult = {
     nodeId: instance.id,
-    name: instance.name,
-    alias: options.alias,
-    x: instance.x,
-    y: instance.y,
+    alias: stamp.alias,
+    appliedProps: propKeys,
     width: instance.width,
     height: instance.height,
-    appliedProps: propKeys,
-    pageName: targetPage.name,
   };
   if (warnings.length > 0) {
     result.warnings = warnings;

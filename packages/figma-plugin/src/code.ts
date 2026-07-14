@@ -22,7 +22,7 @@ import { createVariableCollection, createVariable, getVariables, setVariableValu
 import { createNodeFromSvg } from './node-ops';
 import { listAvailableFonts, getNodeCSS } from './node-ops';
 import { createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './node-ops';
-import { buildComponentFromSpec, useComponentSpec } from './node-ops';
+import { buildComponentFromSpec, useComponentSpec, setComponentSpecInstanceProps } from './node-ops';
 import { getAvailableLibraries, getLibraryComponents, getLibraryVariables, importLibraryComponent, importLibraryStyle } from './node-ops';
 import { setExportSettings, getExportSettings } from './node-ops';
 import { createSticky, createConnector } from './node-ops';
@@ -1408,6 +1408,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
             alias: msg.alias as string,
             props: msg.props as Record<string, string> | undefined,
             position: msg.position as { x: number; y: number } | undefined,
+            width: msg.width as number | undefined,
+            height: msg.height as number | undefined,
             parentId: msg.parentId as string | undefined,
             pageId: msg.pageId as string | undefined,
             expectedFileId: msg.expectedFileId as string | undefined,
@@ -1419,6 +1421,20 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('use-component-spec-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-component-spec-instance-props': {
+      try {
+        const result = await setComponentSpecInstanceProps({
+          nodeId: msg.nodeId as string,
+          props: msg.props as Record<string, string>,
+        });
+        sendResult('set-component-spec-instance-props-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-component-spec-instance-props-result', errMsg);
       }
       break;
     }

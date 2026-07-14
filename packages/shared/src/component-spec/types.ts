@@ -15,8 +15,10 @@ export interface ComponentParam {
   defaultValue: string;
   /** slot 요소의 data-sigma-desc — 에이전트가 값을 채울 때 참고하는 설명 */
   description?: string;
-  /** text-overflow: ellipsis slot — 컨테이너 폭을 넘치면 …으로 잘림 (긴 값 안전) */
+  /** text-overflow: ellipsis slot — 컨테이너 폭을 넘치면 …으로 잘림 (긴 값 안전, 단일 행) */
   truncates?: boolean;
+  /** white-space: normal slot — 컨테이너 폭에서 줄바꿈되는 다중 행 텍스트 (주석/본문용) */
+  wraps?: boolean;
 }
 
 /**
