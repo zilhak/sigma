@@ -151,6 +151,11 @@ sigma가 미리 정의한 스펙 팩을 `sigma_import_spec_preset(token, preset)
 - 프리셋 HTML은 유닛 테스트가 스펙 검증기 통과를 강제한다 (`spec-presets.test.ts`).
 - 기획 주석 관례: **번호 마커 + 범례**가 기본 (마커를 대상 프레임 안에 넣으면 함께
   이동). 영역 강조는 위치 스냅샷이므로 대상을 옮기면 함께 옮겨야 한다.
+- **프레임 위 오버레이 레시피**: Auto Layout 프레임 위에 region을 씌우려면
+  ① `parentId` 없이 생성 → ② `sigma_move_node(nodeId, parentId: 프레임)` →
+  ③ `sigma_modify_node(setLayoutPositioning, {positioning: "ABSOLUTE"})` →
+  ④ `sigma_modify_node(move, {x, y})` (프레임 상대 좌표). flow에 끼어들지 않고
+  겹쳐진다.
 
 ## 예시
 

@@ -284,9 +284,11 @@ export const componentSpecHandlers: Record<
 
       // 조용한 변형 감지: 고정폭 컴포넌트에서 긴 텍스트가 줄바꿈되면 높이가 급증한다
       // (영역 밖 침범이 아니라 플러그인의 넘침 경고에는 안 걸림)
+      // 단, 호출자가 height를 명시했으면 의도된 크기이므로 검사하지 않는다
       const r = result as { height?: number; warnings?: string[] };
       const warnings = r.warnings ? [...r.warnings] : [];
       if (
+        args.height === undefined &&
         spec.sizing && spec.sizing.horizontal === 'fixed' && spec.size &&
         typeof r.height === 'number' && r.height > spec.size.height * 1.5
       ) {

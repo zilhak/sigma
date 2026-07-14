@@ -33,9 +33,9 @@ const ANNOTATION_PRESET: SpecPreset = {
       description:
         '영역 강조 사각형 — 투명 배경 + 빨간 보더 + 좌상단 라벨 칩. ' +
         '설명할 영역 위에 width/height로 씌워 사용 (콘텐츠를 가리지 않음)',
-      html: `<div style="display: flex; width: 240px; height: 140px; border-width: 2px; border-color: #E53935; border-radius: 4px;">
+      html: `<div style="display: flex; align-items: flex-start; width: 240px; height: 140px; border-width: 2px; border-color: #E53935; border-radius: 4px;">
   <div style="display: flex; padding: 2px 8px; background-color: #E53935; border-radius: 0 0 4px 0;">
-    <span data-sigma-slot="label" data-sigma-desc="이 영역에 대한 설명" style="font-size: 11px; font-weight: 600; color: #FFFFFF;">영역 설명</span>
+    <span data-sigma-slot="label" data-sigma-desc="이 영역에 대한 설명 (짧게 — 길면 칩이 영역을 넘음)" style="font-size: 11px; font-weight: 600; color: #FFFFFF;">영역 설명</span>
   </div>
 </div>`,
     },
