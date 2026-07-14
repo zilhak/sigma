@@ -386,8 +386,11 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
 바인딩되지 않은 토큰으로는 사용할 수 없습니다. 먼저 sigma_bind로 대상 페이지를 지정하세요.
 
 **경로 형식:**
-- 문자열: "Section/Frame/Button"
-- 배열: ["Section", "Frame", "Button"]
+- 문자열: "Section/Frame/Button" — '/'를 계층 구분자로 해석해 쪼갭니다
+- 배열: ["Section", "Frame", "Button"] — 각 원소를 리터럴 이름으로 매칭 (쪼개지 않음)
+
+**이름에 '/'가 포함된 노드**(예: Assets 그룹핑용 "icon/arrow/left")는 반드시 배열 형태로 찾으세요:
+path: ["icon/arrow/left"] (원소 1개짜리 배열)
 
 **반환값:**
 - 단일 매칭: { node: { id, name, type, boundingBox, ... } }

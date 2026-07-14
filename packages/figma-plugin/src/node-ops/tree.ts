@@ -196,7 +196,12 @@ export function findNodeWithDetails(
 
   if (filteredNodes.length === 0) {
     const pathStr = Array.isArray(path) ? path.join('/') : path;
-    throw new Error(`경로 "${pathStr}"에 해당하는 노드를 찾을 수 없습니다`);
+    // 문자열 path는 '/'를 계층 구분자로 쪼개므로, 이름 자체에 '/'가 든 노드는
+    // 배열 형태로만 찾을 수 있다 — 실패 메시지에서 자가 교정을 유도한다.
+    const slashHint = typeof path === 'string' && path.includes('/')
+      ? ' (문자열 path는 "/"를 계층 구분자로 해석합니다 — 이름에 "/"가 포함된 노드라면 배열 형태로 전달하세요: path: ["' + path + '"])'
+      : '';
+    throw new Error(`경로 "${pathStr}"에 해당하는 노드를 찾을 수 없습니다${slashHint}`);
   }
 
   // 찾은 노드들을 직렬화 (자식은 포함하지 않음, depth=0)
