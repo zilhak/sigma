@@ -202,7 +202,19 @@ export async function buildComponentFromSpec(
   // fresh 빌드와 형상이 달라지는 문제가 있었다.
   if (options.existingNodeId) {
     const existing = figma.getNodeById(options.existingNodeId);
-    if (existing && existing.type === 'COMPONENT' && existing.parent) {
+    // 안전 가드: nodeId는 파일마다 독립이라 다른 파일의 레코드가 가리키는 id가
+    // 이 파일의 무관한 노드와 우연히 일치할 수 있다. 기존 노드의 스탬프 alias가
+    // 일치할 때만 in-place 갱신하고, 아니면 신규 빌드로 폴백해 오염을 막는다.
+    let stampMatches = false;
+    if (existing && existing.type === 'COMPONENT') {
+      try {
+        const raw = (existing as ComponentNode).getPluginData(SPEC_STAMP_KEY);
+        stampMatches = raw !== '' && (JSON.parse(raw) as ComponentSpecStamp).alias === options.alias;
+      } catch (e) {
+        stampMatches = false;
+      }
+    }
+    if (existing && existing.type === 'COMPONENT' && existing.parent && stampMatches) {
       const component = existing as ComponentNode;
 
       await loadDefaultFonts();

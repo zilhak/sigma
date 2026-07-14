@@ -12,6 +12,7 @@ import {
   deleteComponentSpec,
   DEFAULT_NAMESPACE,
 } from '../../storage/component-specs.js';
+import { SPEC_PRESETS, SPEC_PRESET_NAMES } from '../spec-presets.js';
 
 /**
  * 컴포넌트 스펙 시스템 핸들러
@@ -303,6 +304,102 @@ export const componentSpecHandlers: Record<
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return jsonResponse({ error: errorMessage });
     }
+  },
+
+  async sigma_import_spec_preset(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const presetName = args.preset as string;
+    const preset = SPEC_PRESETS[presetName];
+    if (!preset) {
+      return jsonResponse({
+        error: `알 수 없는 프리셋: "${presetName}"`,
+        available: SPEC_PRESET_NAMES,
+      });
+    }
+    const overwrite = args.overwrite as boolean | undefined;
+
+    const { pluginId, pageId } = access;
+    const results: Array<Record<string, unknown>> = [];
+
+    for (const item of preset.items) {
+      const existing = await getComponentSpec(preset.namespace, item.alias);
+      if (existing && !overwrite) {
+        results.push({
+          alias: item.alias,
+          status: 'skipped',
+          reason: '이미 등록됨 — 갱신하려면 overwrite: true',
+        });
+        continue;
+      }
+
+      const validation = validateComponentSpecHtml(item.html);
+      if (!validation.ok) {
+        // 유닛 테스트가 프리셋을 강제 검증하므로 정상 배포에선 도달 불가
+        results.push({ alias: item.alias, status: 'failed', violations: validation.errors });
+        continue;
+      }
+
+      try {
+        const result = (await wsServer.buildComponentFromSpec(
+          {
+            html: item.html,
+            alias: item.alias,
+            params: validation.params,
+            pageId,
+            existingNodeId: existing ? existing.componentNodeId : undefined,
+          },
+          pluginId
+        )) as {
+          nodeId: string;
+          key: string;
+          width: number;
+          height: number;
+          updated: boolean;
+          fileId: string;
+          fileName: string;
+        };
+
+        const now = Date.now();
+        const record: ComponentSpecRecord = {
+          alias: item.alias,
+          namespace: preset.namespace,
+          description: item.description,
+          html: item.html,
+          params: validation.params,
+          componentNodeId: result.nodeId,
+          componentKey: result.key,
+          size: { width: result.width, height: result.height },
+          sizing: validation.sizing,
+          fileId: result.fileId,
+          fileName: result.fileName,
+          createdAt: existing ? existing.createdAt : now,
+          updatedAt: now,
+        };
+        await saveComponentSpec(record);
+
+        results.push({
+          alias: item.alias,
+          nodeId: result.nodeId,
+          status: result.updated ? 'updated' : 'created',
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.push({ alias: item.alias, status: 'failed', error: errorMessage });
+      }
+    }
+
+    const failed = results.filter((r) => r.status === 'failed').length;
+    return jsonResponse({
+      success: failed === 0,
+      preset: presetName,
+      namespace: preset.namespace,
+      summary: preset.summary,
+      results,
+      hint: `sigma_create_component_spec_instance(alias, namespace: "${preset.namespace}", props, ...)로 사용하세요. 카탈로그: sigma_list_component_specs(namespace: "${preset.namespace}")`,
+    });
   },
 
   async sigma_set_component_spec_instance_props(args, context) {

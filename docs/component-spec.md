@@ -136,6 +136,22 @@
 - 둘 다 없는 fixed 컴포넌트에 긴 값을 넣으면 use 응답의 `warnings`로 넘침을 알려준다.
 - 카탈로그 param에 `truncates: true` / `wraps: true`로 노출된다.
 
+## 내장 프리셋 (표준 컴포넌트 팩)
+
+sigma가 미리 정의한 스펙 팩을 `sigma_import_spec_preset(token, preset)`으로
+현재 파일에 등록할 수 있다. 등록 후에는 일반 스펙과 완전히 동일하게 동작한다
+(인스턴스 생성, props 재설정, overwrite 커스터마이즈 전부 가능).
+
+| preset | namespace | 구성 |
+|--------|-----------|------|
+| `annotation` | `anno` | `region`(영역 강조 사각형 — 투명 배경+보더+라벨 칩), `marker`(번호 마커 ①), `label`(라벨 칩) |
+| `wireframe` | `wire` | `box`(placeholder), `section_title`, `item`(목록 행), `kv`(설정 행, ellipsis), `note`(메모, wrap) |
+
+- 이미 등록된 항목은 건너뛴다 (`overwrite: true`면 in-place 갱신 → 인스턴스 전파).
+- 프리셋 HTML은 유닛 테스트가 스펙 검증기 통과를 강제한다 (`spec-presets.test.ts`).
+- 기획 주석 관례: **번호 마커 + 범례**가 기본 (마커를 대상 프레임 안에 넣으면 함께
+  이동). 영역 강조는 위치 스냅샷이므로 대상을 옮기면 함께 옮겨야 한다.
+
 ## 예시
 
 ```html

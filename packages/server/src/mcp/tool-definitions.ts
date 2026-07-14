@@ -2303,6 +2303,24 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     },
   },
   {
+    name: 'sigma_import_spec_preset',
+    description:
+      'sigma가 내장한 스펙 프리셋(표준 컴포넌트 팩)을 현재 바인딩된 파일에 등록합니다 (바인딩 필수). ' +
+      '등록 후에는 일반 스펙과 동일하게 sigma_create_component_spec_instance로 사용합니다. ' +
+      'annotation: 기획 주석 3종 — anno/region(영역 강조 사각형), anno/marker(번호 마커), anno/label(라벨 칩). ' +
+      'wireframe: 와이어프레임 프리미티브 5종 — wire/box(placeholder), wire/section_title, wire/item, wire/kv, wire/note(줄바꿈 메모). ' +
+      '이미 등록된 항목은 건너뛰고(overwrite: true면 in-place 갱신 — 기존 인스턴스에 전파), 프리셋 스펙은 overwrite로 자유롭게 커스터마이즈할 수 있습니다.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: '인증 토큰' },
+        preset: { type: 'string', enum: ['annotation', 'wireframe'], description: '등록할 프리셋 팩' },
+        overwrite: { type: 'boolean', description: '(선택) 이미 등록된 항목도 in-place 갱신. 기본 false(건너뜀)' },
+      },
+      required: ['token', 'preset'],
+    },
+  },
+  {
     name: 'sigma_set_component_spec_instance_props',
     description:
       '기존 스펙 인스턴스의 파라미터(TEXT 속성)를 재설정합니다 (바인딩 필수). ' +
