@@ -54,7 +54,7 @@ const ANNOTATION_PRESET: SpecPreset = {
         '범례 행 — 번호 배지(marker와 동일 스타일) + 설명 텍스트(자동 줄바꿈). ' +
         '화면에 찍은 anno/marker들의 설명을 별도 구역에 목록으로 나열할 때 사용. ' +
         '여러 행을 세로 Auto Layout 프레임에 담으면 범례 패널이 됨',
-      html: `<div style="display: flex; align-items: flex-start; gap: 8px; width: 320px;">
+      html: `<div style="display: flex; align-items: flex-start; gap: 8px; width: 320px; padding: 8px 10px; background-color: #FFF5F5; border-width: 1px; border-color: #FFCDD2; border-radius: 4px;">
   <div style="display: flex; justify-content: center; align-items: center; width: 20px; height: 20px; background-color: #E53935; border-radius: 10px;">
     <span data-sigma-slot="n" data-sigma-desc="마커 번호 (화면의 marker와 일치시킬 것)" style="font-size: 11px; font-weight: 700; color: #FFFFFF;">1</span>
   </div>
