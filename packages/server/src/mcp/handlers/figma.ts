@@ -20,14 +20,18 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     if (access.error) return access.error;
 
     const { pluginId, pageId } = access;
-    const format = (args.format as 'json' | 'html') || 'json';
+    // html 인자는 data의 별칭 (스키마가 html을 광고하므로 둘 다 수용).
+    // html로 전달되면 format 미지정 시 'html'로 자동 판정.
+    const data = args.data !== undefined ? args.data : args.html;
+    const format = (args.format as 'json' | 'html')
+      || (args.data === undefined && args.html !== undefined ? 'html' : 'json');
     const position = args.position as { x: number; y: number } | undefined;
     const layoutMode = (args.layoutMode as 'auto' | 'absolute') || 'auto';
 
-    if (!args.data) {
-      return jsonResponse({ error: 'data 필드가 필요합니다' });
+    if (!data) {
+      return jsonResponse({ error: 'data 또는 html 필드가 필요합니다' });
     }
-    await wsServer.createFrame(args.data, args.name as string | undefined, position, format, pluginId, pageId, layoutMode);
+    await wsServer.createFrame(data, args.name as string | undefined, position, format, pluginId, pageId, layoutMode);
 
     return jsonResponse({
       success: true,
