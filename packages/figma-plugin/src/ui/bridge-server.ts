@@ -1,11 +1,12 @@
 import { SERVER_MSG } from './constants';
 import {
-  getWs, setPendingCommandId, setAssignedPluginId,
+  getWs, setAssignedPluginId,
   log, showMessage, updatePluginIdDisplay,
 } from './ui-state';
 import { handleChunkStart, handleChunk, handleChunkEnd } from './chunk-handler';
 
 // 플러그인(code.ts)으로 메시지 전송 헬퍼
+// commandId를 함께 실어 보내 code.ts가 응답에 그대로 echo하도록 한다 (요청↔응답 end-to-end 상관).
 export function sendToPlugin(
   type: string,
   data?: unknown,
@@ -14,10 +15,11 @@ export function sendToPlugin(
   fileKey?: string,
   nodeId?: string,
   pageId?: string,
+  commandId?: string,
 ) {
   parent.postMessage(
     {
-      pluginMessage: { type, data, name, position, fileKey, nodeId, pageId },
+      pluginMessage: { type, data, name, position, fileKey, nodeId, pageId, commandId },
     },
     '*'
   );
@@ -87,6 +89,7 @@ export function handleServerMessage(msg: ServerMessage) {
             position: msg.position,
             pageId: msg.pageId,
             forceAbsolute,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -118,20 +121,17 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.GET_FRAMES:
       log(`프레임 목록 요청${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('get-frames', undefined, undefined, undefined, undefined, undefined, msg.pageId);
+      sendToPlugin('get-frames', undefined, undefined, undefined, undefined, undefined, msg.pageId, msg.commandId);
       break;
 
     case SERVER_MSG.GET_PAGES:
       log('페이지 목록 요청', 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('get-pages');
+      sendToPlugin('get-pages', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);
       break;
 
     case SERVER_MSG.DELETE_FRAME:
       log(`프레임 삭제 요청: ${msg.nodeId}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('delete-frame', undefined, undefined, undefined, undefined, msg.nodeId, msg.pageId);
+      sendToPlugin('delete-frame', undefined, undefined, undefined, undefined, msg.nodeId, msg.pageId, msg.commandId);
       break;
 
     case SERVER_MSG.UPDATE_FRAME: {
@@ -148,12 +148,11 @@ export function handleServerMessage(msg: ServerMessage) {
             data: msg.data,
             name: msg.name,
             pageId: msg.pageId,
+            commandId: msg.commandId,
           },
         },
         '*'
       );
-
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
       break;
     }
 
@@ -167,12 +166,11 @@ export function handleServerMessage(msg: ServerMessage) {
             nodeId: msg.nodeId,
             method: msg.method,
             args: msg.args,
+            commandId: msg.commandId,
           },
         },
         '*'
       );
-
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
       break;
     }
 
@@ -186,31 +184,26 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.EXTRACT_JSON:
       log('JSON 추출 요청', 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('extract-to-json');
+      sendToPlugin('extract-to-json', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);
       break;
 
     case SERVER_MSG.EXTRACT_HTML:
       log('HTML 추출 요청', 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('extract-to-html');
+      sendToPlugin('extract-to-html', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);
       break;
 
     case SERVER_MSG.TEST_ROUNDTRIP_JSON:
       log(`JSON 라운드트립 테스트 요청: ${msg.name || 'Unnamed'}`, 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('test-roundtrip-json', msg.data, msg.name as string | undefined);
+      sendToPlugin('test-roundtrip-json', msg.data, msg.name as string | undefined, undefined, undefined, undefined, undefined, msg.commandId);
       break;
 
     case SERVER_MSG.TEST_ROUNDTRIP_HTML:
       log(`HTML 라운드트립 테스트 요청: ${msg.name || 'Unnamed'}`, 'info');
-      setPendingCommandId(msg.commandId || null);
-      sendToPlugin('test-roundtrip-html', msg.data, msg.name as string | undefined);
+      sendToPlugin('test-roundtrip-html', msg.data, msg.name as string | undefined, undefined, undefined, undefined, undefined, msg.commandId);
       break;
 
     case SERVER_MSG.FIND_NODE: {
       log(`노드 찾기 요청: ${JSON.stringify(msg.path)}`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -219,6 +212,7 @@ export function handleServerMessage(msg: ServerMessage) {
             path: msg.path,
             typeFilter: msg.typeFilter,
             pageId: msg.pageId,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -228,7 +222,6 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.GET_TREE: {
       log(`트리 조회 요청: nodeId=${msg.nodeId || 'root'}, depth=${msg.depth || 1}`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -240,6 +233,7 @@ export function handleServerMessage(msg: ServerMessage) {
             filter: msg.filter,
             limit: msg.limit,
             pageId: msg.pageId,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -249,7 +243,6 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.EXPORT_IMAGE: {
       log(`이미지 export 요청: ${msg.nodeId} (${msg.format || 'PNG'}, scale: ${msg.scale || 2})`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -258,6 +251,7 @@ export function handleServerMessage(msg: ServerMessage) {
             nodeId: msg.nodeId,
             format: msg.format,
             scale: msg.scale,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -268,7 +262,6 @@ export function handleServerMessage(msg: ServerMessage) {
     case SERVER_MSG.EXTRACT_NODE_JSON: {
       const extractFormat = msg.format || 'json';
       log(`노드 추출 요청: ${msg.nodeId} (${extractFormat})`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -276,6 +269,7 @@ export function handleServerMessage(msg: ServerMessage) {
             type: 'extract-node-json',
             nodeId: msg.nodeId,
             format: extractFormat,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -286,7 +280,6 @@ export function handleServerMessage(msg: ServerMessage) {
     case SERVER_MSG.CREATE_SECTION: {
       const sectionPageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
       log(`Section 생성 요청: ${msg.name || 'Section'}${sectionPageInfo}`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -298,6 +291,7 @@ export function handleServerMessage(msg: ServerMessage) {
             children: msg.children,
             fills: msg.fills,
             pageId: msg.pageId,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -307,7 +301,6 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.MOVE_NODE: {
       log(`노드 이동 요청: ${msg.nodeId} → ${msg.parentId}`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -316,6 +309,7 @@ export function handleServerMessage(msg: ServerMessage) {
             nodeId: msg.nodeId,
             parentId: msg.parentId,
             index: msg.index,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -325,7 +319,6 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.CLONE_NODE: {
       log(`노드 복제 요청: ${msg.nodeId}${msg.parentId ? ` → ${msg.parentId}` : ''}`, 'info');
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
 
       parent.postMessage(
         {
@@ -335,6 +328,7 @@ export function handleServerMessage(msg: ServerMessage) {
             parentId: msg.parentId,
             position: msg.position,
             name: msg.name,
+            commandId: msg.commandId,
           },
         },
         '*'
@@ -347,10 +341,10 @@ export function handleServerMessage(msg: ServerMessage) {
       if (msg.commandId && msg.type) {
         const kebabType = msg.type.toLowerCase().replace(/_/g, '-');
         log(`명령 전달: ${msg.type} → ${kebabType}`, 'info');
-        setPendingCommandId(msg.commandId);
 
-        // type과 commandId를 제외한 모든 필드를 플러그인에 전달
-        const { type: _type, commandId: _cmdId, ...rest } = msg;
+        // type만 제외하고 나머지(commandId 포함)를 플러그인에 전달 —
+        // commandId를 함께 실어 code.ts가 응답에 그대로 echo하게 한다.
+        const { type: _type, ...rest } = msg;
         parent.postMessage(
           { pluginMessage: { type: kebabType, ...rest } },
           '*'

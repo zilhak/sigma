@@ -92,7 +92,6 @@ let ws: WebSocket | null = null;
 let pollingInterval: number | null = null;
 let isConnected = false;
 let isMinimized = false;
-let pendingCommandId: string | null = null;
 let assignedPluginId: string | null = null;
 let chunkBuffer: ChunkBuffer | null = null;
 let fileInfo: FileInfo | null = null;
@@ -110,9 +109,6 @@ export function setIsConnected(value: boolean) { isConnected = value; }
 
 export function getIsMinimized(): boolean { return isMinimized; }
 export function setIsMinimized(value: boolean) { isMinimized = value; }
-
-export function getPendingCommandId(): string | null { return pendingCommandId; }
-export function setPendingCommandId(value: string | null) { pendingCommandId = value; }
 
 export function getAssignedPluginId(): string | null { return assignedPluginId; }
 export function setAssignedPluginId(value: string | null) { assignedPluginId = value; }

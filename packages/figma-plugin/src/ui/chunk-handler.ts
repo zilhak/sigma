@@ -1,5 +1,5 @@
 import {
-  getWs, getChunkBuffer, setChunkBuffer, setPendingCommandId,
+  getWs, getChunkBuffer, setChunkBuffer,
   log,
 } from './ui-state';
 import { sendToPlugin } from './bridge-server';
@@ -103,11 +103,10 @@ export function handleChunkEnd(msg: ChunkMsg) {
           data: updateData,
           name: chunkBuffer.name,
           pageId: chunkBuffer.pageId,
+          commandId: msg.commandId,
         },
       }, '*');
-
-      setPendingCommandId(msg.commandId !== undefined ? msg.commandId : null);
-      // update-result를 code.ts에서 기다림
+      // update-result를 code.ts에서 기다림 (commandId를 실어 보냈으므로 응답에 echo됨)
     } else {
       // CREATE_FRAME via chunks
       const chunkForceAbsolute = chunkBuffer.layoutMode === 'absolute';
@@ -124,6 +123,7 @@ export function handleChunkEnd(msg: ChunkMsg) {
             position: chunkBuffer.position,
             pageId: chunkBuffer.pageId,
             forceAbsolute: chunkForceAbsolute,
+            commandId: msg.commandId,
           },
         }, '*');
       } else {
@@ -140,6 +140,7 @@ export function handleChunkEnd(msg: ChunkMsg) {
             position: chunkBuffer.position,
             pageId: chunkBuffer.pageId,
             forceAbsolute: chunkForceAbsolute,
+            commandId: msg.commandId,
           },
         }, '*');
       }

@@ -1,6 +1,6 @@
 import { PLUGIN_MSG } from './constants';
 import {
-  getWs, getPendingCommandId, setPendingCommandId,
+  getWs,
   getIsConnected, getFileInfo, setFileInfo,
   log, showMessage, updateFileKeyUI, updateSelectionDisplay, notifyExportResult,
   type FileInfo, type SelectionNode,
@@ -19,7 +19,10 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
   if (!msg) return;
 
   const ws = getWs();
-  const pendingCommandId = getPendingCommandId();
+  // 응답에 실린 commandId를 그대로 서버로 되돌린다 — code.ts가 요청 시 받은 commandId를
+  // echo하므로, 동시 명령이 겹쳐도 각 결과가 자기 commandId를 정확히 달고 올라간다.
+  // (과거엔 전역 단일 슬롯 pendingCommandId를 읽어 응답이 교차되는 버그가 있었다.)
+  const pendingCommandId = msg.commandId as string | undefined;
 
   switch (msg.type) {
     case PLUGIN_MSG.SUCCESS:
@@ -74,9 +77,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           pageName: msg.pageName,
           commandId: pendingCommandId,
         });
-        log(`프레임 목록 전송: ${(msg.frames as unknown[]).length}개 (페이지: ${msg.pageName || 'unknown'})`, 'info');
-        setPendingCommandId(null);
-      }
+        log(`프레임 목록 전송: ${(msg.frames as unknown[]).length}개 (페이지: ${msg.pageName || 'unknown'})`, 'info');      }
       break;
 
     case PLUGIN_MSG.PAGES_LIST:
@@ -88,9 +89,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           currentPageId: msg.currentPageId,
           commandId: pendingCommandId,
         });
-        log(`페이지 목록 전송: ${(msg.pages as unknown[]).length}개`, 'info');
-        setPendingCommandId(null);
-      }
+        log(`페이지 목록 전송: ${(msg.pages as unknown[]).length}개`, 'info');      }
       break;
 
     case PLUGIN_MSG.DELETE_RESULT:
@@ -107,9 +106,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log(`프레임 삭제 완료: ${(msg.result as any)?.name || (msg.result as any)?.nodeId}`, 'success');
         } else {
           log(`프레임 삭제 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.UPDATE_RESULT:
@@ -128,9 +125,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           );
         } else {
           log(`프레임 업데이트 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.MODIFY_RESULT:
@@ -146,9 +141,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log('노드 조작 완료', 'success');
         } else {
           log(`노드 조작 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.INFO:
@@ -187,9 +180,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           success: msg.success,
           data: msg.data,
           error: msg.error,
-        });
-        setPendingCommandId(null);
-      }
+        });      }
       break;
 
     case PLUGIN_MSG.ROUNDTRIP_RESULT:
@@ -218,9 +209,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           extracted: msg.extracted,
           createdFrameId: msg.createdFrameId,
           error: msg.error,
-        });
-        setPendingCommandId(null);
-      }
+        });      }
       break;
 
     case PLUGIN_MSG.FIND_NODE_RESULT:
@@ -236,9 +225,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log('노드 찾기 완료', 'success');
         } else {
           log(`노드 찾기 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.TREE_RESULT:
@@ -254,9 +241,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log('트리 조회 완료', 'success');
         } else {
           log(`트리 조회 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.EXPORT_IMAGE_RESULT:
@@ -272,9 +257,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log(`이미지 export 완료: ${(msg.result as any)?.nodeName || 'unknown'}`, 'success');
         } else {
           log(`이미지 export 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.EXTRACT_NODE_JSON_RESULT:
@@ -290,9 +273,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log(`노드 JSON 추출 완료: ${(msg.result as any)?.nodeName || 'unknown'}`, 'success');
         } else {
           log(`노드 JSON 추출 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.CREATE_SECTION_RESULT:
@@ -308,9 +289,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log(`Section 생성 완료: ${(msg.result as any)?.name || 'unknown'} (${(msg.result as any)?.nodeId})`, 'success');
         } else {
           log(`Section 생성 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.MOVE_NODE_RESULT:
@@ -329,9 +308,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           );
         } else {
           log(`노드 이동 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     case PLUGIN_MSG.CLONE_NODE_RESULT:
@@ -347,9 +324,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           log(`노드 복제 완료: ${(msg.result as any)?.name || 'unknown'} (${(msg.result as any)?.nodeId})`, 'success');
         } else {
           log(`노드 복제 실패: ${msg.error}`, 'error');
-        }
-        setPendingCommandId(null);
-      }
+        }      }
       break;
 
     default: {
@@ -370,7 +345,6 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
           } else {
             log(`실패: ${msgType} - ${msg.error}`, 'error');
           }
-          setPendingCommandId(null);
         }
       }
       break;

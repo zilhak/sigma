@@ -58,14 +58,9 @@ async function enrichSvgData(extracted: ExtractedNode): Promise<void> {
 // UI 표시
 figma.showUI(__html__, { width: 320, height: 400 });
 
-// --- postMessage 헬퍼 ---
-function sendResult(type: string, result: unknown) {
-  figma.ui.postMessage({ type, success: true, result });
-}
-
-function sendError(type: string, error: string) {
-  figma.ui.postMessage({ type, success: false, error });
-}
+// postMessage 응답 헬퍼(sendResult/sendError)는 figma.ui.onmessage 핸들러 내부에서
+// 매 메시지의 commandId를 클로저로 캡처하는 지역 함수로 정의된다 (아래 참고).
+// 전역/모듈 스코프에 두면 async 인터리브 시 commandId가 뒤섞이므로 의도적으로 지역화했다.
 
 // 초기 파일 정보 전달
 sendFileInfo();
@@ -147,6 +142,15 @@ const PAGE_SCOPED_CREATE = new Set([
 
 // 메시지 핸들러
 figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
+  // 이 메시지(요청)의 commandId를 클로저 지역으로 캡처한다. 각 onmessage 호출은
+  // 자기만의 commandId를 가지므로, await로 처리가 인터리브돼도 sendResult/sendError가
+  // 항상 "이 요청"의 commandId를 응답에 실어 보낸다 (전역 슬롯 교차 버그 제거).
+  const commandId = msg.commandId as string | undefined;
+  const sendResult = (type: string, result: unknown) =>
+    figma.ui.postMessage({ type, commandId, success: true, result });
+  const sendError = (type: string, error: string) =>
+    figma.ui.postMessage({ type, commandId, success: false, error });
+
   // ── 바인딩 page 활성화 초크포인트 (옵션 A) ──
   // create 계열 명령이 바인딩된 pageId를 갖고 있으면, switch 분기 이전에 활성
   // page를 그 page로 1회 설정한다. 이후 모든 figma.createX()가 자동으로 올바른
@@ -236,6 +240,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const pages = getAllPages();
       figma.ui.postMessage({
         type: 'pages-list',
+        commandId,
         pages,
         currentPageId: figma.currentPage.id,
       });
@@ -246,6 +251,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const result = getFrames(msg.pageId as string | undefined);
       figma.ui.postMessage({
         type: 'frames-list',
+        commandId,
         frames: result.frames,
         pageId: result.pageId,
         pageName: result.pageName,
@@ -296,6 +302,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (selection.length === 0) {
         figma.ui.postMessage({
           type: 'extract-result',
+          commandId,
           format: 'json',
           success: false,
           error: '노드를 선택해주세요.',
@@ -314,6 +321,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (extractedNodes.length === 0) {
         figma.ui.postMessage({
           type: 'extract-result',
+          commandId,
           format: 'json',
           success: false,
           error: '추출 가능한 노드가 없습니다.',
@@ -324,6 +332,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const resultData = extractedNodes.length === 1 ? extractedNodes[0] : extractedNodes;
       figma.ui.postMessage({
         type: 'extract-result',
+        commandId,
         format: 'json',
         success: true,
         data: resultData,
@@ -336,6 +345,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (htmlSelection.length === 0) {
         figma.ui.postMessage({
           type: 'extract-result',
+          commandId,
           format: 'html',
           success: false,
           error: '노드를 선택해주세요.',
@@ -354,6 +364,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (htmlParts.length === 0) {
         figma.ui.postMessage({
           type: 'extract-result',
+          commandId,
           format: 'html',
           success: false,
           error: '추출 가능한 노드가 없습니다.',
@@ -363,6 +374,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
       figma.ui.postMessage({
         type: 'extract-result',
+        commandId,
         format: 'html',
         success: true,
         data: htmlParts.join('\n'),
@@ -377,6 +389,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (!jsonData) {
         figma.ui.postMessage({
           type: 'roundtrip-result',
+          commandId,
           format: 'json',
           success: false,
           error: 'JSON 데이터가 필요합니다.',
@@ -387,6 +400,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const jsonResult = await testRoundtripJSON(jsonData, jsonName);
       figma.ui.postMessage({
         type: 'roundtrip-result',
+        commandId,
         format: 'json',
         ...jsonResult,
       });
@@ -400,6 +414,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (!htmlData) {
         figma.ui.postMessage({
           type: 'roundtrip-result',
+          commandId,
           format: 'html',
           success: false,
           error: 'HTML 데이터가 필요합니다.',
@@ -410,6 +425,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const htmlResult = await testRoundtripHTML(htmlData, htmlName);
       figma.ui.postMessage({
         type: 'roundtrip-result',
+        commandId,
         format: 'html',
         ...htmlResult,
       });
@@ -445,6 +461,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         });
         figma.ui.postMessage({
           type: 'tree-result',
+          commandId,
           success: true,
           result,
         });
@@ -493,6 +510,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
         figma.ui.postMessage({
           type: 'extract-node-json-result',
+          commandId,
           success: true,
           result: {
             nodeId: extractNodeId,
