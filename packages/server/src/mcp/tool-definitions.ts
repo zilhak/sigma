@@ -2232,6 +2232,10 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   {
     name: 'sigma_create_component_spec',
     description:
+      '[용도] 반복되는 UI 조각(배지·버튼·칩 등)을 HTML로 한 번 정의해 재사용 Figma 컴포넌트로 등록하고, ' +
+      '이후 sigma_create_component_spec_instance에 alias+props만 주어 화면을 조립합니다 — create_frame/create_rectangle로 노드를 하나씩 쌓는 것을 대체합니다. ' +
+      '⚠️ 코드베이스의 컴포넌트를 Figma에 연결하는 code-connect/코드매핑 기능이 아닙니다. ' +
+      '여기서 HTML은 Figma 컴포넌트를 만들기 위한 설계 스펙일 뿐, 소스코드와 링크하지 않습니다. ' +
       '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수, validateOnly는 예외). ' +
       '[구조] 단일 루트, inline style만(<style>·class 불가). 컨테이너 태그는 div/button뿐이며 자식이 있으면 display: flex 명시 필수. ' +
       '텍스트 태그(span/p/h1~h6/a/strong/em/b/i)는 자식 없는 leaf 전용. void는 img/br. 허용 HTML 속성: style, src, alt, href, data-sigma-*. ' +
