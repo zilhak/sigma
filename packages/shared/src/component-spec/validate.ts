@@ -41,6 +41,27 @@ const VOID_TAGS = new Set(['br', 'img']);
 export const ALLOWED_TAGS = new Set([...CONTAINER_TAGS, ...TEXT_TAGS, ...VOID_TAGS]);
 
 /**
+ * <svg> 벡터 아이콘 — 컨테이너(div/button)의 자식 leaf로만 허용.
+ * 빌더(figma-plugin html-parser)가 svg 전체를 svgString으로 캡처해 createNodeFromSvg로
+ * 정적 벡터를 만든다. createNodeFromSvg는 정적 path/shape만 안전하게 옮기므로,
+ * 애니메이션·스크립트·필터·foreignObject·외부참조 등은 아래에서 차단한다.
+ *
+ * 태그 비교는 스캐너가 소문자화한 이름 기준(예: linearGradient→lineargradient).
+ */
+export const SVG_ALLOWED_TAGS = new Set([
+  'svg', 'g', 'path', 'circle', 'ellipse', 'rect', 'line', 'polyline', 'polygon',
+  'defs', 'lineargradient', 'radialgradient', 'stop', 'clippath', 'title', 'desc',
+]);
+
+/** svg 내부에서 명시적으로 차단하는 요소 (fe* 필터 프리미티브는 접두사로 별도 차단) */
+export const SVG_BLOCKED_TAGS = new Set([
+  'script', 'style',
+  'animate', 'animatetransform', 'animatemotion', 'animatecolor', 'set',
+  'foreignobject', 'filter', 'image', 'a', 'iframe', 'switch',
+  'use', 'symbol', 'text', 'tspan',
+]);
+
+/**
  * 허용 CSS 속성 (kebab-case) — html-parser.ts applyStyleProperty 지원 집합.
  * 여기 없는 속성이 스펙에 들어오면 등록 거부.
  *
@@ -247,6 +268,18 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     const attrsString = match[3];
     const selfClosed = match[4] === '/' || VOID_TAGS.has(tagName);
 
+    // <svg> 벡터 아이콘: 컨테이너의 자식 leaf로 등록하고, 내부는 별도 스캐너로
+    // 화이트리스트 검증한다(내부 태그를 일반 스캐너로 흘리지 않도록 </svg>까지 점프).
+    if (!isClosing && tagName === 'svg') {
+      handleSvgLeaf(attrsString);
+      if (!selfClosed) {
+        const end = scanSvgInternals(index); // index = 여는 <svg ...> 태그 바로 뒤
+        index = end;
+        tagRe.lastIndex = end;
+      }
+      continue;
+    }
+
     if (isClosing) {
       handleCloseTag(tagName);
     } else {
@@ -283,6 +316,96 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     }
   }
 
+  /** 현재 열린 부모가 자식 요소를 받을 수 있는지 검사 + 자식 보유 표시 (일반 태그·svg 공용) */
+  function registerChild() {
+    const parent = stack[stack.length - 1];
+    parent.hasChildElement = true;
+    if (parent.slotName !== null) {
+      errors.push(`slot 요소(<${parent.tagName} data-sigma-slot="${parent.slotName}">)는 자식 요소를 가질 수 없습니다. 텍스트만 허용됩니다`);
+    } else if (TEXT_TAGS.has(parent.tagName)) {
+      errors.push(`텍스트 태그 <${parent.tagName}>는 자식 요소를 가질 수 없습니다 (rich text 중첩은 이후 단계). 컨테이너가 필요하면 div/button을 사용하세요`);
+    } else if (CONTAINER_TAGS.has(parent.tagName) && !parent.hasFlexDisplay && !parent.flexWarned) {
+      errors.push(`<${parent.tagName}> 컨테이너에 display: flex가 없습니다 — 자식 요소를 가진 컨테이너는 display: flex를 명시해야 합니다 (배치는 Auto Layout으로만, 암시적 블록 배치 불가)`);
+      parent.flexWarned = true;
+    }
+  }
+
+  /** svg 여는 태그를 아이콘 leaf로 등록: 루트 불가, slot 불가, 자식 규칙(flex) 유지, 여는 태그 속성 차단 검사 */
+  function handleSvgLeaf(attrsString: string) {
+    if (stack.length === 0) {
+      rootCount++;
+      errors.push('svg는 루트 요소로 사용할 수 없습니다 (컴포넌트 루트는 div/button만) — svg는 컨테이너의 자식 아이콘으로 넣으세요');
+    } else {
+      registerChild();
+    }
+    if (/(?:^|\s)data-sigma-slot\s*=/i.test(attrsString)) {
+      errors.push('svg에는 data-sigma-slot을 붙일 수 없습니다 (svg는 텍스트가 아니라 벡터 아이콘 leaf입니다)');
+    }
+    validateSvgAttrs(attrsString, 'svg');
+  }
+
+  /**
+   * 여는 <svg ...> 다음(fromIndex)부터 매칭 </svg>까지 내부 태그를 화이트리스트 검증한다.
+   * 중첩 svg는 depth 카운트로 안전 처리. 반환값은 매칭 </svg> 바로 뒤 인덱스.
+   * 내부는 일반 스캐너(handleOpenTag/CloseTag)로 흘리지 않으므로 stack에 영향 없음.
+   */
+  function scanSvgInternals(fromIndex: number): number {
+    const innerRe = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)(\/?)>/g;
+    innerRe.lastIndex = fromIndex;
+    let depth = 1; // 이미 여는 <svg> 안
+    let m: RegExpExecArray | null;
+    while ((m = innerRe.exec(source)) !== null) {
+      const closing = m[1] === '/';
+      const name = m[2].toLowerCase();
+      const attrs = m[3];
+      if (name === 'svg') {
+        if (closing) {
+          depth--;
+          if (depth === 0) return innerRe.lastIndex; // </svg> 뒤
+        } else {
+          depth++;
+          validateSvgAttrs(attrs, 'svg');
+        }
+        continue;
+      }
+      if (closing) continue; // 내부 닫는 태그는 검증 대상 아님
+      validateSvgTag(name, attrs);
+    }
+    errors.push('닫히지 않은 <svg> 태그');
+    return source.length;
+  }
+
+  /** svg 내부 여는 태그 1개를 검증: 허용 목록 통과, 차단 목록/fe* 거부, 그 외 미지원 거부 */
+  function validateSvgTag(name: string, attrsString: string) {
+    if (SVG_ALLOWED_TAGS.has(name)) {
+      validateSvgAttrs(attrsString, name);
+      return;
+    }
+    if (SVG_BLOCKED_TAGS.has(name) || name.startsWith('fe')) {
+      errors.push(`svg 내부에 허용되지 않는 요소: <${name}> — 애니메이션/스크립트/필터/외부참조 등은 정적 벡터로 변환되지 않아 차단됩니다`);
+      return;
+    }
+    errors.push(`svg 내부에 알 수 없는 요소: <${name}> (허용: ${Array.from(SVG_ALLOWED_TAGS).join(', ')})`);
+  }
+
+  /** svg 태그(루트/내부 공용) 속성 차단 검사: on* 이벤트, href/xlink:href, style 내 url()/expression */
+  function validateSvgAttrs(attrsString: string, tagLabel: string) {
+    const onMatch = attrsString.match(/(?:^|\s)(on[a-z]+)\s*=/i);
+    if (onMatch) {
+      errors.push(`svg 이벤트 핸들러 속성은 허용되지 않습니다: ${onMatch[1]} (<${tagLabel}>)`);
+    }
+    if (/(?:^|\s)(?:xlink:)?href\s*=/i.test(attrsString)) {
+      errors.push(`svg의 href/xlink:href는 허용되지 않습니다 (<${tagLabel}>) — 외부/내부 참조·<use>는 이번 단계에서 차단됩니다`);
+    }
+    const styleMatch = attrsString.match(/style\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+    if (styleMatch) {
+      const v = (styleMatch[1] || styleMatch[2] || '').toLowerCase();
+      if (v.includes('url(') || v.includes('expression')) {
+        errors.push(`svg style 속성에 url()/expression은 허용되지 않습니다 (<${tagLabel}>)`);
+      }
+    }
+  }
+
   function handleOpenTag(tagName: string, attrsString: string, selfClosed: boolean) {
     if (!ALLOWED_TAGS.has(tagName)) {
       errors.push(`허용되지 않는 태그: <${tagName}> (허용: ${Array.from(ALLOWED_TAGS).join(', ')})`);
@@ -290,16 +413,7 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     if (stack.length === 0) {
       rootCount++;
     } else {
-      const parent = stack[stack.length - 1];
-      parent.hasChildElement = true;
-      if (parent.slotName !== null) {
-        errors.push(`slot 요소(<${parent.tagName} data-sigma-slot="${parent.slotName}">)는 자식 요소를 가질 수 없습니다. 텍스트만 허용됩니다`);
-      } else if (TEXT_TAGS.has(parent.tagName)) {
-        errors.push(`텍스트 태그 <${parent.tagName}>는 자식 요소를 가질 수 없습니다 (rich text 중첩은 이후 단계). 컨테이너가 필요하면 div/button을 사용하세요`);
-      } else if (CONTAINER_TAGS.has(parent.tagName) && !parent.hasFlexDisplay && !parent.flexWarned) {
-        errors.push(`<${parent.tagName}> 컨테이너에 display: flex가 없습니다 — 자식 요소를 가진 컨테이너는 display: flex를 명시해야 합니다 (배치는 Auto Layout으로만, 암시적 블록 배치 불가)`);
-        parent.flexWarned = true;
-      }
+      registerChild();
     }
 
     const { attrs, bareAttrs } = parseAttrs(attrsString);
