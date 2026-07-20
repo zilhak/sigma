@@ -137,6 +137,26 @@ export function flattenNodes(
 }
 
 /**
+ * reparent 로 절대 위치가 튀었을 때의 좌표 보정 안내 (좌표계 함정).
+ *
+ * Figma 에서 노드의 x/y 는 "직속 부모 기준" 좌표이고, 부모 종류에 따라 원점이 다르다:
+ *   - SECTION/PAGE 는 원점을 새로 잡지 않음 → 자식 x/y = 절대(페이지) 좌표
+ *   - FRAME/COMPONENT/GROUP 은 로컬 원점 → 자식 x/y = 부모 좌상단 기준 상대 좌표
+ * appendChild 는 노드의 숫자 x/y 를 그대로 보존하므로, 원점 성격이 다른 부모로 옮기면
+ * 같은 숫자가 새 원점 기준으로 재해석되어 화면상 위치가 튄다.
+ */
+export interface MoveCoordinateShift {
+  shifted: true;
+  reason: string;
+  beforeAbsolute: { x: number; y: number };
+  afterAbsolute: { x: number; y: number };
+  currentLocal: { x: number; y: number };
+  /** 원래 절대 위치를 유지하려면 이 로컬 좌표로 보정해야 함 */
+  restoreLocal: { x: number; y: number };
+  hint: string;
+}
+
+/**
  * 노드 이동 결과
  */
 export interface MoveNodeResult {
@@ -149,6 +169,8 @@ export interface MoveNodeResult {
   newParentName: string;
   newParentType: string;
   index: number | undefined;
+  /** reparent 로 절대 위치가 튄 경우에만 존재 — 좌표 보정 안내 */
+  coordinateShift?: MoveCoordinateShift;
 }
 
 /**
@@ -199,10 +221,43 @@ export function moveNode(
   const oldParentId = node.parent ? node.parent.id : null;
   const oldParentName = node.parent ? node.parent.name : null;
 
+  // reparent 로 절대 위치가 튀는지 감지하기 위해 이동 전 절대좌표를 기록.
+  // absoluteTransform[*][2] = 노드 원점(로컬 0,0)의 절대 위치.
+  const hasTransform = 'absoluteTransform' in node;
+  const beforeAbsX = hasTransform ? (node as SceneNode).absoluteTransform[0][2] : 0;
+  const beforeAbsY = hasTransform ? (node as SceneNode).absoluteTransform[1][2] : 0;
+
   if (index !== undefined) {
     (targetParent as ChildrenMixin).insertChild(index, node as SceneNode);
   } else {
     (targetParent as ChildrenMixin).appendChild(node as SceneNode);
+  }
+
+  // appendChild 는 로컬 x/y 숫자를 보존 → 새 부모 원점 성격이 다르면 절대 위치가 이동한다.
+  let coordinateShift: MoveCoordinateShift | undefined;
+  if (hasTransform) {
+    const scene = node as SceneNode;
+    const afterAbsX = scene.absoluteTransform[0][2];
+    const afterAbsY = scene.absoluteTransform[1][2];
+    const dx = afterAbsX - beforeAbsX;
+    const dy = afterAbsY - beforeAbsY;
+    if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+      const r = (n: number) => Math.round(n * 100) / 100;
+      coordinateShift = {
+        shifted: true,
+        reason:
+          'reparent 시 로컬 x/y 숫자는 보존되지만 새 부모의 원점 기준으로 재해석됩니다 ' +
+          '(SECTION/PAGE=원점 없음·자식이 절대좌표 ↔ FRAME/COMPONENT/GROUP=로컬 원점·자식이 상대좌표). ' +
+          '그래서 절대 위치가 이동했습니다.',
+        beforeAbsolute: { x: r(beforeAbsX), y: r(beforeAbsY) },
+        afterAbsolute: { x: r(afterAbsX), y: r(afterAbsY) },
+        currentLocal: { x: r(scene.x), y: r(scene.y) },
+        restoreLocal: { x: r(scene.x - dx), y: r(scene.y - dy) },
+        hint:
+          '원래 절대 위치를 유지하려면 sigma_modify_node(method:"move") 로 restoreLocal 좌표로 보정하세요. ' +
+          '배치 의도가 새 부모 로컬 기준이면 무시해도 됩니다. 이후 sigma_layout_lint 로 회귀 검사 권장.',
+      };
+    }
   }
 
   return {
@@ -215,6 +270,7 @@ export function moveNode(
     newParentName: targetParent.name,
     newParentType: targetParent.type,
     index,
+    ...(coordinateShift ? { coordinateShift } : {}),
   };
 }
 

@@ -554,6 +554,8 @@ Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout
 노드를 Section, Frame, Group, 또는 Page의 자식으로 이동시킵니다.
 기존 부모에서 자동으로 제거되고 새 부모에 추가됩니다.
 
+⚠️ **좌표계 함정**: 노드의 x/y는 "직속 부모 기준" 좌표이고 부모 종류마다 원점이 다릅니다 — SECTION/PAGE는 원점을 새로 잡지 않아 자식이 절대좌표, FRAME/COMPONENT/GROUP은 로컬 원점이라 자식이 상대좌표. 이동은 로컬 x/y **숫자를 그대로 보존**하므로 원점 성격이 다른 부모로 옮기면 화면상 위치가 튑니다(예: 섹션→프레임). 이 경우 응답에 **coordinateShift**(beforeAbsolute/afterAbsolute + 원위치 복원용 restoreLocal 좌표)가 포함되니, 원래 절대 위치를 유지하려면 sigma_modify_node(move)로 restoreLocal 좌표로 보정하세요. 이동 후 sigma_layout_lint로 회귀 검사 권장.
+
 **사용 예시:**
 - 프레임을 Section으로 이동: sigma_move_node({ nodeId: "1:234", parentId: "5:678" })
 - 특정 위치에 삽입: sigma_move_node({ nodeId: "1:234", parentId: "5:678", index: 0 })`,

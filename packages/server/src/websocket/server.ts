@@ -824,7 +824,7 @@ export class FigmaWebSocketServer {
     parentId: string,
     index?: number,
     pluginId?: string
-  ): Promise<{ nodeId: string; nodeName: string; nodeType: string; oldParentId: string | null; oldParentName: string | null; newParentId: string; newParentName: string; newParentType: string }> {
+  ): Promise<{ nodeId: string; nodeName: string; nodeType: string; oldParentId: string | null; oldParentName: string | null; newParentId: string; newParentName: string; newParentType: string; coordinateShift?: { shifted: true; reason: string; beforeAbsolute: { x: number; y: number }; afterAbsolute: { x: number; y: number }; currentLocal: { x: number; y: number }; restoreLocal: { x: number; y: number }; hint: string } }> {
     return this.sendCommand('MOVE_NODE', { nodeId, parentId, index }, {
       pluginId,
       logSuffix: ` (node: ${nodeId} → parent: ${parentId})`,
