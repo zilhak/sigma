@@ -137,7 +137,8 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
         }
       }
       for (const c of children) {
-        // R5: 섹션 밖으로 튀어나감
+        if (annoWire.has(c.name)) continue; // 기획 프리셋 예외
+        // R5(섹션): 자식은 섹션 bbox(절대좌표) 안에 있어야 함
         if (!insetOk(bb(container), bb(c), 0)) {
           add('child_overflow', `"${c.name}" (${c.id}) 가 섹션 "${container.name}" 밖으로 나감`,
             [c.id], growSectionFix(container, c, 0, 'child_overflow: 자식을 품도록 섹션 확장'));
@@ -145,6 +146,21 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
           // R3: 프레임 여백 부족 (섹션에 딱 붙으면 섹션 의미 없음)
           add('frame_padding', `프레임 "${c.name}" 가 섹션 "${container.name}" 안 ${pad}px 여백 미달`,
             [c.id, container.id], growSectionFix(container, c, pad, `frame_padding: ${pad}px 여백 확보`));
+        }
+      }
+    }
+
+    if (kind === 'frame' && container) {
+      // R5(프레임): 프레임/컴포넌트/인스턴스의 배치형 자식은 그 내부 좌표(0,0~W,H) 안에 있어야 함.
+      // ⚠️ 좌표계: 섹션 자식은 절대좌표지만 프레임/컴포넌트 자식은 "부모 로컬 좌표"라 (0,0,W,H) 기준으로 본다.
+      // ⚠️ TEXT/RECT/VECTOR 리프는 폰트 baseline 등으로 1px 삐져나오는 게 정상 → 배치형(PLACED)만 검사.
+      const local = { x: 0, y: 0, width: container.boundingBox.width, height: container.boundingBox.height };
+      for (const c of children) {
+        if (annoWire.has(c.name)) continue; // 기획 프리셋 예외
+        if (!PLACED_TYPES.has(c.type)) continue; // 배치형 자식만 (리프 제외)
+        if (!insetOk(local, bb(c), 0)) {
+          add('child_overflow', `"${c.name}" (${c.id}) 가 "${container.name}" 프레임 내부 좌표를 벗어남`, [c.id]);
+          // 프레임 확대는 디자인 변경이라 자동수정 안 함(needsManual) — check-first
         }
       }
     }
@@ -158,10 +174,11 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
       }
     }
 
-    // 재귀: SECTION → section, FRAME → frame (COMPONENT 내부 guts 는 기하 검사 대상 아님)
+    // 재귀: SECTION → section, 배치형(프레임/컴포넌트/인스턴스/그룹) → frame. 기획 프리셋 하위는 제외.
     for (const c of children) {
+      if (annoWire.has(c.name)) continue;
       if (c.type === 'SECTION') checkContainer(kids(c), c, 'section');
-      else if (c.type === 'FRAME') checkContainer(kids(c), c, 'frame');
+      else if (PLACED_TYPES.has(c.type)) checkContainer(kids(c), c, 'frame');
     }
   }
 

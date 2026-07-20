@@ -146,6 +146,68 @@ describe('lintLayout', () => {
   });
 });
 
+describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
+  test('프레임 안 배치형 자식이 내부에 있으면 clean', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
+          node('i', 'card', 'INSTANCE', [20, 20, 200, 100]), // 로컬 좌표
+        ]),
+      ]),
+    ];
+    expect(lintLayout(roots).clean).toBe(true);
+  });
+
+  test('배치형 자식이 로컬 좌표로 프레임을 벗어나면 child_overflow (자동수정 없음)', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
+          node('i', 'card', 'INSTANCE', [300, 250, 200, 100]), // 300+200=500 > 400
+        ]),
+      ]),
+    ];
+    const v = lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow');
+    expect(v).toHaveLength(1);
+    expect(v[0].nodes).toContain('i');
+    expect(v[0].fix).toBeUndefined(); // 프레임 오버플로는 재배치 판단 필요 → 자동수정 안 함
+  });
+
+  test('리프(TEXT)는 프레임 밖으로 살짝 나가도 검사 제외 (baseline 노이즈 방지)', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
+          node('t', 'label', 'TEXT', [12, -1, 38, 18]), // y=-1 로 위로 삐져나옴(정상)
+        ]),
+      ]),
+    ];
+    expect(lintLayout(roots).clean).toBe(true);
+  });
+
+  test('anno/wire 는 프레임 밖으로 나가도 예외', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
+          node('m', 'marker', 'INSTANCE', [390, -10, 24, 24]), // 밖으로 나가지만 marker(anno) 예외
+        ]),
+      ]),
+    ];
+    expect(rules(roots)).not.toContain('child_overflow');
+  });
+
+  test('중첩: 마스터 COMPONENT 내부 인스턴스가 컴포넌트 밖으로 나가면 잡음', () => {
+    const roots = [
+      node('lib', 'library', 'SECTION', [0, 0, 3000, 3000], [
+        node('m', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60], [
+          node('ovf', 'OneUI/select', 'INSTANCE', [1400, 10, 200, 32]), // 1400+200=1600 > 1520
+        ]),
+      ]),
+    ];
+    const v = lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow');
+    expect(v).toHaveLength(1);
+    expect(v[0].nodes).toContain('ovf');
+  });
+});
+
 describe('mergeFixesBySection', () => {
   test('같은 섹션 확장 요구를 union', () => {
     const fixes: LayoutFix[] = [
