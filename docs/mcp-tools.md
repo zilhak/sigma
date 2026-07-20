@@ -1,6 +1,6 @@
 # MCP 도구 레퍼런스
 
-Sigma MCP 서버가 제공하는 121개 도구의 전체 목록입니다.
+Sigma MCP 서버가 제공하는 123개 도구의 전체 목록입니다.
 
 ## 사용 흐름
 
@@ -102,6 +102,19 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 **Plugin Data:**
 `setPluginData`, `getPluginData`, `getPluginDataKeys`, `setSharedPluginData`, `getSharedPluginData`
+
+## 레이아웃 규약 (lint / fix)
+
+캔버스 공간 불변식(형제 non-overlap, 섹션 여백, 컨테이너 포함 등)을 결정론적으로 검사·수정.
+로스 노드는 겹쳐도 육안 판별이 안 되므로 좌표 기반 검사가 필요하다.
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_layout_lint` | 공간 규약 위반 검출 (read-only). 자동수정 가능한 위반엔 `fix` 동봉 | `token` | `nodeId`, `path`, `padding` |
+| `sigma_layout_fix` | 안전 자동수정(섹션 확장)만 적용. **dry-run 기본**, `apply:true`로 실제 적용 | `token` | `apply`, `padding` |
+
+**검사 규칙**: `outside_section`(섹션 밖 배치노드) · `section_overlap` · `card_overlap`(섹션 안 프레임 겹침) · `frame_padding`(섹션 안 프레임 ≥20px 여백) · `instance_orphan`(프레임 밖 인스턴스, anno/wire 예외) · `child_overflow`(부모 섹션 초과).
+자동수정은 **frame_padding·child_overflow → 섹션 확장**만(형제 불변). 나머지는 재배치 판단이 필요해 `needsManual`로 보고만.
 
 ## 조회/검색
 

@@ -14,7 +14,7 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 **핵심 철학:** 서로 연동하면 최고의 효율, 따로따로도 사용 가능
 
-Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 121개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
+Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 123개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
 ## 모듈 구성
 
@@ -169,7 +169,7 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 (121개):**
+**MCP 도구 (123개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
@@ -192,6 +192,8 @@ AI Agent:
 | | `sigma_set_multiple_text_contents` | 여러 텍스트 노드 일괄 변경 |
 | | `sigma_group_nodes` / `sigma_ungroup` | 그룹 묶기 / 해제 |
 | | `sigma_flatten` / `sigma_boolean_operation` | 벡터 평탄화 / Boolean 연산 |
+| 레이아웃 규약 | `sigma_layout_lint` | 공간 규약 위반 검출 (read-only) |
+| | `sigma_layout_fix` | 안전 자동수정(섹션 확장), dry-run 기본 |
 | 조회 | `sigma_find_node` / `sigma_get_tree` | 노드 검색 / 계층 탐색 |
 | | `sigma_get_node_info` / `sigma_get_nodes_info` | 노드 상세 정보 (단일/배치) |
 | | `sigma_get_frames` / `sigma_get_document_info` | 프레임 목록 / 문서 정보 |
@@ -241,7 +243,7 @@ docker compose up -d
 |------|------|
 | [아키텍처](docs/architecture.md) | 시스템 구조, 통신 흐름, 데이터 흐름 |
 | [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
-| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 121개 MCP 도구 전체 목록 및 파라미터 |
+| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 123개 MCP 도구 전체 목록 및 파라미터 |
 | [컴포넌트 스펙](docs/component-spec.md) | HTML 기반 컴포넌트 정의 규칙 (화이트리스트·값 검증·slot) |
 | [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |
 | [Extractor 스크립트 상세](docs/scripts/extractor.md) | 추출 로직, 가시성 판단, 텍스트 병합, SVG/아이콘 처리 |

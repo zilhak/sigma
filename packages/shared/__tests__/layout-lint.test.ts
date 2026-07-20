@@ -1,0 +1,154 @@
+/**
+ * lintLayout 스펙 — 공간 규약 6규칙 검출 + 안전 fix.
+ *   R0 outside_section / R1 section_overlap / R2 card_overlap
+ *   R3 frame_padding / R4 instance_orphan / R5 child_overflow
+ * 좌표계: 섹션 직속 자식은 절대좌표(섹션은 원점 재설정 안 함).
+ */
+import { describe, test, expect } from 'bun:test';
+import { lintLayout, mergeFixesBySection, type LayoutFix } from '../src/layout/lint';
+import type { TreeNode } from '../src/types';
+
+function node(
+  id: string, name: string, type: string,
+  box: [number, number, number, number], children: TreeNode[] = [],
+): TreeNode {
+  return {
+    id, name, type,
+    boundingBox: { x: box[0], y: box[1], width: box[2], height: box[3] },
+    childCount: children.length,
+    children,
+  };
+}
+
+const rules = (roots: TreeNode[], opts = {}) =>
+  lintLayout(roots, opts).violations.map((v) => v.rule).sort();
+
+describe('lintLayout', () => {
+  test('규약 준수 트리 → clean', () => {
+    const roots = [
+      node('sA', 'diagram', 'SECTION', [-40, -80, 1696, 1280], [
+        node('f1', 'screen', 'FRAME', [0, 0, 1616, 1160], [
+          node('i1', 'shell', 'INSTANCE', [48, 132, 1520, 780]),
+        ]),
+      ]),
+      node('sB', 'library', 'SECTION', [-40, 1240, 1600, 1760], [
+        node('c1', 'shell/gnb', 'COMPONENT', [0, 1260, 1520, 60]),
+        node('c2', 'shell/lnb', 'COMPONENT', [0, 1380, 240, 720]),
+      ]),
+    ];
+    const r = lintLayout(roots);
+    expect(r.clean).toBe(true);
+    expect(r.violationCount).toBe(0);
+  });
+
+  test('R1 section_overlap — 형제 섹션 겹침', () => {
+    const roots = [
+      node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
+      node('sB', 'B', 'SECTION', [500, 300, 400, 400]),
+    ];
+    expect(rules(roots)).toContain('section_overlap');
+  });
+
+  test('R2 card_overlap — 섹션 안 프레임끼리 겹침', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f1', 'f1', 'FRAME', [20, 20, 600, 400]),
+        node('f2', 'f2', 'FRAME', [500, 350, 600, 400]),
+      ]),
+    ];
+    expect(rules(roots)).toContain('card_overlap');
+  });
+
+  test('R3 frame_padding — 딱 붙은 프레임 + grow fix 동봉', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 600, 400], [
+        node('f', 'flush', 'FRAME', [0, 0, 600, 400]),
+      ]),
+    ];
+    const r = lintLayout(roots);
+    const v = r.violations.find((x) => x.rule === 'frame_padding');
+    expect(v).toBeDefined();
+    expect(v!.fix).toBeDefined();
+    // 20px 여백 확보를 위해 섹션이 사방 20 확장돼야 함
+    expect(v!.fix).toMatchObject({ op: 'grow_section', sectionId: 's', x: -20, y: -20, width: 640, height: 440 });
+  });
+
+  test('R5 child_overflow — 자식이 섹션 밖 + grow fix', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 600, 400], [
+        node('f', 'big', 'FRAME', [550, 350, 300, 300]),
+      ]),
+    ];
+    const r = lintLayout(roots);
+    const v = r.violations.find((x) => x.rule === 'child_overflow');
+    expect(v).toBeDefined();
+    expect(v!.fix).toMatchObject({ op: 'grow_section', sectionId: 's', width: 850, height: 650 });
+  });
+
+  test('R0 outside_section — 페이지 직속 배치 노드', () => {
+    const roots = [node('f', 'loose', 'FRAME', [0, 0, 100, 100])];
+    expect(rules(roots)).toContain('outside_section');
+  });
+
+  test('R4 instance_orphan — 프레임 밖 인스턴스', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 600, 400], [
+        node('i', 'floatingBtn', 'INSTANCE', [20, 20, 80, 32]),
+      ]),
+    ];
+    expect(rules(roots)).toContain('instance_orphan');
+  });
+
+  test('R4 예외 — 기획용(anno/wire) 인스턴스는 프레임 밖이어도 통과', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 600, 400], [
+        node('m', 'marker', 'INSTANCE', [20, 20, 24, 24]),
+      ]),
+    ];
+    expect(rules(roots)).not.toContain('instance_orphan');
+  });
+
+  test('프레임 안 인스턴스 겹침은 허용 (합성)', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'screen', 'FRAME', [20, 20, 800, 600], [
+          node('a', 'card', 'INSTANCE', [0, 0, 400, 300]),
+          node('b', 'button', 'INSTANCE', [100, 100, 200, 80]),
+        ]),
+      ]),
+    ];
+    expect(lintLayout(roots).clean).toBe(true);
+  });
+
+  test('padding 옵션 반영', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 600, 400], [
+        node('f', 'f', 'FRAME', [10, 10, 580, 380]),
+      ]),
+    ];
+    // 여백 10px → pad 20 이면 위반, pad 5 면 통과
+    expect(rules(roots, { padding: 20 })).toContain('frame_padding');
+    expect(rules(roots, { padding: 5 })).not.toContain('frame_padding');
+  });
+});
+
+describe('mergeFixesBySection', () => {
+  test('같은 섹션 확장 요구를 union', () => {
+    const fixes: LayoutFix[] = [
+      { op: 'grow_section', sectionId: 's', x: -20, y: 0, width: 640, height: 400, reason: 'a' },
+      { op: 'grow_section', sectionId: 's', x: 0, y: -20, width: 600, height: 440, reason: 'b' },
+    ];
+    const merged = mergeFixesBySection(fixes);
+    expect(merged).toHaveLength(1);
+    // union: x=-20,y=-20, right=max(620,600)=620, bottom=max(400,420)=420 → w=640,h=440
+    expect(merged[0]).toMatchObject({ sectionId: 's', x: -20, y: -20, width: 640, height: 440 });
+  });
+
+  test('다른 섹션은 분리 유지', () => {
+    const fixes: LayoutFix[] = [
+      { op: 'grow_section', sectionId: 's1', x: 0, y: 0, width: 100, height: 100, reason: '' },
+      { op: 'grow_section', sectionId: 's2', x: 0, y: 0, width: 100, height: 100, reason: '' },
+    ];
+    expect(mergeFixesBySection(fixes)).toHaveLength(2);
+  });
+});

@@ -46,3 +46,17 @@ export {
   STORAGE_PATH,
   EXTRACTED_PATH,
 } from './constants';
+
+// Layout lint (공간 규약 검출/수정 엔진)
+export type {
+  LayoutRule,
+  LayoutFix,
+  LayoutViolation,
+  LintOptions,
+  LintResult,
+} from './layout/lint';
+export {
+  DEFAULT_PADDING,
+  lintLayout,
+  mergeFixesBySection,
+} from './layout/lint';

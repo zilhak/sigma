@@ -343,6 +343,8 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다. nodeId로 노드를 직접 지정합니다.
 허용된 메서드만 실행 가능하며, 허용되지 않은 메서드를 호출하면 사용 가능한 전체 메서드 목록이 반환됩니다.
 
+⚠️ **resize/move 주의**: 프레임/섹션을 아래·옆으로 키우면 그쪽에 있던 **형제 노드를 덮을 수 있습니다**(로스 노드는 자유 배치라 겹쳐도 육안으로 안 보임). 큰 변형 전엔 sigma_get_tree(depth:1)로 형제 bbox를 확인하고, 변형 후엔 sigma_layout_lint로 회귀 검사하세요.
+
 **사용 가능한 메서드:**
 - Basic: rename, resize, move, setOpacity, setVisible, setLocked, remove
 - Visual: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode, setCornerSmoothing, setDashPattern, setMask
@@ -500,7 +502,9 @@ path: ["icon/arrow/left"] (원소 1개짜리 배열)
 Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout을 지원하지 않지만,
 페이지의 콘텐츠를 논리적으로 그룹화하는 데 사용됩니다.
 
-**children**: 기존 노드의 ID 배열을 전달하면, 해당 노드들이 Section 안으로 이동합니다.`,
+**children**: 기존 노드의 ID 배열을 전달하면, 해당 노드들이 Section 안으로 이동합니다.
+
+**권장 규약**: 배치 노드(프레임/컴포넌트)는 페이지에 흩뿌리지 말고 Section으로 구획하세요(형제 섹션끼리 non-overlap). Section 안 Frame 은 가장자리에 ≥20px 여백을 두는 게 좋습니다(딱 붙으면 섹션 의미가 없음). Section은 Auto Layout처럼 자동 확장되지 않으니 자식을 키운 뒤엔 Section도 직접 넓혀야 합니다. 검증은 sigma_layout_lint / 자동수정은 sigma_layout_fix.`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -2757,6 +2761,51 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         strokeWeight: { type: 'number', description: 'stroke 두께' },
       },
       required: ['token', 'startNodeId', 'endNodeId'],
+    },
+  },
+
+  // === Layout 공간 규약 (lint / fix) ===
+  {
+    name: 'sigma_layout_lint',
+    description: `페이지의 **레이아웃 공간 규약 위반을 검출**합니다 (read-only). **바인딩 필수**.
+
+캔버스에서 로스(loose) 노드는 자유 배치라 서로 겹칠 수 있고, 겹치면 렌더상 가려 육안 판별이 안 됩니다(좌표로만 확실). 이 도구가 결정론적(AABB/포함) 규칙으로 전수 검사합니다.
+
+**검사 규칙**:
+- \`outside_section\`: 페이지 직속에 섹션 아닌 배치 노드(FRAME/COMPONENT/INSTANCE/GROUP) 금지 — 무조건 섹션 안.
+- \`section_overlap\`: 형제 SECTION 끼리 겹침 금지.
+- \`card_overlap\`: 한 섹션의 직속 카드(FRAME/COMPONENT)끼리 겹침 금지.
+- \`frame_padding\`: 섹션 직속 FRAME 은 섹션 안쪽 ≥padding(기본 20px) 여백 확보(딱 붙으면 섹션 의미 없음).
+- \`instance_orphan\`: INSTANCE 는 반드시 FRAME 조상 아래(기획 프리셋 anno/wire 는 예외).
+- \`child_overflow\`: 자식은 부모 섹션 bbox 를 벗어날 수 없음.
+
+자동수정 가능한 위반(frame_padding/child_overflow)에는 \`fix\`(섹션 확장 안)가 함께 옵니다. 실제 수정은 sigma_layout_fix. 배치/resize 후 이 도구로 회귀 검사하는 습관을 권장합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '(선택) 검사 시작 노드. 미지정 시 페이지 전체' },
+        path: { type: 'string', description: '(선택) 검사 시작 경로 ("A/B/C")' },
+        padding: { type: 'number', description: '(선택) 섹션 안 프레임 최소 여백(px). 기본 20' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'sigma_layout_fix',
+    description: `레이아웃 공간 규약 위반 중 **안전하게 자동수정 가능한 것만 고쳐줍니다**. **바인딩 필수**.
+
+**dry-run 기본**(apply 미지정/false): 실제로 건드리지 않고 수정 계획만 반환. \`apply: true\` 여야 적용.
+
+**수정 정책 (check-first)**: 자동수정은 **섹션 확장(grow container)** 만 — 형제를 이동시키지 않으므로 손실이 없습니다(frame_padding/child_overflow 해소). 같은 섹션의 여러 확장 요구는 하나로 합쳐 적용. **section_overlap/card_overlap/instance_orphan/outside_section 은 재배치 판단이 필요해 자동수정하지 않고 \`needsManual\` 로 보고만** 합니다. 적용은 한 번에 처리되며, 확장이 옆 섹션과 겹칠 수 있어 적용 후 자동으로 회귀 검사 결과(after/remaining)를 반환합니다.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        apply: { type: 'boolean', description: '(선택) true 여야 실제 적용. 기본 false(dry-run)' },
+        padding: { type: 'number', description: '(선택) 섹션 안 프레임 최소 여백(px). 기본 20' },
+      },
+      required: ['token'],
     },
   },
 
