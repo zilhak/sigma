@@ -32,8 +32,10 @@ describe('lintLayout', () => {
         ]),
       ]),
       node('sB', 'library', 'SECTION', [-40, 1240, 1600, 1760], [
-        node('c1', 'shell/gnb', 'COMPONENT', [0, 1260, 1520, 60]),
-        node('c2', 'shell/lnb', 'COMPONENT', [0, 1380, 240, 720]),
+        node('board', 'masters', 'FRAME', [0, 1260, 1520, 1680], [
+          node('c1', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),   // 프레임 로컬 좌표
+          node('c2', 'shell/lnb', 'COMPONENT', [0, 120, 240, 720]),
+        ]),
       ]),
     ];
     const r = lintLayout(roots);
@@ -111,6 +113,26 @@ describe('lintLayout', () => {
       ]),
     ];
     expect(rules(roots)).not.toContain('instance_orphan');
+  });
+
+  test('component_needs_frame — 섹션 직속 COMPONENT 는 위반 (프레임 안에 있어야)', () => {
+    const roots = [
+      node('s', 'lib', 'SECTION', [0, 0, 2000, 2000], [
+        node('m', 'shell/gnb', 'COMPONENT', [100, 100, 400, 60]),
+      ]),
+    ];
+    expect(rules(roots)).toContain('component_needs_frame');
+  });
+
+  test('component_needs_frame — 프레임 안 COMPONENT 는 통과', () => {
+    const roots = [
+      node('s', 'lib', 'SECTION', [0, 0, 2000, 2000], [
+        node('board', 'board', 'FRAME', [100, 100, 600, 400], [
+          node('m', 'shell/gnb', 'COMPONENT', [20, 20, 400, 60]),
+        ]),
+      ]),
+    ];
+    expect(rules(roots)).not.toContain('component_needs_frame');
   });
 
   test('R4 예외 — 기획용(anno/wire) 인스턴스는 프레임 밖이어도 통과', () => {

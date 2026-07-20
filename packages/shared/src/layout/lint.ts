@@ -31,6 +31,7 @@ export type LayoutRule =
   | 'card_overlap'
   | 'frame_padding'
   | 'instance_orphan'
+  | 'component_needs_frame'
   | 'child_overflow';
 
 /** 안전 자동수정: 형제를 안 건드리고 섹션을 목표 bbox 로 확장 (grow container > move sibling). */
@@ -138,6 +139,12 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
       }
       for (const c of children) {
         if (annoWire.has(c.name)) continue; // 기획 프리셋 예외
+        // 섹션 직속은 FRAME/SECTION 만 허용. 배치형 컴포넌트/그룹은 프레임 안에 있어야 함.
+        // (INSTANCE 는 R4 instance_orphan 이 담당하므로 여기선 제외해 중복 방지)
+        if (c.type === 'COMPONENT' || c.type === 'COMPONENT_SET' || c.type === 'GROUP') {
+          add('component_needs_frame',
+            `"${c.name}" (${c.id}, ${c.type}) 는 섹션 직속이 아니라 프레임 안에 있어야 함`, [c.id]);
+        }
         // R5(섹션): 자식은 섹션 bbox(절대좌표) 안에 있어야 함
         if (!insetOk(bb(container), bb(c), 0)) {
           add('child_overflow', `"${c.name}" (${c.id}) 가 섹션 "${container.name}" 밖으로 나감`,
