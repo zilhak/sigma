@@ -99,6 +99,20 @@ describe('lintLayout', () => {
     expect(rules(roots)).toContain('instance_orphan');
   });
 
+  test('R4 — 마스터 COMPONENT 내부 중첩 인스턴스는 orphan 아님 (컴포넌트 정의의 일부)', () => {
+    const roots = [
+      node('lib', 'library', 'SECTION', [0, 0, 2000, 2000], [
+        node('m', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60], [
+          node('t', 'OneUI/tabs/primary', 'INSTANCE', [320, 14, 62, 32]),
+          node('inst', 'shell/lnb', 'INSTANCE', [0, 60, 240, 720], [
+            node('deep', 'OneUI/badge', 'INSTANCE', [10, 10, 40, 20]),
+          ]),
+        ]),
+      ]),
+    ];
+    expect(rules(roots)).not.toContain('instance_orphan');
+  });
+
   test('R4 예외 — 기획용(anno/wire) 인스턴스는 프레임 밖이어도 통과', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 600, 400], [

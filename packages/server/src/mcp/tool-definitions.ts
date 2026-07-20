@@ -2776,7 +2776,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 - \`section_overlap\`: 형제 SECTION 끼리 겹침 금지.
 - \`card_overlap\`: 한 섹션의 직속 카드(FRAME/COMPONENT)끼리 겹침 금지.
 - \`frame_padding\`: 섹션 직속 FRAME 은 섹션 안쪽 ≥padding(기본 20px) 여백 확보(딱 붙으면 섹션 의미 없음).
-- \`instance_orphan\`: INSTANCE 는 반드시 FRAME 조상 아래(기획 프리셋 anno/wire 는 예외).
+- \`instance_orphan\`: INSTANCE 는 래퍼(프레임/컴포넌트/그룹) 조상 아래여야 함 = 섹션/페이지 직속으로 뜨면 안 됨(마스터 컴포넌트 내부 중첩 인스턴스는 정상, 기획 프리셋 anno/wire 예외).
 - \`child_overflow\`: 자식은 부모 섹션 bbox 를 벗어날 수 없음.
 
 자동수정 가능한 위반(frame_padding/child_overflow)에는 \`fix\`(섹션 확장 안)가 함께 옵니다. 실제 수정은 sigma_layout_fix. 배치/resize 후 이 도구로 회귀 검사하는 습관을 권장합니다.`,

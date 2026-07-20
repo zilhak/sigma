@@ -113,7 +113,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_layout_lint` | 공간 규약 위반 검출 (read-only). 자동수정 가능한 위반엔 `fix` 동봉 | `token` | `nodeId`, `path`, `padding` |
 | `sigma_layout_fix` | 안전 자동수정(섹션 확장)만 적용. **dry-run 기본**, `apply:true`로 실제 적용 | `token` | `apply`, `padding` |
 
-**검사 규칙**: `outside_section`(섹션 밖 배치노드) · `section_overlap` · `card_overlap`(섹션 안 프레임 겹침) · `frame_padding`(섹션 안 프레임 ≥20px 여백) · `instance_orphan`(프레임 밖 인스턴스, anno/wire 예외) · `child_overflow`(부모 섹션 초과).
+**검사 규칙**: `outside_section`(섹션 밖 배치노드) · `section_overlap` · `card_overlap`(섹션 안 프레임 겹침) · `frame_padding`(섹션 안 프레임 ≥20px 여백) · `instance_orphan`(섹션/페이지 직속으로 뜬 인스턴스 — 마스터 내부 중첩은 정상, anno/wire 예외) · `child_overflow`(부모 섹션 초과).
 자동수정은 **frame_padding·child_overflow → 섹션 확장**만(형제 불변). 나머지는 재배치 판단이 필요해 `needsManual`로 보고만.
 
 ## 조회/검색

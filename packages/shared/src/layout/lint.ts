@@ -21,6 +21,9 @@ const ANNO_WIRE_NAMES = new Set([
 ]);
 const CARD_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET']);
 const PLACED_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE', 'GROUP']);
+/** INSTANCE 를 감싸면 "떠 있는 게 아닌" 것으로 인정하는 래퍼 타입.
+ *  COMPONENT/INSTANCE 내부의 중첩 인스턴스(컴포넌트 정의의 일부)는 orphan 이 아니다. */
+const WRAPPER_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE', 'GROUP']);
 
 export type LayoutRule =
   | 'outside_section'
@@ -162,13 +165,14 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
     }
   }
 
-  // R4: INSTANCE 는 FRAME 조상 필요 (구조 검사, 전체 순회)
-  function walkOrphan(n: TreeNode, hasFrameAncestor: boolean) {
-    if (n.type === 'INSTANCE' && !hasFrameAncestor && !annoWire.has(n.name)) {
+  // R4: INSTANCE 는 래퍼(프레임/컴포넌트/그룹) 조상 필요 = 섹션/페이지 직속으로 뜨면 안 됨.
+  //     (마스터 COMPONENT·다른 INSTANCE 내부의 중첩 인스턴스는 정상 — 컴포넌트 정의의 일부)
+  function walkOrphan(n: TreeNode, hasWrapperAncestor: boolean) {
+    if (n.type === 'INSTANCE' && !hasWrapperAncestor && !annoWire.has(n.name)) {
       add('instance_orphan', `INSTANCE "${n.name}" (${n.id}) 가 프레임 밖에 떠 있음`, [n.id]);
     }
-    const nextHasFrame = hasFrameAncestor || n.type === 'FRAME';
-    for (const c of kids(n)) walkOrphan(c, nextHasFrame);
+    const nextWrap = hasWrapperAncestor || WRAPPER_TYPES.has(n.type);
+    for (const c of kids(n)) walkOrphan(c, nextWrap);
   }
 
   checkContainer(roots, null, 'page');
