@@ -554,7 +554,7 @@ Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout
 노드를 Section, Frame, Group, 또는 Page의 자식으로 이동시킵니다.
 기존 부모에서 자동으로 제거되고 새 부모에 추가됩니다.
 
-⚠️ **좌표계 함정**: 노드의 x/y는 "직속 부모 기준" 좌표이고 부모 종류마다 원점이 다릅니다 — SECTION/PAGE는 원점을 새로 잡지 않아 자식이 절대좌표, FRAME/COMPONENT/GROUP은 로컬 원점이라 자식이 상대좌표. 이동은 로컬 x/y **숫자를 그대로 보존**하므로 원점 성격이 다른 부모로 옮기면 화면상 위치가 튑니다(예: 섹션→프레임). 이 경우 응답에 **coordinateShift**(beforeAbsolute/afterAbsolute + 원위치 복원용 restoreLocal 좌표)가 포함되니, 원래 절대 위치를 유지하려면 sigma_modify_node(move)로 restoreLocal 좌표로 보정하세요. 이동 후 sigma_layout_lint로 회귀 검사 권장.
+⚠️ **좌표계 함정**: 노드의 x/y는 "직속 부모 원점 기준" 로컬 좌표입니다(SECTION/FRAME/COMPONENT/GROUP 모두 자식 원점을 자기 좌상단으로 잡음 — 섹션도 예외 아님). 이동은 로컬 x/y **숫자를 그대로 보존**하므로 원점 위치가 다른 부모로 옮기면 그 차이만큼 절대 위치가 튑니다(예: 섹션→프레임). 이 경우 응답에 **coordinateShift**(beforeAbsolute/afterAbsolute + 원위치 복원용 restoreLocal 좌표)가 포함되니, 원래 절대 위치를 유지하려면 sigma_modify_node(move)로 restoreLocal 좌표로 보정하세요. 이동 후 sigma_layout_lint로 회귀 검사 권장.
 
 **사용 예시:**
 - 프레임을 Section으로 이동: sigma_move_node({ nodeId: "1:234", parentId: "5:678" })
@@ -2780,7 +2780,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 - \`frame_padding\`: 섹션 직속 FRAME 은 섹션 안쪽 ≥padding(기본 20px) 여백 확보(딱 붙으면 섹션 의미 없음).
 - \`instance_orphan\`: INSTANCE 는 래퍼(프레임/컴포넌트/그룹) 조상 아래여야 함 = 섹션/페이지 직속으로 뜨면 안 됨(마스터 컴포넌트 내부 중첩 인스턴스는 정상, 기획 프리셋 anno/wire 예외).
 - \`component_needs_frame\`: 섹션 직속에 놓인 COMPONENT/COMPONENT_SET/GROUP 금지 — 프레임 안에 있어야 함(마스터도 컴포넌트 보드 프레임 안에). 섹션 직속은 FRAME/SECTION 만. anno/wire 예외.
-- \`child_overflow\`: 트리상 자식이면 좌표상으로도 부모 안에 있어야 함. 배치형 자식(프레임/컴포넌트/인스턴스)만 검사하며, 부모가 섹션이면 절대좌표 기준, 프레임/컴포넌트면 로컬좌표(0,0~W,H) 기준. TEXT/도형 리프는 폰트 baseline 노이즈로 제외. 예외 anno/wire.
+- \`child_overflow\`: 트리상 자식이면 좌표상으로도 부모 안에 있어야 함. 배치형 자식(프레임/컴포넌트/인스턴스)만 검사하며, **모든 컨테이너(섹션/프레임/컴포넌트)는 자식이 로컬좌표라 부모의 로컬박스(0,0~W,H) 기준**으로 본다(섹션도 동일 — 섹션의 부모공간 bbox 와 섞지 않음). TEXT/도형 리프는 폰트 baseline 노이즈로 제외. 예외 anno/wire.
 
 자동수정 가능한 위반(frame_padding/child_overflow)에는 \`fix\`(섹션 확장 안)가 함께 옵니다. 실제 수정은 sigma_layout_fix. 배치/resize 후 이 도구로 회귀 검사하는 습관을 권장합니다.`,
     inputSchema: {

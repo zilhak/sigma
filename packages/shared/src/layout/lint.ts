@@ -5,9 +5,12 @@
  * 육안 판별이 안 된다(좌표로만 확실). 에이전트는 좌표 부기에 약해 이 클래스 버그를 반복한다.
  * 규칙이 전부 결정론적(AABB/containment)이라 툴이 흡수한다. check=린터, fix=포매터.
  *
- * 좌표계 주의: Figma 에서 SECTION 은 좌표 원점을 새로 잡지 않는다 → 섹션 직속 자식은
- * 페이지(절대) 좌표 유지. FRAME/COMPONENT 는 로컬 원점 → 자식은 상대 좌표. 따라서 섹션
- * 레벨 기하 규칙(R1~R3,R5)은 전부 절대좌표라 서로 비교 가능하고, R4 는 구조(타입)만 본다.
+ * 좌표계 주의(중요): Figma 의 모든 컨테이너(SECTION/FRAME/COMPONENT/GROUP)는 자식 좌표의
+ * 원점을 자기 좌상단으로 새로 잡는다 → 자식 x/y 는 "직속 부모 로컬 좌표". **SECTION 도 예외가
+ * 아니다** (실측 확인: 섹션 자식을 로컬 (0,0) 에 두면 섹션 좌상단 코너에 렌더된다). 따라서
+ * 형제 겹침(R1/R2)은 같은 로컬 공간의 bbox 끼리 직접 비교하고, 부모 포함(R3/R5)은 부모 자신의
+ * (부모공간) bbox 가 아니라 부모의 **로컬박스 (0,0,W,H)** 기준으로 본다 — 부모 좌표와 자식
+ * 좌표를 섞으면 비원점 컨테이너에서 오판한다. R4 는 구조(타입)만 본다.
  */
 import type { TreeNode } from '../types';
 
@@ -90,15 +93,19 @@ function kids(n: TreeNode): TreeNode[] {
   return n.children ?? [];
 }
 
-/** 섹션이 child 를 pad 여백으로 품도록 확장하는 목표 bbox (형제 불변) */
-function growSectionFix(section: TreeNode, child: TreeNode, pad: number, reason: string): LayoutFix {
+/**
+ * 섹션을 **오른쪽/아래로만** 늘려(원점 이동 없음) child(섹션 로컬좌표)를 pad 여백으로 품게 하는
+ * 안전 fix. 좌/상 여백이 부족하면(child 가 원점에 너무 붙음) 원점 이동이 필요해 안전 grow 로는
+ * 못 고친다 → null 반환(수동 처리). resize 만 하고 move 는 no-op 이라 자식 로컬좌표가 안 밀린다.
+ */
+function growSectionFix(section: TreeNode, child: TreeNode, pad: number, reason: string): LayoutFix | null {
   const s = bb(section);
-  const c = bb(child);
-  const nx = Math.min(s.x, c.x - pad);
-  const ny = Math.min(s.y, c.y - pad);
-  const right = Math.max(s.x + s.width, c.x + c.width + pad);
-  const bottom = Math.max(s.y + s.height, c.y + c.height + pad);
-  return { op: 'grow_section', sectionId: section.id, x: nx, y: ny, width: right - nx, height: bottom - ny, reason };
+  const c = bb(child); // 섹션 로컬 좌표
+  if (c.x < pad || c.y < pad) return null; // 좌/상 부족 → 원점 이동 필요 → 수동
+  const newW = Math.max(s.width, c.x + c.width + pad);
+  const newH = Math.max(s.height, c.y + c.height + pad);
+  if (newW === s.width && newH === s.height) return null;
+  return { op: 'grow_section', sectionId: section.id, x: s.x, y: s.y, width: newW, height: newH, reason };
 }
 
 /**
@@ -127,7 +134,9 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
     }
 
     if (kind === 'section' && container) {
-      // R2: 섹션 직속 카드(FRAME/COMPONENT)끼리 겹침
+      // 섹션 자식은 섹션 로컬좌표 → 포함검사는 섹션의 로컬박스(0,0,W,H) 기준. (부모공간 bbox 아님)
+      const localBox = { x: 0, y: 0, width: container.boundingBox.width, height: container.boundingBox.height };
+      // R2: 섹션 직속 카드(FRAME/COMPONENT)끼리 겹침 (형제 = 같은 로컬 공간, bbox 직접 비교)
       const cards = children.filter((c) => CARD_TYPES.has(c.type));
       for (let i = 0; i < cards.length; i++) {
         for (let j = i + 1; j < cards.length; j++) {
@@ -145,21 +154,21 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
           add('component_needs_frame',
             `"${c.name}" (${c.id}, ${c.type}) 는 섹션 직속이 아니라 프레임 안에 있어야 함`, [c.id]);
         }
-        // R5(섹션): 자식은 섹션 bbox(절대좌표) 안에 있어야 함
-        if (!insetOk(bb(container), bb(c), 0)) {
+        // R5(섹션): 자식(섹션 로컬좌표)은 섹션 로컬박스(0,0,W,H) 안에 있어야 함
+        if (!insetOk(localBox, bb(c), 0)) {
           add('child_overflow', `"${c.name}" (${c.id}) 가 섹션 "${container.name}" 밖으로 나감`,
-            [c.id], growSectionFix(container, c, 0, 'child_overflow: 자식을 품도록 섹션 확장'));
-        } else if (c.type === 'FRAME' && !insetOk(bb(container), bb(c), pad)) {
+            [c.id], growSectionFix(container, c, 0, 'child_overflow: 자식을 품도록 섹션 확장') ?? undefined);
+        } else if (c.type === 'FRAME' && !insetOk(localBox, bb(c), pad)) {
           // R3: 프레임 여백 부족 (섹션에 딱 붙으면 섹션 의미 없음)
           add('frame_padding', `프레임 "${c.name}" 가 섹션 "${container.name}" 안 ${pad}px 여백 미달`,
-            [c.id, container.id], growSectionFix(container, c, pad, `frame_padding: ${pad}px 여백 확보`));
+            [c.id, container.id], growSectionFix(container, c, pad, `frame_padding: ${pad}px 여백 확보`) ?? undefined);
         }
       }
     }
 
     if (kind === 'frame' && container) {
       // R5(프레임): 프레임/컴포넌트/인스턴스의 배치형 자식은 그 내부 좌표(0,0~W,H) 안에 있어야 함.
-      // ⚠️ 좌표계: 섹션 자식은 절대좌표지만 프레임/컴포넌트 자식은 "부모 로컬 좌표"라 (0,0,W,H) 기준으로 본다.
+      // ⚠️ 좌표계: 프레임/컴포넌트 자식은 "부모 로컬 좌표" → (0,0,W,H) 기준. (섹션도 동일하게 로컬박스로 봄)
       // ⚠️ TEXT/RECT/VECTOR 리프는 폰트 baseline 등으로 1px 삐져나오는 게 정상 → 배치형(PLACED)만 검사.
       const local = { x: 0, y: 0, width: container.boundingBox.width, height: container.boundingBox.height };
       for (const c of children) {

@@ -139,11 +139,10 @@ export function flattenNodes(
 /**
  * reparent 로 절대 위치가 튀었을 때의 좌표 보정 안내 (좌표계 함정).
  *
- * Figma 에서 노드의 x/y 는 "직속 부모 기준" 좌표이고, 부모 종류에 따라 원점이 다르다:
- *   - SECTION/PAGE 는 원점을 새로 잡지 않음 → 자식 x/y = 절대(페이지) 좌표
- *   - FRAME/COMPONENT/GROUP 은 로컬 원점 → 자식 x/y = 부모 좌상단 기준 상대 좌표
- * appendChild 는 노드의 숫자 x/y 를 그대로 보존하므로, 원점 성격이 다른 부모로 옮기면
- * 같은 숫자가 새 원점 기준으로 재해석되어 화면상 위치가 튄다.
+ * Figma 에서 노드의 x/y 는 "직속 부모 원점 기준" 로컬 좌표다(SECTION/FRAME/COMPONENT/GROUP
+ * 모두 자식 원점을 자기 좌상단으로 잡는다 — 섹션도 예외 아님). appendChild 는 노드의 숫자 x/y 를
+ * 그대로 보존하므로, 원점 위치가 다른 부모로 옮기면 같은 숫자가 새 원점 기준으로 재해석되어
+ * 절대(페이지) 위치가 그 원점 차이만큼 이동한다.
  */
 export interface MoveCoordinateShift {
   shifted: true;
@@ -246,9 +245,9 @@ export function moveNode(
       coordinateShift = {
         shifted: true,
         reason:
-          'reparent 시 로컬 x/y 숫자는 보존되지만 새 부모의 원점 기준으로 재해석됩니다 ' +
-          '(SECTION/PAGE=원점 없음·자식이 절대좌표 ↔ FRAME/COMPONENT/GROUP=로컬 원점·자식이 상대좌표). ' +
-          '그래서 절대 위치가 이동했습니다.',
+          'reparent 시 로컬 x/y 숫자는 보존되지만 새 부모의 원점 기준으로 재해석됩니다. ' +
+          '노드 x/y 는 직속 부모(SECTION/FRAME/COMPONENT/GROUP 모두 로컬 원점) 좌상단 기준이라, ' +
+          '원점 위치가 다른 부모로 옮기면 그 차이만큼 절대 위치가 이동합니다.',
         beforeAbsolute: { x: r(beforeAbsX), y: r(beforeAbsY) },
         afterAbsolute: { x: r(afterAbsX), y: r(afterAbsY) },
         currentLocal: { x: r(scene.x), y: r(scene.y) },

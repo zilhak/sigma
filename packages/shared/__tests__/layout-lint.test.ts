@@ -26,14 +26,15 @@ const rules = (roots: TreeNode[], opts = {}) =>
 describe('lintLayout', () => {
   test('규약 준수 트리 → clean', () => {
     const roots = [
+      // 프레임은 섹션 로컬좌표로 (40,20) 배치 → 사방 ≥20 여백. (비원점 섹션이어도 로컬 기준)
       node('sA', 'diagram', 'SECTION', [-40, -80, 1696, 1280], [
-        node('f1', 'screen', 'FRAME', [0, 0, 1616, 1160], [
-          node('i1', 'shell', 'INSTANCE', [48, 132, 1520, 780]),
+        node('f1', 'screen', 'FRAME', [40, 20, 1616, 1160], [
+          node('i1', 'shell', 'INSTANCE', [48, 132, 1520, 780]),   // 프레임 로컬 좌표
         ]),
       ]),
       node('sB', 'library', 'SECTION', [-40, 1240, 1600, 1760], [
-        node('board', 'masters', 'FRAME', [0, 1260, 1520, 1680], [
-          node('c1', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),   // 프레임 로컬 좌표
+        node('board', 'masters', 'FRAME', [40, 20, 1520, 1680], [
+          node('c1', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),   // 프레임 로컬 좌표(컴포넌트는 여백 불필요)
           node('c2', 'shell/lnb', 'COMPONENT', [0, 120, 240, 720]),
         ]),
       ]),
@@ -61,18 +62,30 @@ describe('lintLayout', () => {
     expect(rules(roots)).toContain('card_overlap');
   });
 
-  test('R3 frame_padding — 딱 붙은 프레임 + grow fix 동봉', () => {
+  test('R3 frame_padding — 우/하 밀착 프레임 + grow fix(원점 이동 없음)', () => {
+    // 좌/상은 20 여백, 우/하가 0 여백 → 안전 grow(우/하 확장)로 수정 가능
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 600, 400], [
-        node('f', 'flush', 'FRAME', [0, 0, 600, 400]),
+        node('f', 'flush', 'FRAME', [20, 20, 580, 380]),
       ]),
     ];
     const r = lintLayout(roots);
     const v = r.violations.find((x) => x.rule === 'frame_padding');
     expect(v).toBeDefined();
     expect(v!.fix).toBeDefined();
-    // 20px 여백 확보를 위해 섹션이 사방 20 확장돼야 함
-    expect(v!.fix).toMatchObject({ op: 'grow_section', sectionId: 's', x: -20, y: -20, width: 640, height: 440 });
+    // 우/하 20px 확보 위해 섹션 W/H 만 확장, 원점(x,y)은 불변
+    expect(v!.fix).toMatchObject({ op: 'grow_section', sectionId: 's', x: 0, y: 0, width: 620, height: 420 });
+  });
+
+  test('R3 frame_padding — 좌/상 밀착은 안전 grow 불가(수동, fix 없음)', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 600, 400], [
+        node('f', 'flush', 'FRAME', [0, 0, 560, 360]), // 좌/상 여백 0, 우/하는 여유
+      ]),
+    ];
+    const v = lintLayout(roots).violations.find((x) => x.rule === 'frame_padding');
+    expect(v).toBeDefined();
+    expect(v!.fix).toBeUndefined(); // 좌/상 부족은 원점 이동 필요 → 자동수정 안 함
   });
 
   test('R5 child_overflow — 자식이 섹션 밖 + grow fix', () => {
@@ -227,6 +240,32 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     const v = lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow');
     expect(v).toHaveLength(1);
     expect(v[0].nodes).toContain('ovf');
+  });
+});
+
+describe('비원점 섹션 — 자식은 섹션 로컬좌표 (회귀: 절대좌표로 착각하면 오판)', () => {
+  test('비원점 섹션 안 프레임이 로컬 여백 OK 면 clean', () => {
+    // 섹션이 (-40,1240) 비원점. 보드가 섹션 로컬 (40,20) 이면 사방 여백 ≥20 → clean.
+    // (구버그: 섹션의 부모공간 bbox 와 자식 로컬좌표를 섞어 비교 → frame_padding 오탐)
+    const roots = [
+      node('s', 'lib', 'SECTION', [-40, 1240, 1600, 1760], [
+        node('board', 'board', 'FRAME', [40, 20, 1520, 1680], [
+          node('c', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),
+        ]),
+      ]),
+    ];
+    expect(lintLayout(roots).clean).toBe(true);
+  });
+
+  test('비원점 섹션 — 프레임이 로컬좌표로 섹션 하단을 벗어나면 overflow (실제 겪은 버그)', () => {
+    // 보드가 섹션 로컬 (0,1260) → 1260+1680=2940 > 1760 → 하단 오버플로.
+    // 구버그는 board(0,1260) 를 섹션 abs(-40,1240) 안에 있다고 오판해 clean 처리했음.
+    const roots = [
+      node('s', 'lib', 'SECTION', [-40, 1240, 1600, 1760], [
+        node('board', 'board', 'FRAME', [0, 1260, 1520, 1680]),
+      ]),
+    ];
+    expect(rules(roots)).toContain('child_overflow');
   });
 });
 
