@@ -32,7 +32,8 @@ describe('lintLayout', () => {
           node('i1', 'shell', 'INSTANCE', [48, 132, 1520, 780]),   // 프레임 로컬 좌표
         ]),
       ]),
-      node('sB', 'library', 'SECTION', [-40, 1240, 1600, 1760], [
+      // sA 하단 y=1200 → sB 상단은 ≥80 간격(section_gap) 두고 y=1290
+      node('sB', 'library', 'SECTION', [-40, 1290, 1600, 1760], [
         node('board', 'masters', 'FRAME', [40, 20, 1520, 1680], [
           node('c1', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),   // 프레임 로컬 좌표(컴포넌트는 여백 불필요)
           node('c2', 'shell/lnb', 'COMPONENT', [0, 120, 240, 720]),
@@ -50,6 +51,41 @@ describe('lintLayout', () => {
       node('sB', 'B', 'SECTION', [500, 300, 400, 400]),
     ];
     expect(rules(roots)).toContain('section_overlap');
+  });
+
+  test('section_gap — 세로로 이웃한 섹션 간격 부족 (라벨 가림)', () => {
+    // A 하단 y=400, B 상단 y=440 → 간격 40 < 기본 80 → section_gap (겹침 아님)
+    const roots = [
+      node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
+      node('sB', 'B', 'SECTION', [0, 440, 600, 400]),
+    ];
+    const rs = rules(roots);
+    expect(rs).toContain('section_gap');
+    expect(rs).not.toContain('section_overlap');
+  });
+
+  test('section_gap — 간격 충분하면 clean', () => {
+    const roots = [
+      node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
+      node('sB', 'B', 'SECTION', [0, 520, 600, 400]), // 간격 120 ≥ 80
+    ];
+    expect(rules(roots)).not.toContain('section_gap');
+  });
+
+  test('section_gap — 대각선 배치는 비적용(라벨 가림 없음)', () => {
+    const roots = [
+      node('sA', 'A', 'SECTION', [0, 0, 400, 400]),
+      node('sB', 'B', 'SECTION', [600, 600, 400, 400]), // 양 축 모두 안 겹침
+    ];
+    expect(rules(roots)).not.toContain('section_gap');
+  });
+
+  test('section_gap — sectionGap:0 이면 검사 비활성', () => {
+    const roots = [
+      node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
+      node('sB', 'B', 'SECTION', [0, 440, 600, 400]),
+    ];
+    expect(rules(roots, { sectionGap: 0 })).not.toContain('section_gap');
   });
 
   test('R2 card_overlap — 섹션 안 프레임끼리 겹침', () => {

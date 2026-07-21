@@ -57,6 +57,7 @@ export type {
 } from './layout/lint';
 export {
   DEFAULT_PADDING,
+  DEFAULT_SECTION_GAP,
   lintLayout,
   mergeFixesBySection,
 } from './layout/lint';

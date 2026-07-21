@@ -15,6 +15,9 @@
 import type { TreeNode } from '../types';
 
 export const DEFAULT_PADDING = 20;
+/** 형제 섹션 간 최소 간격(px). Figma 섹션 라벨이 위쪽에 렌더돼 경계를 가리므로, 겹치지
+ *  않아도 너무 붙으면 시각적으로 한 섹션처럼 보인다 → 라벨 공간 확보용 최소 gap. */
+export const DEFAULT_SECTION_GAP = 80;
 
 /** 기획용(anno/wire) 프리셋 인스턴스 이름 — 프레임 밖에 떠 있어도 R4 예외.
  *  (한계: 노드 이름엔 spec namespace 가 안 실림 → 이름 휴리스틱. 정확 판정은 호출측에서 보강) */
@@ -31,6 +34,7 @@ const WRAPPER_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE'
 export type LayoutRule =
   | 'outside_section'
   | 'section_overlap'
+  | 'section_gap'
   | 'card_overlap'
   | 'frame_padding'
   | 'instance_orphan'
@@ -60,6 +64,8 @@ export interface LayoutViolation {
 export interface LintOptions {
   /** 섹션 안 프레임 최소 여백(px). 기본 20 */
   padding?: number;
+  /** 형제 섹션 간 최소 간격(px). 기본 80. 0 이면 gap 검사 비활성(겹침만 검사) */
+  sectionGap?: number;
   /** R4 예외로 볼 인스턴스 이름 집합 확장 (기획용 커스텀 등) */
   annoWireNames?: Iterable<string>;
 }
@@ -79,6 +85,19 @@ function bb(n: TreeNode): Box {
 function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width &&
     a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+/**
+ * 겹치지 않는 두 박스의 최단 간격(px). 한 축에서 범위가 겹치는(=이웃한) 축의 간격만 의미가 있다:
+ * 세로로 이웃(가로 범위 겹침)이면 세로 간격, 가로로 이웃이면 가로 간격. 대각선 배치(양 축 모두
+ * 안 겹침)는 라벨 가림 문제가 없으므로 null(gap 규칙 비적용).
+ */
+function edgeGap(a: Box, b: Box): number | null {
+  const xOverlap = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const yOverlap = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  if (xOverlap > 0) return Math.max(a.y, b.y) - Math.min(a.y + a.height, b.y + b.height); // 세로 간격
+  if (yOverlap > 0) return Math.max(a.x, b.x) - Math.min(a.x + a.width, b.x + b.width);   // 가로 간격
+  return null;
 }
 
 /** inner 가 outer 안에 pad 여백을 두고 들어가는가 */
@@ -114,6 +133,7 @@ function growSectionFix(section: TreeNode, child: TreeNode, pad: number, reason:
  */
 export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResult {
   const pad = opts.padding ?? DEFAULT_PADDING;
+  const sectionGap = opts.sectionGap ?? DEFAULT_SECTION_GAP;
   const annoWire = new Set(ANNO_WIRE_NAMES);
   if (opts.annoWireNames) for (const n of opts.annoWireNames) annoWire.add(n);
   const V: LayoutViolation[] = [];
@@ -122,13 +142,20 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
 
   // container 의 직속 자식에 규칙 적용 후 재귀. kind: page | section | frame
   function checkContainer(children: TreeNode[], container: TreeNode | null, kind: 'page' | 'section' | 'frame') {
-    // R1: 형제 SECTION 끼리 겹침 (모든 레벨)
+    // R1: 형제 SECTION 끼리 겹침 + 간격 부족 (모든 레벨)
     const sections = children.filter((c) => c.type === 'SECTION');
     for (let i = 0; i < sections.length; i++) {
       for (let j = i + 1; j < sections.length; j++) {
         if (overlaps(bb(sections[i]), bb(sections[j]))) {
           add('section_overlap', `섹션 "${sections[i].name}" ↔ "${sections[j].name}" 겹침`,
             [sections[i].id, sections[j].id]);
+        } else if (sectionGap > 0) {
+          // 겹치진 않지만 이웃한 두 섹션이 너무 붙음 → 라벨이 경계를 가림
+          const g = edgeGap(bb(sections[i]), bb(sections[j]));
+          if (g !== null && g < sectionGap) {
+            add('section_gap', `섹션 "${sections[i].name}" ↔ "${sections[j].name}" 간격 ${Math.round(g)}px < ${sectionGap}px (섹션 라벨이 경계를 가림)`,
+              [sections[i].id, sections[j].id]);
+          }
         }
       }
     }

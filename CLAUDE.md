@@ -183,7 +183,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_layout_lint` | 레이아웃 공간 규약 위반 검출 (read-only) | `token` | `nodeId`, `path`, `padding` |
 | `sigma_layout_fix` | 안전 자동수정(섹션 확장), dry-run 기본 | `token` | `apply`, `padding` |
 
-> **공간 규약 (layout lint/fix)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · 섹션 안 프레임 ≥20px 여백 · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_layout_lint`로 회귀 검사. 엔진은 `packages/shared/src/layout/lint.ts`(순수 기하, 유닛테스트).
+> **공간 규약 (layout lint/fix)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · **이웃 섹션 간 ≥80px 간격**(section_gap — 라벨이 경계 가림 방지, sectionGap 조절) · 섹션 안 프레임 ≥20px 여백 · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_layout_lint`로 회귀 검사. 엔진은 `packages/shared/src/layout/lint.ts`(순수 기하, 유닛테스트).
 
 **`sigma_modify_node` 지원 메서드:**
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove

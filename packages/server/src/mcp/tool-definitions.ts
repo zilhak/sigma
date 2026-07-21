@@ -2776,6 +2776,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 **검사 규칙**:
 - \`outside_section\`: 페이지 직속에 섹션 아닌 배치 노드(FRAME/COMPONENT/INSTANCE/GROUP) 금지 — 무조건 섹션 안.
 - \`section_overlap\`: 형제 SECTION 끼리 겹침 금지.
+- \`section_gap\`: 겹치진 않아도 이웃한 형제 SECTION 이 너무 붙으면 금지 — Figma 섹션 라벨이 위쪽에 렌더돼 경계를 가리므로 최소 간격(기본 80px, sectionGap 로 조절, 0=비활성) 확보. 대각선 배치는 비적용.
 - \`card_overlap\`: 한 섹션의 직속 카드(FRAME/COMPONENT)끼리 겹침 금지.
 - \`frame_padding\`: 섹션 직속 FRAME 은 섹션 안쪽 ≥padding(기본 20px) 여백 확보(딱 붙으면 섹션 의미 없음).
 - \`instance_orphan\`: INSTANCE 는 래퍼(프레임/컴포넌트/그룹) 조상 아래여야 함 = 섹션/페이지 직속으로 뜨면 안 됨(마스터 컴포넌트 내부 중첩 인스턴스는 정상, 기획 프리셋 anno/wire 예외).
@@ -2790,6 +2791,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         nodeId: { type: 'string', description: '(선택) 검사 시작 노드. 미지정 시 페이지 전체' },
         path: { type: 'string', description: '(선택) 검사 시작 경로 ("A/B/C")' },
         padding: { type: 'number', description: '(선택) 섹션 안 프레임 최소 여백(px). 기본 20' },
+        sectionGap: { type: 'number', description: '(선택) 형제 섹션 간 최소 간격(px). 기본 80. 0=간격 검사 비활성' },
       },
       required: ['token'],
     },
@@ -2807,6 +2809,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
         apply: { type: 'boolean', description: '(선택) true 여야 실제 적용. 기본 false(dry-run)' },
         padding: { type: 'number', description: '(선택) 섹션 안 프레임 최소 여백(px). 기본 20' },
+        sectionGap: { type: 'number', description: '(선택) 형제 섹션 간 최소 간격(px). 기본 80. 0=간격 검사 비활성' },
       },
       required: ['token'],
     },

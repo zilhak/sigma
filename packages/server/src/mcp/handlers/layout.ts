@@ -27,10 +27,11 @@ export const layoutHandlers: Record<string, (args: Record<string, unknown>, cont
     const nodeId = args.nodeId as string | undefined;
     const path = args.path as string | string[] | undefined;
     const padding = args.padding as number | undefined;
+    const sectionGap = args.sectionGap as number | undefined;
 
     try {
       const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId }, pluginId);
-      const result = lintLayout(tree.children as TreeNode[], { padding });
+      const result = lintLayout(tree.children as TreeNode[], { padding, sectionGap });
       return jsonResponse({
         page: tree.pageName,
         scope: nodeId || path || '(page root)',
@@ -50,10 +51,11 @@ export const layoutHandlers: Record<string, (args: Record<string, unknown>, cont
     const { pluginId, pageId } = access;
     const apply = args.apply === true; // 기본 false = dry-run
     const padding = args.padding as number | undefined;
+    const sectionGap = args.sectionGap as number | undefined;
 
     try {
       const tree = await wsServer.getTree({ depth: 'full', pageId }, pluginId);
-      const lint = lintLayout(tree.children as TreeNode[], { padding });
+      const lint = lintLayout(tree.children as TreeNode[], { padding, sectionGap });
 
       const fixable = lint.violations
         .map((v) => v.fix)
@@ -78,7 +80,7 @@ export const layoutHandlers: Record<string, (args: Record<string, unknown>, cont
       const applyResult = ops.length ? await wsServer.batchModifyNodes(ops, pluginId) : { skipped: true, reason: '자동수정 대상 없음' };
       // 적용 후 재검사 (확장이 옆 섹션과 겹쳤는지 등)
       const after = await wsServer.getTree({ depth: 'full', pageId }, pluginId);
-      const afterLint = lintLayout(after.children as TreeNode[], { padding });
+      const afterLint = lintLayout(after.children as TreeNode[], { padding, sectionGap });
 
       return jsonResponse({
         mode: 'apply',
