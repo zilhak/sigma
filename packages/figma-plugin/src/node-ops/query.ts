@@ -3,6 +3,15 @@
  * cursor-talk-to-figma의 get_node_info, get_document_info, get_styles 참고
  */
 
+/**
+ * Figma는 혼합값(cornerRadius/fontSize/fontName 등)을 `figma.mixed` 심볼로 반환한다.
+ * 심볼은 postMessage(구조화 복제)로 직렬화가 안 돼 "Cannot unwrap symbol" 에러로 통신 자체가
+ * 끊긴다 — 배치 조회(getNodesInfo)에서 실사용 중 발견. 심볼이면 문자열 'mixed'로 치환해 보낸다.
+ */
+function sanitizeMixed(value: unknown): unknown {
+  return value === figma.mixed ? 'mixed' : value;
+}
+
 export interface NodeDetailInfo {
   nodeId: string;
   name: string;
@@ -70,26 +79,26 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     opacity: 'opacity' in scene ? (scene as any).opacity : 1,
   };
 
-  // Fills & Strokes
+  // Fills & Strokes (TEXT는 문자 range별로 달라 mixed 심볼일 수 있음 — sanitize 필요)
   if ('fills' in scene) {
-    info.fills = (scene as GeometryMixin & SceneNode).fills;
+    info.fills = sanitizeMixed((scene as GeometryMixin & SceneNode).fills);
   }
   if ('strokes' in scene) {
-    info.strokes = (scene as GeometryMixin & SceneNode).strokes;
-    info.strokeWeight = (scene as GeometryMixin & SceneNode).strokeWeight as number;
+    info.strokes = sanitizeMixed((scene as GeometryMixin & SceneNode).strokes);
+    info.strokeWeight = sanitizeMixed((scene as GeometryMixin & SceneNode).strokeWeight) as number;
   }
 
   // Corner radius
   if ('cornerRadius' in scene) {
-    info.cornerRadius = (scene as FrameNode).cornerRadius;
+    info.cornerRadius = sanitizeMixed((scene as FrameNode).cornerRadius);
   }
 
   // Text
   if (scene.type === 'TEXT') {
     const textNode = scene as TextNode;
     info.characters = textNode.characters;
-    info.fontSize = textNode.fontSize;
-    info.fontName = textNode.fontName;
+    info.fontSize = sanitizeMixed(textNode.fontSize);
+    info.fontName = sanitizeMixed(textNode.fontName);
     info.textAlignHorizontal = textNode.textAlignHorizontal;
     info.textAlignVertical = textNode.textAlignVertical;
   }

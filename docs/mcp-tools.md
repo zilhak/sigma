@@ -113,6 +113,8 @@ config 파일 하나로 빌트인 규칙(기하 8종 + 신규 4종)과 커스텀
 |------|------|-----------|-----------|
 | `sigma_lint` | config 기반 검사(read-only 기본) + 빌트인 안전수정(`apply:true`) | `token`, `configPath` | `nodeId`, `path`, `apply` |
 
+**`configPath` 실행 환경 주의**: 서버가 자신의 파일시스템에서 직접 읽으므로, Docker로 배포한 경우 컨테이너 안에서 보이는 경로여야 한다 — 프로젝트 저장소 경로(`E:\...`)는 컨테이너에 안 보인다. `docker-compose.yml`에서 바인드 마운트된 `~/.sigma`(컨테이너 `/root/.sigma`) 하위에 config를 두는 것을 권장(예: `~/.sigma/lint-configs/`) — `SIGMA_DATA_DIR`를 오버라이드했다면 그 경로 기준.
+
 **config 스키마**:
 ```jsonc
 {
