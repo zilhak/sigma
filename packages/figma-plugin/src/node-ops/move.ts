@@ -254,7 +254,7 @@ export function moveNode(
         restoreLocal: { x: r(scene.x - dx), y: r(scene.y - dy) },
         hint:
           '원래 절대 위치를 유지하려면 sigma_modify_node(method:"move") 로 restoreLocal 좌표로 보정하세요. ' +
-          '배치 의도가 새 부모 로컬 기준이면 무시해도 됩니다. 이후 sigma_layout_lint 로 회귀 검사 권장.',
+          '배치 의도가 새 부모 로컬 기준이면 무시해도 됩니다. 이후 sigma_lint 로 회귀 검사 권장.',
       };
     }
   }

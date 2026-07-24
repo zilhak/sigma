@@ -1,41 +1,43 @@
 /**
- * lintLayout 스펙 — 공간 규약 6규칙 검출 + 안전 fix.
- *   R0 outside_section / R1 section_overlap / R2 card_overlap
- *   R3 frame_padding / R4 instance_orphan / R5 child_overflow
- * 좌표계: 섹션 직속 자식은 절대좌표(섹션은 원점 재설정 안 함).
+ * lint 엔진 스펙 — geometric.ts(기하 8종, sigma_layout_lint 시절과 동일 로직) +
+ * simple-rules.ts(신규 4종) + engine.ts(config.builtins enable/disable) + json-rule.ts(5개 연산자).
  */
 import { describe, test, expect } from 'bun:test';
-import { lintLayout, mergeFixesBySection, type LayoutFix } from '../src/layout/lint';
+import { lintLayout, mergeFixesBySection, type LayoutFix } from '../src/lint/geometric';
+import { runBuiltinRules } from '../src/lint/engine';
+import { defaultNameRule, emptyContainerRule, hiddenLeafRule, strayPixelRule } from '../src/lint/simple-rules';
+import { compileMatchRule, runMatchRule } from '../src/lint/json-rule';
+import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
 
 function node(
   id: string, name: string, type: string,
   box: [number, number, number, number], children: TreeNode[] = [],
+  meta?: TreeNode['meta'],
 ): TreeNode {
   return {
     id, name, type,
     boundingBox: { x: box[0], y: box[1], width: box[2], height: box[3] },
     childCount: children.length,
     children,
+    meta,
   };
 }
 
 const rules = (roots: TreeNode[], opts = {}) =>
   lintLayout(roots, opts).violations.map((v) => v.rule).sort();
 
-describe('lintLayout', () => {
+describe('lintLayout (기하 8종, geometric.ts — 무변경 이관)', () => {
   test('규약 준수 트리 → clean', () => {
     const roots = [
-      // 프레임은 섹션 로컬좌표로 (40,20) 배치 → 사방 ≥20 여백. (비원점 섹션이어도 로컬 기준)
       node('sA', 'diagram', 'SECTION', [-40, -80, 1696, 1280], [
         node('f1', 'screen', 'FRAME', [40, 20, 1616, 1160], [
-          node('i1', 'shell', 'INSTANCE', [48, 132, 1520, 780]),   // 프레임 로컬 좌표
+          node('i1', 'shell', 'INSTANCE', [48, 132, 1520, 780]),
         ]),
       ]),
-      // sA 하단 y=1200 → sB 상단은 ≥80 간격(section_gap) 두고 y=1290
       node('sB', 'library', 'SECTION', [-40, 1290, 1600, 1760], [
         node('board', 'masters', 'FRAME', [40, 20, 1520, 1680], [
-          node('c1', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),   // 프레임 로컬 좌표(컴포넌트는 여백 불필요)
+          node('c1', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60]),
           node('c2', 'shell/lnb', 'COMPONENT', [0, 120, 240, 720]),
         ]),
       ]),
@@ -54,7 +56,6 @@ describe('lintLayout', () => {
   });
 
   test('section_gap — 세로로 이웃한 섹션 간격 부족 (라벨 가림)', () => {
-    // A 하단 y=400, B 상단 y=440 → 간격 40 < 기본 80 → section_gap (겹침 아님)
     const roots = [
       node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
       node('sB', 'B', 'SECTION', [0, 440, 600, 400]),
@@ -67,7 +68,7 @@ describe('lintLayout', () => {
   test('section_gap — 간격 충분하면 clean', () => {
     const roots = [
       node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
-      node('sB', 'B', 'SECTION', [0, 520, 600, 400]), // 간격 120 ≥ 80
+      node('sB', 'B', 'SECTION', [0, 520, 600, 400]),
     ];
     expect(rules(roots)).not.toContain('section_gap');
   });
@@ -75,7 +76,7 @@ describe('lintLayout', () => {
   test('section_gap — 대각선 배치는 비적용(라벨 가림 없음)', () => {
     const roots = [
       node('sA', 'A', 'SECTION', [0, 0, 400, 400]),
-      node('sB', 'B', 'SECTION', [600, 600, 400, 400]), // 양 축 모두 안 겹침
+      node('sB', 'B', 'SECTION', [600, 600, 400, 400]),
     ];
     expect(rules(roots)).not.toContain('section_gap');
   });
@@ -99,7 +100,6 @@ describe('lintLayout', () => {
   });
 
   test('R3 frame_padding — 우/하 밀착 프레임 + grow fix(원점 이동 없음)', () => {
-    // 좌/상은 20 여백, 우/하가 0 여백 → 안전 grow(우/하 확장)로 수정 가능
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 600, 400], [
         node('f', 'flush', 'FRAME', [20, 20, 580, 380]),
@@ -109,19 +109,18 @@ describe('lintLayout', () => {
     const v = r.violations.find((x) => x.rule === 'frame_padding');
     expect(v).toBeDefined();
     expect(v!.fix).toBeDefined();
-    // 우/하 20px 확보 위해 섹션 W/H 만 확장, 원점(x,y)은 불변
     expect(v!.fix).toMatchObject({ op: 'grow_section', sectionId: 's', x: 0, y: 0, width: 620, height: 420 });
   });
 
   test('R3 frame_padding — 좌/상 밀착은 안전 grow 불가(수동, fix 없음)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 600, 400], [
-        node('f', 'flush', 'FRAME', [0, 0, 560, 360]), // 좌/상 여백 0, 우/하는 여유
+        node('f', 'flush', 'FRAME', [0, 0, 560, 360]),
       ]),
     ];
     const v = lintLayout(roots).violations.find((x) => x.rule === 'frame_padding');
     expect(v).toBeDefined();
-    expect(v!.fix).toBeUndefined(); // 좌/상 부족은 원점 이동 필요 → 자동수정 안 함
+    expect(v!.fix).toBeUndefined();
   });
 
   test('R5 child_overflow — 자식이 섹션 밖 + grow fix', () => {
@@ -150,7 +149,7 @@ describe('lintLayout', () => {
     expect(rules(roots)).toContain('instance_orphan');
   });
 
-  test('R4 — 마스터 COMPONENT 내부 중첩 인스턴스는 orphan 아님 (컴포넌트 정의의 일부)', () => {
+  test('R4 — 마스터 COMPONENT 내부 중첩 인스턴스는 orphan 아님', () => {
     const roots = [
       node('lib', 'library', 'SECTION', [0, 0, 2000, 2000], [
         node('m', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60], [
@@ -164,7 +163,7 @@ describe('lintLayout', () => {
     expect(rules(roots)).not.toContain('instance_orphan');
   });
 
-  test('component_needs_frame — 섹션 직속 COMPONENT 는 위반 (프레임 안에 있어야)', () => {
+  test('component_needs_frame — 섹션 직속 COMPONENT 는 위반', () => {
     const roots = [
       node('s', 'lib', 'SECTION', [0, 0, 2000, 2000], [
         node('m', 'shell/gnb', 'COMPONENT', [100, 100, 400, 60]),
@@ -211,7 +210,6 @@ describe('lintLayout', () => {
         node('f', 'f', 'FRAME', [10, 10, 580, 380]),
       ]),
     ];
-    // 여백 10px → pad 20 이면 위반, pad 5 면 통과
     expect(rules(roots, { padding: 20 })).toContain('frame_padding');
     expect(rules(roots, { padding: 5 })).not.toContain('frame_padding');
   });
@@ -222,7 +220,7 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
         node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
-          node('i', 'card', 'INSTANCE', [20, 20, 200, 100]), // 로컬 좌표
+          node('i', 'card', 'INSTANCE', [20, 20, 200, 100]),
         ]),
       ]),
     ];
@@ -233,21 +231,21 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
         node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
-          node('i', 'card', 'INSTANCE', [300, 250, 200, 100]), // 300+200=500 > 400
+          node('i', 'card', 'INSTANCE', [300, 250, 200, 100]),
         ]),
       ]),
     ];
     const v = lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow');
     expect(v).toHaveLength(1);
     expect(v[0].nodes).toContain('i');
-    expect(v[0].fix).toBeUndefined(); // 프레임 오버플로는 재배치 판단 필요 → 자동수정 안 함
+    expect(v[0].fix).toBeUndefined();
   });
 
   test('리프(TEXT)는 프레임 밖으로 살짝 나가도 검사 제외 (baseline 노이즈 방지)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
         node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
-          node('t', 'label', 'TEXT', [12, -1, 38, 18]), // y=-1 로 위로 삐져나옴(정상)
+          node('t', 'label', 'TEXT', [12, -1, 38, 18]),
         ]),
       ]),
     ];
@@ -258,7 +256,7 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
         node('f', 'screen', 'FRAME', [100, 100, 400, 300], [
-          node('m', 'marker', 'INSTANCE', [390, -10, 24, 24]), // 밖으로 나가지만 marker(anno) 예외
+          node('m', 'marker', 'INSTANCE', [390, -10, 24, 24]),
         ]),
       ]),
     ];
@@ -269,7 +267,7 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     const roots = [
       node('lib', 'library', 'SECTION', [0, 0, 3000, 3000], [
         node('m', 'shell/gnb', 'COMPONENT', [0, 0, 1520, 60], [
-          node('ovf', 'OneUI/select', 'INSTANCE', [1400, 10, 200, 32]), // 1400+200=1600 > 1520
+          node('ovf', 'OneUI/select', 'INSTANCE', [1400, 10, 200, 32]),
         ]),
       ]),
     ];
@@ -281,8 +279,6 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
 
 describe('비원점 섹션 — 자식은 섹션 로컬좌표 (회귀: 절대좌표로 착각하면 오판)', () => {
   test('비원점 섹션 안 프레임이 로컬 여백 OK 면 clean', () => {
-    // 섹션이 (-40,1240) 비원점. 보드가 섹션 로컬 (40,20) 이면 사방 여백 ≥20 → clean.
-    // (구버그: 섹션의 부모공간 bbox 와 자식 로컬좌표를 섞어 비교 → frame_padding 오탐)
     const roots = [
       node('s', 'lib', 'SECTION', [-40, 1240, 1600, 1760], [
         node('board', 'board', 'FRAME', [40, 20, 1520, 1680], [
@@ -294,8 +290,6 @@ describe('비원점 섹션 — 자식은 섹션 로컬좌표 (회귀: 절대좌�
   });
 
   test('비원점 섹션 — 프레임이 로컬좌표로 섹션 하단을 벗어나면 overflow (실제 겪은 버그)', () => {
-    // 보드가 섹션 로컬 (0,1260) → 1260+1680=2940 > 1760 → 하단 오버플로.
-    // 구버그는 board(0,1260) 를 섹션 abs(-40,1240) 안에 있다고 오판해 clean 처리했음.
     const roots = [
       node('s', 'lib', 'SECTION', [-40, 1240, 1600, 1760], [
         node('board', 'board', 'FRAME', [0, 1260, 1520, 1680]),
@@ -313,7 +307,6 @@ describe('mergeFixesBySection', () => {
     ];
     const merged = mergeFixesBySection(fixes);
     expect(merged).toHaveLength(1);
-    // union: x=-20,y=-20, right=max(620,600)=620, bottom=max(400,420)=420 → w=640,h=440
     expect(merged[0]).toMatchObject({ sectionId: 's', x: -20, y: -20, width: 640, height: 440 });
   });
 
@@ -323,5 +316,183 @@ describe('mergeFixesBySection', () => {
       { op: 'grow_section', sectionId: 's2', x: 0, y: 0, width: 100, height: 100, reason: '' },
     ];
     expect(mergeFixesBySection(fixes)).toHaveLength(2);
+  });
+});
+
+describe('simple-rules.ts (신규 빌트인 4종)', () => {
+  test('stray_pixel — 비정수 좌표/크기 검출', () => {
+    const roots = [node('a', 'a', 'FRAME', [10.5, 20, 100, 100])];
+    const v = strayPixelRule(roots);
+    expect(v).toHaveLength(1);
+    expect(v[0].rule).toBe('stray_pixel');
+  });
+
+  test('stray_pixel — 전부 정수면 clean', () => {
+    const roots = [node('a', 'a', 'FRAME', [10, 20, 100, 100])];
+    expect(strayPixelRule(roots)).toHaveLength(0);
+  });
+
+  test('default_name — Figma 기본 이름 패턴 검출', () => {
+    const roots = [
+      node('a', 'Rectangle 123', 'RECTANGLE', [0, 0, 10, 10]),
+      node('b', 'Frame 45', 'FRAME', [0, 0, 10, 10]),
+      node('c', 'MyButton', 'FRAME', [0, 0, 10, 10]),
+    ];
+    const violated = defaultNameRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('a');
+    expect(violated).toContain('b');
+    expect(violated).not.toContain('c');
+  });
+
+  test('empty_container — 자식 없는 FRAME/GROUP 검출', () => {
+    const roots = [
+      node('a', 'empty', 'FRAME', [0, 0, 10, 10], []),
+      node('b', 'nonempty', 'FRAME', [0, 0, 10, 10], [node('c', 'child', 'TEXT', [0, 0, 5, 5])]),
+    ];
+    const violated = emptyContainerRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('a');
+    expect(violated).not.toContain('b');
+  });
+
+  test('hidden_leaf — visible:false 노드 검출', () => {
+    const roots = [
+      node('a', 'ghost', 'FRAME', [0, 0, 10, 10], [], { visible: false }),
+      node('b', 'shown', 'FRAME', [0, 0, 10, 10], [], { visible: true }),
+    ];
+    const violated = hiddenLeafRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('a');
+    expect(violated).not.toContain('b');
+  });
+});
+
+describe('runBuiltinRules (engine.ts) — config.builtins enable/disable', () => {
+  const looseFrame = [node('f', 'loose', 'FRAME', [0, 0, 100, 100])]; // outside_section 위반
+
+  test('config 없이 호출하면 기존 sigma_layout_lint 와 동일하게 전부 ON', () => {
+    const violations = runBuiltinRules(looseFrame);
+    expect(violations.map((v) => v.rule)).toContain('outside_section');
+  });
+
+  test('enabled:false 로 특정 기하 규칙만 끌 수 있다', () => {
+    const violations = runBuiltinRules(looseFrame, { outside_section: { enabled: false } });
+    expect(violations.map((v) => v.rule)).not.toContain('outside_section');
+  });
+
+  test('신규 빌트인도 같은 config로 켜진다', () => {
+    const roots = [node('a', 'Rectangle 1', 'RECTANGLE', [0, 0, 10, 10])];
+    const violations = runBuiltinRules(roots, {});
+    expect(violations.map((v) => v.rule)).toContain('default_name');
+  });
+
+  test('신규 빌트인도 enabled:false 로 끌 수 있다', () => {
+    const roots = [node('a', 'Rectangle 1', 'RECTANGLE', [0, 0, 10, 10])];
+    const violations = runBuiltinRules(roots, { default_name: { enabled: false } });
+    expect(violations.map((v) => v.rule)).not.toContain('default_name');
+  });
+
+  test('section_gap.gap 파라미터가 기하 엔진에 반영된다', () => {
+    const roots = [
+      node('sA', 'A', 'SECTION', [0, 0, 600, 400]),
+      node('sB', 'B', 'SECTION', [0, 440, 600, 400]), // 간격 40
+    ];
+    expect(runBuiltinRules(roots, { section_gap: { gap: 30 } }).map((v) => v.rule)).not.toContain('section_gap');
+    expect(runBuiltinRules(roots, { section_gap: { gap: 50 } }).map((v) => v.rule)).toContain('section_gap');
+  });
+
+  test('violation.source 는 항상 builtin', () => {
+    const violations = runBuiltinRules(looseFrame);
+    expect(violations.every((v) => v.source === 'builtin')).toBe(true);
+  });
+});
+
+describe('json-rule.ts — MatchRule 5개 연산자 컴파일러', () => {
+  function lnode(overrides: Partial<LintNode>): LintNode {
+    return { id: 'n1', name: 'Card/Button', type: 'FRAME', x: 0, y: 0, width: 10, height: 10, childCount: 0, ...overrides };
+  }
+
+  test('equals — 통과/위반', () => {
+    const rule: MatchRule = {
+      id: 'card-radius-12', select: { type: 'FRAME', namePattern: 'Card' },
+      check: { op: 'equals', field: 'cornerRadius', value: 12 },
+    };
+    expect(compileMatchRule(rule)(lnode({ cornerRadius: 12 }))).toBeNull();
+    const v = compileMatchRule(rule)(lnode({ cornerRadius: 8 }));
+    expect(v).not.toBeNull();
+    expect(v!.rule).toBe('card-radius-12');
+    expect(v!.source).toBe('custom');
+  });
+
+  test('select 불일치면 검사 자체를 건너뜀(null)', () => {
+    const rule: MatchRule = {
+      id: 'r', select: { type: 'TEXT' },
+      check: { op: 'equals', field: 'cornerRadius', value: 12 },
+    };
+    expect(compileMatchRule(rule)(lnode({ type: 'FRAME', cornerRadius: 999 }))).toBeNull();
+  });
+
+  test('range — 경계값 포함', () => {
+    const rule: MatchRule = {
+      id: 'cta-fontsize', select: { type: 'TEXT' },
+      check: { op: 'range', field: 'fontSize', min: 14, max: 18 },
+    };
+    const compiled = compileMatchRule(rule);
+    expect(compiled(lnode({ type: 'TEXT', fontSize: 14 }))).toBeNull();
+    expect(compiled(lnode({ type: 'TEXT', fontSize: 18 }))).toBeNull();
+    expect(compiled(lnode({ type: 'TEXT', fontSize: 20 }))).not.toBeNull();
+  });
+
+  test('regex — 이름 접두사 검사', () => {
+    const rule: MatchRule = {
+      id: 'section-prefix', select: { type: 'SECTION' },
+      check: { op: 'regex', field: 'name', pattern: '^\\d{2}_' },
+    };
+    const compiled = compileMatchRule(rule);
+    expect(compiled(lnode({ type: 'SECTION', name: '01_Hero' }))).toBeNull();
+    expect(compiled(lnode({ type: 'SECTION', name: 'Hero' }))).not.toBeNull();
+  });
+
+  test('oneOf — 허용 목록', () => {
+    const rule: MatchRule = {
+      id: 'radius-scale', select: {},
+      check: { op: 'oneOf', field: 'cornerRadius', values: [0, 4, 8, 16] },
+    };
+    const compiled = compileMatchRule(rule);
+    expect(compiled(lnode({ cornerRadius: 8 }))).toBeNull();
+    expect(compiled(lnode({ cornerRadius: 6 }))).not.toBeNull();
+  });
+
+  test('exists — 필드 존재 여부', () => {
+    const rule: MatchRule = {
+      id: 'has-fill', select: {},
+      check: { op: 'exists', field: 'fills' },
+    };
+    const compiled = compileMatchRule(rule);
+    expect(compiled(lnode({ fills: [] }))).toBeNull();
+    expect(compiled(lnode({}))).not.toBeNull();
+  });
+
+  test('message 템플릿의 {name}/{actual} 치환', () => {
+    const rule: MatchRule = {
+      id: 'r', select: {},
+      check: { op: 'equals', field: 'cornerRadius', value: 12 },
+      message: '"{name}" cornerRadius={actual}',
+    };
+    const v = compileMatchRule(rule)(lnode({ name: 'MyCard', cornerRadius: 4 }));
+    expect(v!.message).toBe('"MyCard" cornerRadius=4');
+  });
+
+  test('runMatchRule — 노드 목록 전체에 일괄 적용', () => {
+    const rule: MatchRule = {
+      id: 'card-radius-12', select: { type: 'FRAME', namePattern: 'Card' },
+      check: { op: 'equals', field: 'cornerRadius', value: 12 },
+    };
+    const nodes = [
+      lnode({ id: 'a', name: 'Card/1', cornerRadius: 12 }),
+      lnode({ id: 'b', name: 'Card/2', cornerRadius: 4 }),
+      lnode({ id: 'c', name: 'Other', type: 'TEXT', cornerRadius: 4 }),
+    ];
+    const violations = runMatchRule(rule, nodes);
+    expect(violations).toHaveLength(1);
+    expect(violations[0].nodes).toEqual(['b']);
   });
 });

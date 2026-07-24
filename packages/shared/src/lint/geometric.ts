@@ -11,6 +11,9 @@
  * 형제 겹침(R1/R2)은 같은 로컬 공간의 bbox 끼리 직접 비교하고, 부모 포함(R3/R5)은 부모 자신의
  * (부모공간) bbox 가 아니라 부모의 **로컬박스 (0,0,W,H)** 기준으로 본다 — 부모 좌표와 자식
  * 좌표를 섞으면 비원점 컨테이너에서 오판한다. R4 는 구조(타입)만 본다.
+ *
+ * `packages/shared/src/lint/engine.ts`가 이 모듈을 `sigma_lint`의 빌트인 규칙 카탈로그
+ * 일부(기하 8종)로 감싼다 — 이 파일 자체는 기존 동작을 그대로 유지한다(무변경 이관).
  */
 import type { TreeNode } from '../types';
 
@@ -132,8 +135,8 @@ function growSectionFix(section: TreeNode, child: TreeNode, pad: number, reason:
  * roots = 페이지 최상위 노드 배열 (sigma get_tree 의 children).
  */
 export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResult {
-  const pad = opts.padding ?? DEFAULT_PADDING;
-  const sectionGap = opts.sectionGap ?? DEFAULT_SECTION_GAP;
+  const pad = opts.padding !== undefined ? opts.padding : DEFAULT_PADDING;
+  const sectionGap = opts.sectionGap !== undefined ? opts.sectionGap : DEFAULT_SECTION_GAP;
   const annoWire = new Set(ANNO_WIRE_NAMES);
   if (opts.annoWireNames) for (const n of opts.annoWireNames) annoWire.add(n);
   const V: LayoutViolation[] = [];

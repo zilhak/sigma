@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 123개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 122개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -180,10 +180,9 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_ungroup` | 그룹 해제 | `token`, `nodeId` | — |
 | `sigma_flatten` | 여러 노드를 하나의 벡터로 평탄화 | `token`, `nodeIds` | `name` |
 | `sigma_boolean_operation` | Boolean 연산 (Union, Subtract, Intersect, Exclude) | `token`, `nodeIds`, `operation` | `name` |
-| `sigma_layout_lint` | 레이아웃 공간 규약 위반 검출 (read-only) | `token` | `nodeId`, `path`, `padding` |
-| `sigma_layout_fix` | 안전 자동수정(섹션 확장), dry-run 기본 | `token` | `apply`, `padding` |
+| `sigma_lint` | config 기반 빌트인(기하 8종+신규 4종) + 커스텀 규칙(JSON/predicate) 검사, 안전 자동수정(`apply:true`) | `token`, `configPath` | `nodeId`, `path`, `apply` |
 
-> **공간 규약 (layout lint/fix)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · **이웃 섹션 간 ≥80px 간격**(section_gap — 라벨이 경계 가림 방지, sectionGap 조절) · 섹션 안 프레임 ≥20px 여백 · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_layout_lint`로 회귀 검사. 엔진은 `packages/shared/src/layout/lint.ts`(순수 기하, 유닛테스트).
+> **공간 규약(빌트인 기하 8종)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · **이웃 섹션 간 ≥80px 간격**(section_gap — 라벨이 경계 가림 방지, `gap` 조절) · 섹션 안 프레임 ≥20px 여백(`padding` 조절) · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_lint`로 회귀 검사. 커스텀 규칙(JSON 선언적/JS predicate)은 `configPath`로 지정한 로컬 JSON 파일에 정의 — 상세 스키마는 `docs/mcp-tools.md`. 엔진은 `packages/shared/src/lint/`(순수 함수, 유닛테스트).
 
 **`sigma_modify_node` 지원 메서드:**
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove

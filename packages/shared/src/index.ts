@@ -47,17 +47,38 @@ export {
   EXTRACTED_PATH,
 } from './constants';
 
-// Layout lint (공간 규약 검출/수정 엔진)
+// Lint (sigma_lint) — 기하 8종 + 빌트인 4종 엔진, JSON/predicate 커스텀 규칙
 export type {
   LayoutRule,
   LayoutFix,
   LayoutViolation,
   LintOptions,
   LintResult,
-} from './layout/lint';
+} from './lint/geometric';
 export {
   DEFAULT_PADDING,
   DEFAULT_SECTION_GAP,
   lintLayout,
+} from './lint/geometric';
+export type {
+  BuiltinRuleId,
+  BuiltinRuleConfig,
+  BuiltinsConfig,
+  CustomRuleRecord,
+  JsonCheck,
+  JsonOp,
+  LintConfig,
+  LintNode,
+  MatchRule,
+  PredicateRule,
+  Violation,
+} from './lint/types';
+export {
+  ALL_BUILTIN_RULE_IDS,
+  collectFixableViolations,
   mergeFixesBySection,
-} from './layout/lint';
+  runBuiltinRules,
+} from './lint/engine';
+export { compileMatchRule, runMatchRule, type CompiledMatchRule } from './lint/json-rule';
+export { strayPixelRule, defaultNameRule, emptyContainerRule, hiddenLeafRule } from './lint/simple-rules';
+export { flattenTree, buildRelationMaps, type FlatEntry, type RelationMaps } from './lint/tree-utils';
