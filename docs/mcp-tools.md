@@ -113,30 +113,8 @@ config 파일 하나로 빌트인 규칙(기하 8종 + 신규 4종)과 커스텀
 |------|------|-----------|-----------|
 | `sigma_lint` | config 기반 검사(read-only 기본) + 빌트인 안전수정(`apply:true`) | `token`, `configPath` | `nodeId`, `path`, `apply` |
 
-**`configPath` 실행 환경 주의**: 서버가 자신의 파일시스템에서 직접 읽으므로, Docker로 배포한 경우 컨테이너 안에서 보이는 경로여야 한다 — 프로젝트 저장소 경로(`E:\...`)는 컨테이너에 안 보인다. `docker-compose.yml`에서 바인드 마운트된 `~/.sigma`(컨테이너 `/root/.sigma`) 하위에 config를 두는 것을 권장(예: `~/.sigma/lint-configs/`) — `SIGMA_DATA_DIR`를 오버라이드했다면 그 경로 기준.
-
-**config 스키마**:
-```jsonc
-{
-  "builtins": { "section_gap": { "gap": 80 }, "frame_padding": { "enabled": false } },
-  "custom": [
-    { "id": "card-radius-12", "select": { "type": "FRAME", "namePattern": "Card" },
-      "check": { "op": "equals", "field": "cornerRadius", "value": 12 } },
-    { "id": "modal-needs-overlay", "kind": "predicate",
-      "code": "export default function(node, ctx) { ... }" }
-  ]
-}
-```
-
-**빌트인 규칙 12종** (미기재 시 기본 ON — opt-out 모델):
-- 기하 8종(좌표, 구 `sigma_layout_lint`와 동일 로직): `outside_section`(섹션 밖 배치노드) · `section_overlap` · `section_gap`(이웃 섹션 간격 <80px — 라벨이 경계 가림, `gap`으로 조절·0=off) · `card_overlap`(섹션 안 프레임 겹침) · `frame_padding`(섹션 안 프레임 ≥20px 여백, `padding`으로 조절) · `instance_orphan`(섹션/페이지 직속으로 뜬 인스턴스 — 마스터 내부 중첩은 정상, anno/wire 예외) · `component_needs_frame`(섹션 직속 COMPONENT/GROUP 금지 — 프레임 안에) · `child_overflow`(트리상 자식이면 좌표상으로도 부모 안 — 모든 컨테이너가 자식 로컬좌표라 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외).
-- 신규 4종: `stray_pixel`(비정수 좌표/크기) · `default_name`("Rectangle 123" 류 기본 이름 방치) · `empty_container`(자식 없는 FRAME/GROUP) · `hidden_leaf`(visible:false 로 트리 잔존).
-
-**커스텀 규칙**: `select+check`(연산자 `equals/range/regex/oneOf/exists` 5개, 필드 비교 전용) 또는
-`kind:"predicate"` + `code`(`export default function(node, ctx) {...}` 형태, 서버 Worker에서
-격리 실행·타임아웃 기본 2000ms). **read-only** — 커스텀 규칙은 fix를 가질 수 없다.
-
-**자동수정**은 **frame_padding·child_overflow → 섹션 확장**만(형제 불변, 빌트인 전용). 나머지(겹침·orphan·커스텀)는 재배치 판단이 필요해 보고만 하고 자동수정하지 않는다.
+**빌트인 12종(파라미터·기본값), JSON/predicate 커스텀 규칙 스키마, `configPath`의 Docker
+배포 주의사항, 복붙용 예제 config, 설계 근거는 [lint.md](lint.md) 참조.**
 
 ## 조회/검색
 
