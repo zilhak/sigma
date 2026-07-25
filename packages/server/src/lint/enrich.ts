@@ -22,6 +22,9 @@ export interface NodeInfoLike {
   textAlignHorizontal?: string;
   textAlignVertical?: string;
   layoutMode?: string;
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  description?: string;
 }
 
 export interface BuildLintNodesResult {
@@ -59,6 +62,9 @@ export function buildLintNodes(roots: TreeNode[], nodesInfo: NodeInfoLike[]): Bu
       base.textAlignHorizontal = info.textAlignHorizontal;
       base.textAlignVertical = info.textAlignVertical;
       base.layoutMode = info.layoutMode;
+      base.layoutSizingHorizontal = info.layoutSizingHorizontal;
+      base.layoutSizingVertical = info.layoutSizingVertical;
+      base.description = info.description;
     }
     return base;
   });

@@ -1,6 +1,6 @@
 # Lint (`sigma_lint`) — 빌트인 카탈로그 + 커스텀 규칙
 
-Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 12개(좌표 기반 8종 + 신규 4종)와
+Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 14개(좌표 기반 8종 + 구조/이름/가시성 6종)와
 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
 
 ```
@@ -29,7 +29,7 @@ Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙
   나머지(겹침·orphan 등 재배치가 필요한 것, 모든 커스텀 규칙)는 보고만 하고
   자동수정하지 않는다(check-first).
 
-## 빌트인 규칙 12종
+## 빌트인 규칙 14종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -45,6 +45,8 @@ Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙
 | `default_name` | `Rectangle 123`/`Frame 45`/`Group 12` 등 Figma 기본 이름 방치 | — | — |
 | `empty_container` | FRAME/GROUP인데 자식이 0개 | — | — |
 | `hidden_leaf` | `visible:false`인 노드가 트리에 잔존 | — | — |
+| `fill_sizing_orphan` | `layoutSizingHorizontal/Vertical`이 `FILL`인데 부모가 오토레이아웃(`layoutMode !== 'NONE'`)이 아님 — FILL은 오토레이아웃 부모 안에서만 의미가 있어, 이 상태는 `resize()`/reparent 이후 남은 무효 상태가 거의 유일한 원인 | — | — |
+| `component_description_empty` | COMPONENT/COMPONENT_SET의 `description`이 비어있거나 공백만 있음 | — | — |
 
 파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
 
@@ -108,6 +110,24 @@ Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙
   계속 진행**된다(배열 입력 부분 실패 허용 관례와 일관).
 - predicate는 **라이브 Figma 객체가 아니라 이미 서버가 들고 있는 직렬화된 노드
   데이터 위에서만 동작**한다 — 문서를 직접 조작할 수 없다.
+
+## 추천 커스텀 규칙 — placeholder/lorem 텍스트 잔존
+
+빌트인화하지 않고 커스텀 규칙만으로 바로 쓸 수 있는, 우선순위가 높은 예시. AI Agent가 생성한 문서에
+"Lorem ipsum...", "placeholder", "TODO:" 같은 임시 텍스트가 그대로 남는 경우를 잡는다. 코드 변경이
+전혀 필요 없다 — 아래 항목을 `config.custom`에 추가하기만 하면 된다.
+
+```jsonc
+{
+  "id": "placeholder-text-leftover",
+  "select": { "type": "TEXT" },
+  "check": { "op": "regex", "field": "characters", "pattern": "Lorem ipsum|placeholder text|TODO:|dummy text" },
+  "message": "\"{name}\" 에 placeholder/lorem 텍스트가 남아있음: {actual}"
+}
+```
+
+`regex` op은 플래그를 지원하지 않아(대소문자 구분) 실제 사용하는 표기 그대로 패턴에 나열해야 한다
+(필요하면 `[Ll]orem` 같은 문자 클래스로 대소문자 변형을 직접 명시).
 
 ## 예제 config (복붙용)
 

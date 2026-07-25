@@ -8,7 +8,7 @@ import { buildLintNodes, collectNodeIds, type NodeInfoLike } from '../../lint/en
 import { runPredicateRule } from '../../lint/run-custom-rule.js';
 
 /**
- * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 신규 4종) + config.custom(JSON shorthand / JS
+ * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종) + config.custom(JSON shorthand / JS
  * predicate) 커스텀 규칙을 config 파일 하나로 함께 실행한다. sigma_layout_lint/sigma_layout_fix
  * 를 완전히 대체(기하 8종은 빌트인 카탈로그의 일부로 흡수). 설계 배경은
  * .claude-workspace/analysis/lint-benchmark-ideation.md 참조.

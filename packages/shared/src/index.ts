@@ -80,5 +80,8 @@ export {
   runBuiltinRules,
 } from './lint/engine';
 export { compileMatchRule, runMatchRule, type CompiledMatchRule } from './lint/json-rule';
-export { strayPixelRule, defaultNameRule, emptyContainerRule, hiddenLeafRule } from './lint/simple-rules';
+export {
+  strayPixelRule, defaultNameRule, emptyContainerRule, hiddenLeafRule,
+  fillSizingOrphanRule, componentDescriptionEmptyRule,
+} from './lint/simple-rules';
 export { flattenTree, buildRelationMaps, type FlatEntry, type RelationMaps } from './lint/tree-utils';

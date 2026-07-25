@@ -1,11 +1,14 @@
 /**
- * sigma_lint 빌트인 엔진 — 기하 8종(geometric.ts, 무변경 이관) + 신규 4종(simple-rules.ts)을
+ * sigma_lint 빌트인 엔진 — 기하 8종(geometric.ts, 무변경 이관) + 구조/이름/가시성 6종(simple-rules.ts)을
  * config.builtins 로 켜고 끄고 파라미터화한다. 각 규칙은 미기재 시 기본 ON(opt-out 모델) —
  * 8개 기하 규칙은 sigma_layout_lint 시절부터 항상 켜져 있었으므로 그 동작을 그대로 보존한다.
  */
 import type { TreeNode } from '../types';
 import { DEFAULT_PADDING, DEFAULT_SECTION_GAP, lintLayout, mergeFixesBySection, type LayoutRule } from './geometric';
-import { defaultNameRule, emptyContainerRule, hiddenLeafRule, strayPixelRule } from './simple-rules';
+import {
+  componentDescriptionEmptyRule, defaultNameRule, emptyContainerRule,
+  fillSizingOrphanRule, hiddenLeafRule, strayPixelRule,
+} from './simple-rules';
 import type { BuiltinRuleId, BuiltinsConfig, Violation } from './types';
 
 export { mergeFixesBySection };
@@ -19,6 +22,7 @@ const GEOMETRIC_RULES: LayoutRule[] = [
 export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   ...GEOMETRIC_RULES,
   'stray_pixel', 'default_name', 'empty_container', 'hidden_leaf',
+  'fill_sizing_orphan', 'component_description_empty',
 ];
 
 function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean {
@@ -49,6 +53,8 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
   if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots));
   if (isEnabled(builtins, 'empty_container')) out.push(...emptyContainerRule(roots));
   if (isEnabled(builtins, 'hidden_leaf')) out.push(...hiddenLeafRule(roots));
+  if (isEnabled(builtins, 'fill_sizing_orphan')) out.push(...fillSizingOrphanRule(roots));
+  if (isEnabled(builtins, 'component_description_empty')) out.push(...componentDescriptionEmptyRule(roots));
 
   return out;
 }

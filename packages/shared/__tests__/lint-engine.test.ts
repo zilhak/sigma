@@ -5,7 +5,10 @@
 import { describe, test, expect } from 'bun:test';
 import { lintLayout, mergeFixesBySection, type LayoutFix } from '../src/lint/geometric';
 import { runBuiltinRules } from '../src/lint/engine';
-import { defaultNameRule, emptyContainerRule, hiddenLeafRule, strayPixelRule } from '../src/lint/simple-rules';
+import {
+  componentDescriptionEmptyRule, defaultNameRule, emptyContainerRule,
+  fillSizingOrphanRule, hiddenLeafRule, strayPixelRule,
+} from '../src/lint/simple-rules';
 import { compileMatchRule, runMatchRule } from '../src/lint/json-rule';
 import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
@@ -365,6 +368,58 @@ describe('simple-rules.ts (신규 빌트인 4종)', () => {
   });
 });
 
+describe('simple-rules.ts (신규 빌트인 2종 — fill_sizing_orphan, component_description_empty)', () => {
+  test('fill_sizing_orphan — 부모가 layoutMode:NONE 이면 위반', () => {
+    const roots = [
+      node('parent', 'NoAutoLayout', 'FRAME', [0, 0, 200, 200], [
+        node('child', 'orphan', 'TEXT', [10, 10, 50, 20], [], { layoutSizingHorizontal: 'FILL' }),
+      ], { layoutMode: 'NONE' }),
+    ];
+    const violated = fillSizingOrphanRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('child');
+  });
+
+  test('fill_sizing_orphan — 부모가 오토레이아웃이면 clean', () => {
+    const roots = [
+      node('parent', 'AutoLayout', 'FRAME', [0, 0, 200, 200], [
+        node('child', 'valid', 'TEXT', [10, 10, 50, 20], [], { layoutSizingHorizontal: 'FILL' }),
+      ], { layoutMode: 'HORIZONTAL' }),
+    ];
+    expect(fillSizingOrphanRule(roots)).toHaveLength(0);
+  });
+
+  test('fill_sizing_orphan — 부모 없는 루트 노드도 위반(무효 상태)', () => {
+    const roots = [node('root', 'orphanRoot', 'FRAME', [0, 0, 200, 200], [], { layoutSizingVertical: 'FILL' })];
+    const violated = fillSizingOrphanRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('root');
+  });
+
+  test('fill_sizing_orphan — FIXED/HUG는 무시', () => {
+    const roots = [
+      node('parent', 'NoAutoLayout', 'FRAME', [0, 0, 200, 200], [
+        node('child', 'fine', 'TEXT', [10, 10, 50, 20], [], { layoutSizingHorizontal: 'FIXED' }),
+      ], { layoutMode: 'NONE' }),
+    ];
+    expect(fillSizingOrphanRule(roots)).toHaveLength(0);
+  });
+
+  test('component_description_empty — 빈/누락 description 검출', () => {
+    const roots = [
+      node('a', 'Button', 'COMPONENT', [0, 0, 10, 10], [], { description: '' }),
+      node('b', 'Card', 'COMPONENT', [0, 0, 10, 10], [], { description: '   ' }),
+      node('c', 'Icon', 'COMPONENT', [0, 0, 10, 10]),
+      node('d', 'Documented', 'COMPONENT', [0, 0, 10, 10], [], { description: '용도 설명' }),
+      node('e', 'NotAComponent', 'FRAME', [0, 0, 10, 10]),
+    ];
+    const violated = componentDescriptionEmptyRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('a');
+    expect(violated).toContain('b');
+    expect(violated).toContain('c');
+    expect(violated).not.toContain('d');
+    expect(violated).not.toContain('e');
+  });
+});
+
 describe('runBuiltinRules (engine.ts) — config.builtins enable/disable', () => {
   const looseFrame = [node('f', 'loose', 'FRAME', [0, 0, 100, 100])]; // outside_section 위반
 
@@ -402,6 +457,25 @@ describe('runBuiltinRules (engine.ts) — config.builtins enable/disable', () =>
   test('violation.source 는 항상 builtin', () => {
     const violations = runBuiltinRules(looseFrame);
     expect(violations.every((v) => v.source === 'builtin')).toBe(true);
+  });
+
+  test('fill_sizing_orphan / component_description_empty 도 기본 ON, enabled:false 로 끌 수 있다', () => {
+    const roots = [
+      node('parent', 'NoAutoLayout', 'FRAME', [0, 0, 200, 200], [
+        node('child', 'orphan', 'TEXT', [10, 10, 50, 20], [], { layoutSizingHorizontal: 'FILL' }),
+      ], { layoutMode: 'NONE' }),
+      node('comp', 'Button', 'COMPONENT', [0, 0, 10, 10]),
+    ];
+    const on = runBuiltinRules(roots, {}).map((v) => v.rule);
+    expect(on).toContain('fill_sizing_orphan');
+    expect(on).toContain('component_description_empty');
+
+    const off = runBuiltinRules(roots, {
+      fill_sizing_orphan: { enabled: false },
+      component_description_empty: { enabled: false },
+    }).map((v) => v.rule);
+    expect(off).not.toContain('fill_sizing_orphan');
+    expect(off).not.toContain('component_description_empty');
   });
 });
 

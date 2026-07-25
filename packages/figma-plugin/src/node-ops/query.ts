@@ -46,6 +46,7 @@ export interface NodeDetailInfo {
   layoutSizingVertical?: string;
   childCount?: number;
   componentName?: string;
+  description?: string;
 }
 
 export function getNodeInfo(nodeId: string): NodeDetailInfo {
@@ -115,8 +116,19 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     info.itemSpacing = frame.itemSpacing;
     info.primaryAxisAlignItems = frame.primaryAxisAlignItems;
     info.counterAxisAlignItems = frame.counterAxisAlignItems;
-    info.layoutSizingHorizontal = frame.layoutSizingHorizontal;
-    info.layoutSizingVertical = frame.layoutSizingVertical;
+  }
+
+  // layoutSizing은 오토레이아웃 자식으로 참여 가능한 모든 타입(FRAME/TEXT/RECTANGLE 등)에 존재 —
+  // 위 FRAME/COMPONENT 전용 블록에 있으면 일반 자식 노드에서 누락되는 버그였음
+  if ('layoutSizingHorizontal' in scene) {
+    const layoutNode = scene as FrameNode;
+    info.layoutSizingHorizontal = layoutNode.layoutSizingHorizontal;
+    info.layoutSizingVertical = layoutNode.layoutSizingVertical;
+  }
+
+  // Component description
+  if (scene.type === 'COMPONENT' || scene.type === 'COMPONENT_SET') {
+    info.description = (scene as ComponentNode).description;
   }
 
   // Children

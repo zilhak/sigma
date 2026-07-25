@@ -230,6 +230,11 @@ export interface TreeNode {
     layoutMode?: string;
     /** TEXT만 해당 (처음 100자) */
     characters?: string;
+    /** 오토레이아웃 자식으로 참여 가능한 노드 타입만 해당(FRAME/TEXT/RECTANGLE 등) */
+    layoutSizingHorizontal?: string;
+    layoutSizingVertical?: string;
+    /** COMPONENT/COMPONENT_SET만 해당 */
+    description?: string;
   };
 }
 

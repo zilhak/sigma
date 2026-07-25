@@ -137,6 +137,18 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     meta.characters = chars.length > 100 ? chars.slice(0, 100) + '...' : chars;
   }
 
+  // 오토레이아웃 자식으로 참여 가능한 모든 타입(FRAME/TEXT/RECTANGLE 등 — LayoutMixin 상속)
+  if ('layoutSizingHorizontal' in node) {
+    const layoutNode = node as FrameNode;
+    meta.layoutSizingHorizontal = layoutNode.layoutSizingHorizontal;
+    meta.layoutSizingVertical = layoutNode.layoutSizingVertical;
+  }
+
+  // COMPONENT/COMPONENT_SET의 description
+  if (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') {
+    meta.description = (node as ComponentNode).description;
+  }
+
   // TreeNode 구성
   const treeNode: TreeNode = {
     id: node.id,

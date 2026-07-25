@@ -105,7 +105,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 ## Lint (빌트인 카탈로그 + 커스텀 규칙)
 
-config 파일 하나로 빌트인 규칙(기하 8종 + 신규 4종)과 커스텀 규칙(JSON 선언적 / JS predicate)을
+config 파일 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종)과 커스텀 규칙(JSON 선언적 / JS predicate)을
 함께 검사·수정. Figma 파일마다 다른 config를 쓸 수 있도록 서버는 config를 저장하지 않고
 매 호출 시 지정된 경로를 그대로 읽는다.
 
@@ -113,7 +113,7 @@ config 파일 하나로 빌트인 규칙(기하 8종 + 신규 4종)과 커스텀
 |------|------|-----------|-----------|
 | `sigma_lint` | config 기반 검사(read-only 기본) + 빌트인 안전수정(`apply:true`) | `token`, `configPath` | `nodeId`, `path`, `apply` |
 
-**빌트인 12종(파라미터·기본값), JSON/predicate 커스텀 규칙 스키마, `configPath`의 Docker
+**빌트인 14종(파라미터·기본값), JSON/predicate 커스텀 규칙 스키마, `configPath`의 Docker
 배포 주의사항, 복붙용 예제 config, 설계 근거는 [lint.md](lint.md) 참조.**
 
 ## 조회/검색

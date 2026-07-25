@@ -2777,7 +2777,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 \`\`\`jsonc
 {
   "builtins": {
-    // 아래 12개 규칙 id. 생략하면 기본 ON(opt-out). 값은 { enabled?: boolean, ...파라미터 }
+    // 아래 14개 규칙 id. 생략하면 기본 ON(opt-out). 값은 { enabled?: boolean, ...파라미터 }
     "section_gap": { "gap": 80 },
     "frame_padding": { "enabled": false }
   },
@@ -2792,9 +2792,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 }
 \`\`\`
 
-**빌트인 규칙 12개**:
+**빌트인 규칙 14개**:
 - 기하 8종(좌표, sigma_layout_lint 시절과 동일): \`outside_section\`(섹션 밖 배치 노드) · \`section_overlap\`(형제 섹션 겹침) · \`section_gap\`(형제 섹션 간격 부족, 기본 80px — 섹션 라벨이 경계를 가림) · \`card_overlap\`(섹션 안 카드끼리 겹침) · \`frame_padding\`(섹션 안 프레임 여백 부족, 기본 20px) · \`instance_orphan\`(래퍼 없이 뜬 INSTANCE) · \`component_needs_frame\`(섹션 직속 COMPONENT/GROUP) · \`child_overflow\`(자식이 로컬좌표 기준 부모 밖).
-- 신규 4종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 Figma 기본 이름 방치) · \`empty_container\`(자식 없는 FRAME/GROUP) · \`hidden_leaf\`(visible:false 로 트리에 잔존).
+- 구조/이름/가시성 6종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 Figma 기본 이름 방치) · \`empty_container\`(자식 없는 FRAME/GROUP) · \`hidden_leaf\`(visible:false 로 트리에 잔존) · \`fill_sizing_orphan\`(layoutSizing이 FILL인데 부모가 오토레이아웃 아님 — 무효 상태) · \`component_description_empty\`(COMPONENT/COMPONENT_SET의 description 비어있음).
 
 **JSON \`check.op\`**: \`equals | range(min/max) | regex(pattern) | oneOf(values) | exists\` — 5개뿐이며 더 늘리지 않습니다(새 언어 발명 방지). 형제/조상 조회나 유도값 계산이 필요하면 \`kind:"predicate"\`를 쓰세요.
 
