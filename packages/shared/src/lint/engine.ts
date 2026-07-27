@@ -23,9 +23,13 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   ...GEOMETRIC_RULES,
   'stray_pixel', 'default_name', 'empty_container', 'hidden_leaf',
   'fill_sizing_orphan', 'component_description_empty',
+  // fully_occluded_sibling 은 여기 목록엔 있지만 runBuiltinRules 안에서 실행되지 않는다 —
+  // fills/opacity(get_nodes_info 상세)가 필요해 서버가 LintNode 로 enrich 한 뒤
+  // occlusion.ts 의 fullyOccludedSiblingRule 을 별도로 호출한다(isEnabled 로 opt-out 확인은 동일).
+  'fully_occluded_sibling',
 ];
 
-function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean {
+export function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean {
   const cfg = builtins[id];
   return !cfg || cfg.enabled !== false;
 }

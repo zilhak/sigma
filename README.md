@@ -192,7 +192,7 @@ AI Agent:
 | | `sigma_set_multiple_text_contents` | 여러 텍스트 노드 일괄 변경 |
 | | `sigma_group_nodes` / `sigma_ungroup` | 그룹 묶기 / 해제 |
 | | `sigma_flatten` / `sigma_boolean_operation` | 벡터 평탄화 / Boolean 연산 |
-| Lint | `sigma_lint` | config 기반 빌트인(기하 8종+구조/이름/가시성 6종)+커스텀 규칙 검사, 안전 자동수정(`apply:true`) |
+| Lint | `sigma_lint` | config 기반 빌트인(기하 8종+구조/이름/가시성 6종+occlusion 1종)+커스텀 규칙 검사, 안전 자동수정(`apply:true`) |
 | 조회 | `sigma_find_node` / `sigma_get_tree` | 노드 검색 / 계층 탐색 |
 | | `sigma_get_node_info` / `sigma_get_nodes_info` | 노드 상세 정보 (단일/배치) |
 | | `sigma_get_frames` / `sigma_get_document_info` | 프레임 목록 / 문서 정보 |
@@ -244,7 +244,7 @@ docker compose up -d
 | [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
 | [MCP 도구 레퍼런스](docs/mcp-tools.md) | 122개 MCP 도구 전체 목록 및 파라미터 |
 | [컴포넌트 스펙](docs/component-spec.md) | HTML 기반 컴포넌트 정의 규칙 (화이트리스트·값 검증·slot) |
-| [Lint](docs/lint.md) | 빌트인 14종 + 커스텀 규칙(JSON/predicate) 스키마, config 예제, 설계 근거 |
+| [Lint](docs/lint.md) | 빌트인 15종 + 커스텀 규칙(JSON/predicate) 스키마, config 예제, 설계 근거 |
 | [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |
 | [Extractor 스크립트 상세](docs/scripts/extractor.md) | 추출 로직, 가시성 판단, 텍스트 병합, SVG/아이콘 처리 |
 | [Storybook 스크립트 상세](docs/scripts/storybook.md) | Channel API, SPA 전환, 추출+저장 워크플로우 |

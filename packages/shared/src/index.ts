@@ -78,10 +78,12 @@ export {
   collectFixableViolations,
   mergeFixesBySection,
   runBuiltinRules,
+  isEnabled,
 } from './lint/engine';
 export { compileMatchRule, runMatchRule, type CompiledMatchRule } from './lint/json-rule';
 export {
   strayPixelRule, defaultNameRule, emptyContainerRule, hiddenLeafRule,
   fillSizingOrphanRule, componentDescriptionEmptyRule,
 } from './lint/simple-rules';
+export { fullyOccludedSiblingRule } from './lint/occlusion';
 export { flattenTree, buildRelationMaps, type FlatEntry, type RelationMaps } from './lint/tree-utils';

@@ -10,6 +10,7 @@ import {
   fillSizingOrphanRule, hiddenLeafRule, strayPixelRule,
 } from '../src/lint/simple-rules';
 import { compileMatchRule, runMatchRule } from '../src/lint/json-rule';
+import { fullyOccludedSiblingRule } from '../src/lint/occlusion';
 import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
 
@@ -568,5 +569,61 @@ describe('json-rule.ts — MatchRule 5개 연산자 컴파일러', () => {
     const violations = runMatchRule(rule, nodes);
     expect(violations).toHaveLength(1);
     expect(violations[0].nodes).toEqual(['b']);
+  });
+});
+
+describe('occlusion.ts — fully_occluded_sibling', () => {
+  function lnode(overrides: Partial<LintNode>): LintNode {
+    return { id: 'n', name: 'n', type: 'RECTANGLE', x: 0, y: 0, width: 10, height: 10, childCount: 0, ...overrides };
+  }
+  const solidFill = (opacity = 1) => [{ type: 'SOLID', opacity }];
+
+  test('나중에 그려지는(z-order 위) 불투명 SOLID 형제가 완전히 덮으면 위반', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
+    const violated = fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] }).map((v) => v.nodes[0]);
+    expect(violated).toContain('under');
+  });
+
+  test('먼저 그려지는(z-order 아래) 형제는 덮어도 위반 아님(순서 반대)', () => {
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    expect(fullyOccludedSiblingRule([cover, covered], { parent: ['over', 'under'] })).toHaveLength(0);
+  });
+
+  test('부분 겹침(완전 포함 아님)은 위반 아님', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 30, y: 30, width: 50, height: 50, fills: solidFill() });
+    expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
+  });
+
+  test('덮는 노드의 opacity < 1 이면 위반 아님', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill(), opacity: 0.5 });
+    expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
+  });
+
+  test('덮는 노드 fill이 SOLID가 아니면(IMAGE 등) 위반 아님', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: [{ type: 'IMAGE' }] });
+    expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
+  });
+
+  test('덮는 노드 타입이 ELLIPSE 등 비사각형이면 위반 아님(바운딩박스 근사 오탐 방지)', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const cover = lnode({ id: 'over', type: 'ELLIPSE', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
+    expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
+  });
+
+  test('덮는 노드가 visible:false 면 위반 아님', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill(), visible: false });
+    expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
+  });
+
+  test('가려지는 노드가 이미 visible:false 면 위반 아님(hidden_leaf 몫)', () => {
+    const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50, visible: false });
+    const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
+    expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
   });
 });

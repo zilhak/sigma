@@ -1,17 +1,18 @@
 import {
-  runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule,
+  runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule, isEnabled,
+  fullyOccludedSiblingRule,
   type TreeNode, type Violation, type LintConfig, type LayoutFix,
 } from '@sigma/shared';
 import { validateFigmaAccess, jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
 import { loadLintConfig, LintConfigError } from '../../lint/load-config.js';
-import { buildLintNodes, collectNodeIds, type NodeInfoLike } from '../../lint/enrich.js';
+import { buildLintNodes, collectNodeIds, type BuildLintNodesResult, type NodeInfoLike } from '../../lint/enrich.js';
 import { runPredicateRule } from '../../lint/run-custom-rule.js';
 
 /**
- * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종) + config.custom(JSON shorthand / JS
- * predicate) 커스텀 규칙을 config 파일 하나로 함께 실행한다. sigma_layout_lint/sigma_layout_fix
- * 를 완전히 대체(기하 8종은 빌트인 카탈로그의 일부로 흡수). 설계 배경은
- * .claude-workspace/analysis/lint-benchmark-ideation.md 참조.
+ * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종) + config.custom
+ * (JSON shorthand / JS predicate) 커스텀 규칙을 config 파일 하나로 함께 실행한다.
+ * sigma_layout_lint/sigma_layout_fix 를 완전히 대체(기하 8종은 빌트인 카탈로그의 일부로 흡수).
+ * 설계 배경은 .claude-workspace/analysis/lint-benchmark-ideation.md 참조.
  */
 
 function fixesToOps(fixes: LayoutFix[]): Array<{ nodeId: string; method: string; args: Record<string, unknown> }> {
@@ -29,28 +30,39 @@ function extractNodesInfo(raw: unknown): NodeInfoLike[] {
   return [];
 }
 
-async function runCustomRules(
+/**
+ * config.custom 이 있거나 fully_occluded_sibling(fills/opacity 필요)이 켜져 있을 때만
+ * get_nodes_info 왕복 + LintNode enrich를 한 번 수행한다(불필요한 왕복 방지 — 나머지
+ * 빌트인은 TreeNode만으로 충분하므로 이 경로를 타지 않는다).
+ */
+async function enrichIfNeeded(
   config: LintConfig,
   roots: TreeNode[],
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
-): Promise<Violation[]> {
-  const customRules = config.custom || [];
-  if (customRules.length === 0) return [];
+): Promise<BuildLintNodesResult | null> {
+  const needsCustom = (config.custom || []).length > 0;
+  const needsOcclusion = isEnabled(config.builtins || {}, 'fully_occluded_sibling');
+  if (!needsCustom && !needsOcclusion) return null;
 
   const nodeIds = collectNodeIds(roots);
   const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
-  const { nodes: lintNodes, relations } = buildLintNodes(roots, extractNodesInfo(nodesInfoRaw));
+  return buildLintNodes(roots, extractNodesInfo(nodesInfoRaw));
+}
 
-  const violations: Violation[] = [];
-  for (const rule of customRules) {
-    if (rule.kind === 'predicate') {
-      violations.push(...await runPredicateRule({ rule, nodes: lintNodes, relations }));
-    } else {
-      violations.push(...runMatchRule(rule, lintNodes));
+function runCustomRulesFromEnriched(config: LintConfig, enriched: BuildLintNodesResult): Promise<Violation[]> {
+  const customRules = config.custom || [];
+  return (async () => {
+    const violations: Violation[] = [];
+    for (const rule of customRules) {
+      if (rule.kind === 'predicate') {
+        violations.push(...await runPredicateRule({ rule, nodes: enriched.nodes, relations: enriched.relations }));
+      } else {
+        violations.push(...runMatchRule(rule, enriched.nodes));
+      }
     }
-  }
-  return violations;
+    return violations;
+  })();
 }
 
 export const lintHandlers: Record<string, (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>> = {
@@ -81,9 +93,13 @@ export const lintHandlers: Record<string, (args: Record<string, unknown>, contex
       const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId }, pluginId);
       const roots = tree.children as TreeNode[];
 
+      const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId);
       const violations: Violation[] = [
         ...runBuiltinRules(roots, config.builtins || {}),
-        ...await runCustomRules(config, roots, wsServer, pluginId),
+        ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
+          ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
+          : []),
+        ...(enriched ? await runCustomRulesFromEnriched(config, enriched) : []),
       ];
 
       const fixable = collectFixableViolations(violations);

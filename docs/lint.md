@@ -1,7 +1,7 @@
 # Lint (`sigma_lint`) — 빌트인 카탈로그 + 커스텀 규칙
 
-Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 14개(좌표 기반 8종 + 구조/이름/가시성 6종)와
-프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
+Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 15개(좌표 기반 8종 + 구조/이름/가시성 6종 +
+occlusion 1종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
 
 ```
 검사: sigma_lint(token, configPath, nodeId?, path?)
@@ -29,7 +29,7 @@ Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙
   나머지(겹침·orphan 등 재배치가 필요한 것, 모든 커스텀 규칙)는 보고만 하고
   자동수정하지 않는다(check-first).
 
-## 빌트인 규칙 14종
+## 빌트인 규칙 15종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -47,6 +47,7 @@ Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙
 | `hidden_leaf` | `visible:false`인 노드가 트리에 잔존 | — | — |
 | `fill_sizing_orphan` | `layoutSizingHorizontal/Vertical`이 `FILL`인데 부모가 오토레이아웃(`layoutMode !== 'NONE'`)이 아님 — FILL은 오토레이아웃 부모 안에서만 의미가 있어, 이 상태는 `resize()`/reparent 이후 남은 무효 상태가 거의 유일한 원인 | — | — |
 | `component_description_empty` | COMPONENT/COMPONENT_SET의 `description`이 비어있거나 공백만 있음 | — | — |
+| `fully_occluded_sibling` | 같은 부모 안에서 나중에 그려지는(z-order 위) 형제가 완전 불투명한 SOLID fill로 바운딩박스 전체를 덮어, 어떤 상태에서도 절대 안 보이는 노드 — `hidden_leaf`의 암묵적 버전. **fills/opacity 조회가 필요해 켜져 있으면 config.custom 유무와 무관하게 `get_nodes_info` 왕복이 한 번 추가된다.** 덮는 노드는 RECTANGLE/FRAME/COMPONENT/INSTANCE만 인정(원·별 등 비사각형은 바운딩박스 근사가 부정확해 제외), 그라디언트/이미지 fill은 완전 불투명을 증명 못 해 제외, 형제 여럿이 조각조각 합쳐 덮는 경우는 못 잡음(모두 의도적 스코프 축소 — 오탐 방지 우선) | — | — |
 
 파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
 
