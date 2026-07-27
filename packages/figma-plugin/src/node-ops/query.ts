@@ -104,8 +104,8 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     info.textAlignVertical = textNode.textAlignVertical;
   }
 
-  // Layout (Frame/Component)
-  if (scene.type === 'FRAME' || scene.type === 'COMPONENT' || scene.type === 'COMPONENT_SET') {
+  // Layout — 오토레이아웃 가능한 모든 타입(FRAME/COMPONENT/COMPONENT_SET/INSTANCE — BaseFrameMixin 상속)
+  if ('layoutMode' in scene) {
     const frame = scene as FrameNode;
     info.layoutMode = frame.layoutMode;
     info.layoutWrap = frame.layoutWrap;

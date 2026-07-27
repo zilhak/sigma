@@ -124,8 +124,9 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     locked: node.locked,
   };
 
-  // FRAME/COMPONENT의 layoutMode
-  if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') {
+  // 오토레이아웃 가능한 모든 타입(FRAME/COMPONENT/COMPONENT_SET/INSTANCE — BaseFrameMixin 상속)의 layoutMode.
+  // INSTANCE 누락 시 인스턴스 내부의 정상 FILL 자식이 fill_sizing_orphan 오탐으로 잡힘(실측 발견).
+  if ('layoutMode' in node) {
     const frameNode = node as FrameNode;
     meta.layoutMode = frameNode.layoutMode;
   }
