@@ -2593,6 +2593,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '텍스트 태그(span/p/h1~h6/a/strong/em/b/i)는 자식 없는 leaf 전용. void는 img/br. 허용 HTML 속성: style, src, alt, href, data-sigma-*. ' +
       '[이미지] <img src>는 **base64 data URI("data:image/…")만** 허용됩니다 — 원격 URL·상대 경로는 Figma 플러그인이 네트워크로 가져올 수 없어 ' +
       '조용히 회색 플레이스홀더가 되므로 등록 단계에서 거부합니다(src 누락도 거부). 스펙 이미지는 scaleMode FIT(잘리지 않음), 노드 이름은 alt 우선. ' +
+      '[svg] 벡터 아이콘은 컨테이너의 자식 leaf로 허용(루트 불가, slot 불가) — 전체를 문자열로 캡처해 정적 벡터로 변환하므로 ' +
+      '내부는 정적 path/shape 태그만(svg/g/path/circle/ellipse/rect/line/polyline/polygon/defs/linearGradient/radialGradient/stop/clipPath/title/desc), ' +
+      '애니메이션·스크립트·필터·foreignObject·use/symbol·on* 이벤트·href는 차단. ' +
       '[CSS] 화이트리스트: display/flex-direction/justify-content/align-items/align-self/gap/flex-wrap/flex-grow/flex-shrink/overflow, ' +
       'width/height, padding(개별 포함), background-color/background/color/opacity, border-width·color(개별)·radius, ' +
       'font-family/font-size/font-weight/line-height/letter-spacing, box-shadow(inset 불가). ' +

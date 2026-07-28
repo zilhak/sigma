@@ -99,7 +99,30 @@ OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이�
 | 컨테이너 태그 | `div`, `button`만 자식 요소 보유 가능. **자식이 있으면 `display: flex` 명시 필수** (암시적 블록 배치 불가) |
 | 텍스트 태그 | `span, p, h1~h6, a, strong, em, b, i` — **leaf 전용** (자식 요소 금지, rich text 중첩은 이후 단계) |
 | void 태그 | `img`, `br` — **`img`의 `src`는 base64 data URI만**(아래 §이미지) |
+| 벡터 아이콘 | `svg` — 컨테이너(div/button)의 자식 leaf 전용 (**루트 불가, slot 불가**). 내부는 별도 화이트리스트 (아래 §SVG 벡터 아이콘) |
 | 허용 HTML 속성 | `style`, `src`, `alt`, `href`, `data-sigma-*` |
+
+### SVG 벡터 아이콘
+
+`<svg>`는 컨테이너의 자식으로 넣을 수 있는 정적 벡터 아이콘이다. 빌더가 `<svg>...</svg>` 전체를
+문자열로 캡처해 `createNodeFromSvg`로 변환하므로, **정적 path/shape만** 안전하게 옮겨진다 —
+애니메이션·스크립트·필터·외부참조는 변환 보장이 없어 차단된다.
+
+| 항목 | 규칙 |
+|------|------|
+| 위치 | 컨테이너(div/button)의 자식 leaf만. 루트 요소 불가, `data-sigma-slot` 불가 (텍스트가 아님) |
+| 내부 허용 태그 | `svg, g, path, circle, ellipse, rect, line, polyline, polygon, defs, linearGradient, radialGradient, stop, clipPath, title, desc` |
+| 내부 차단 태그 | `script, style, animate*, foreignObject, filter, image, a, iframe, switch, use, symbol, text, tspan` + `fe`로 시작하는 모든 필터 프리미티브 |
+| 속성 차단 | `on*` 이벤트 핸들러, `href`/`xlink:href`, `style` 내 `url()`/`expression()` |
+
+```html
+<div style="display: flex; align-items: center; gap: 4px;">
+  <svg width="16" height="16" viewBox="0 0 16 16">
+    <path d="M2 8 L14 8" stroke="#1565C0" stroke-width="2"/>
+  </svg>
+  <span data-sigma-slot="text" style="font-size: 12px;">라벨</span>
+</div>
+```
 
 ### 배치는 Auto Layout으로만
 
