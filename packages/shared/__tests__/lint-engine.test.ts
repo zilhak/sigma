@@ -13,6 +13,7 @@ import { compileMatchRule, runMatchRule, matchesQuery, queryNodes, type NodeQuer
 import { fullyOccludedSiblingRule } from '../src/lint/occlusion';
 import { contentSpreadRule, originAnchorRule } from '../src/lint/page-rules';
 import { contentAboveAnnotationRule } from '../src/lint/annotation-order';
+import { buildRelationMaps } from '../src/lint/tree-utils';
 import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
 
@@ -929,6 +930,20 @@ describe('occlusion.ts — fully_occluded_sibling', () => {
     const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
     expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
   });
+
+  test('회귀: buildRelationMaps(roots).childrenOf 를 그대로 넘겨도 최상위(감싸는 컨테이너 없는) ' +
+    '형제끼리 occlusion이 잡힘 — sigma_lint(nodeId:...) 스코프에서 새던 버그', () => {
+    const underTree: TreeNode = { id: 'under', name: 'under', type: 'RECTANGLE', boundingBox: { x: 10, y: 10, width: 50, height: 50 }, childCount: 0 };
+    const overTree: TreeNode = { id: 'over', name: 'over', type: 'FRAME', boundingBox: { x: 0, y: 0, width: 200, height: 200 }, childCount: 0 };
+    const roots = [underTree, overTree]; // 감싸는 컨테이너 없이 바로 배열로 전달(=nodeId 스코프 상황 재현)
+    const rel = buildRelationMaps(roots);
+    const childrenOf = Object.fromEntries(rel.childrenOf);
+
+    const under = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50 });
+    const over = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
+    const violated = fullyOccludedSiblingRule([under, over], childrenOf).map((v) => v.nodes[0]);
+    expect(violated).toContain('under');
+  });
 });
 
 describe('json-rule.ts — queryNodes (조건 검색, lint 와 같은 부품 재사용)', () => {
@@ -1341,5 +1356,37 @@ describe('annotation-order.ts — content_above_annotation', () => {
     const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [anno('m'), noAlias])];
     const violated = contentAboveAnnotationRule(roots).map((v) => v.nodes[0]);
     expect(violated).toEqual(['a']);
+  });
+
+  test('회귀: roots 배열 자체(최상위, 어떤 컨테이너에도 안 감싸인 형제들)도 형제 그룹으로 검사됨 — ' +
+    'sigma_lint(nodeId:...)로 스코프했을 때 그 직속 자식들끼리 비교가 새던 버그(실측 발견)', () => {
+    const roots = [anno('m'), content('a')]; // 감싸는 컨테이너 없이 바로 배열로 전달
+    const violated = contentAboveAnnotationRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toEqual(['a']);
+  });
+});
+
+describe('tree-utils.ts — roots 최상위 레벨도 형제 그룹(회귀)', () => {
+  function node(id: string, children: TreeNode[] = []): TreeNode {
+    return { id, name: id, type: 'FRAME', boundingBox: { x: 0, y: 0, width: 10, height: 10 }, childCount: children.length, children };
+  }
+
+  test('siblingsOf — 최상위 노드끼리도 서로 형제로 조회됨', () => {
+    const roots = [node('a'), node('b'), node('c')];
+    const rel = buildRelationMaps(roots);
+    expect(rel.siblingsOf('a').sort()).toEqual(['b', 'c']);
+  });
+
+  test('ancestorsOf — 최상위 노드는 여전히 조상 없음(predicate ctx.getAncestors 계약 유지, sentinel 안 샘)', () => {
+    const roots = [node('a'), node('b')];
+    const rel = buildRelationMaps(roots);
+    expect(rel.ancestorsOf('a')).toEqual([]);
+  });
+
+  test('중첩된 자식의 형제 조회는 기존과 동일하게 동작', () => {
+    const roots = [node('parent', [node('c1'), node('c2')])];
+    const rel = buildRelationMaps(roots);
+    expect(rel.siblingsOf('c1')).toEqual(['c2']);
+    expect(rel.ancestorsOf('c1')).toEqual(['parent']);
   });
 });

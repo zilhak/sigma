@@ -102,12 +102,15 @@ export function buildLintNodes(
 
   const siblings: Record<string, string[]> = {};
   const ancestors: Record<string, string[]> = {};
-  const children: Record<string, string[]> = {};
   for (const n of nodes) {
     siblings[n.id] = rel.siblingsOf(n.id);
     ancestors[n.id] = rel.ancestorsOf(n.id);
-    children[n.id] = rel.childrenIdsOf(n.id);
   }
+  // rel.childrenOf 를 그대로 Record 화(개별 노드별 재조회 대신) — roots 배열 자체도 형제
+  // 그룹(내부 sentinel parentId)으로 잡혀 있어, fullyOccludedSiblingRule 이 nodeId로 스코프한
+  // 요청의 최상위 자식들끼리도 비교할 수 있다(실측 발견: 예전엔 이 레벨만 비교가 샜음).
+  // sentinel 키는 실제 노드 id가 아니라 ctx.getChildren(실제id) 조회엔 영향 없음.
+  const children: Record<string, string[]> = Object.fromEntries(rel.childrenOf);
 
   return { nodes, relations: { byId, siblings, ancestors, children } };
 }

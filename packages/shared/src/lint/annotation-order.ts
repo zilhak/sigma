@@ -30,25 +30,31 @@ export function contentAboveAnnotationRule(roots: TreeNode[], extraAliases?: Ite
 
   const out: Violation[] = [];
 
-  function walk(node: TreeNode) {
-    const children = node.children;
-    if (children && children.length > 1) {
-      let sawAnnotation = false;
-      for (const c of children) {
-        if (isAnnotation(c, aliases)) {
-          sawAnnotation = true;
-        } else if (sawAnnotation) {
-          out.push({
-            rule: 'content_above_annotation', source: 'builtin',
-            message: `"${c.name}" (${c.id}) 가 기획용(anno/wire) 컴포넌트보다 나중에 그려져(z-order 위) 가릴 수 있음`,
-            nodes: [c.id],
-          });
-        }
+  function scanSiblings(children: TreeNode[]) {
+    let sawAnnotation = false;
+    for (const c of children) {
+      if (isAnnotation(c, aliases)) {
+        sawAnnotation = true;
+      } else if (sawAnnotation) {
+        out.push({
+          rule: 'content_above_annotation', source: 'builtin',
+          message: `"${c.name}" (${c.id}) 가 기획용(anno/wire) 컴포넌트보다 나중에 그려져(z-order 위) 가릴 수 있음`,
+          nodes: [c.id],
+        });
       }
     }
+  }
+
+  function walk(node: TreeNode) {
+    const children = node.children;
+    if (children && children.length > 1) scanSiblings(children);
     for (const c of children ?? []) walk(c);
   }
 
+  // roots 배열 자체도 실제 Figma에선 공통 부모(페이지, 또는 sigma_lint(nodeId:...)로 스코프한
+  // 노드)를 공유하는 형제들이다 — 이 레벨도 형제 그룹으로 검사해야 한다(실측으로 발견한 누락:
+  // nodeId로 스코프하면 그 직속 자식들끼리는 비교가 안 되고 있었음).
+  if (roots.length > 1) scanSiblings(roots);
   for (const r of roots) walk(r);
   return out;
 }
