@@ -263,6 +263,9 @@ export interface TreeNode {
     /** fills 를 가질 수 있는 타입만 해당. 자식이 없어도 fill 로 내용을 그리는 노드(이미지 프레임 등)를
      *  empty_container 가 오탐하지 않도록 하는 판정 근거. */
     hasVisibleFill?: boolean;
+    /** COMPONENT(자신) 또는 INSTANCE(mainComponent)에 sigma-spec 스탬프가 있으면 그 alias.
+     *  이름과 달리 리네임에 영향받지 않는 진실 — 컴포넌트 스펙 시스템(anno/wire 프리셋 등) 식별용 */
+    specAlias?: string;
   };
 }
 

@@ -12,6 +12,7 @@ import {
 import { compileMatchRule, runMatchRule, matchesQuery, queryNodes, type NodeQuery } from '../src/lint/json-rule';
 import { fullyOccludedSiblingRule } from '../src/lint/occlusion';
 import { contentSpreadRule, originAnchorRule } from '../src/lint/page-rules';
+import { contentAboveAnnotationRule } from '../src/lint/annotation-order';
 import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
 
@@ -744,6 +745,24 @@ describe('runBuiltinRules (engine.ts) — config.builtins enable/disable', () =>
     expect(violations.every((v) => v.source === 'builtin')).toBe(true);
   });
 
+  test('content_above_annotation 도 기본 ON, enabled:false 로 끄고 aliases 로 확장 가능', () => {
+    const anno = node('m', 'm', 'INSTANCE', [0, 0, 10, 10], [], { specAlias: 'marker' });
+    const content = node('c', 'c', 'FRAME', [0, 0, 10, 10]);
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [anno, content])];
+
+    expect(runBuiltinRules(roots, {}).map((v) => v.rule)).toContain('content_above_annotation');
+    expect(
+      runBuiltinRules(roots, { content_above_annotation: { enabled: false } }).map((v) => v.rule)
+    ).not.toContain('content_above_annotation');
+
+    const custom = node('x', 'x', 'INSTANCE', [0, 0, 10, 10], [], { specAlias: 'my_custom' });
+    const roots2 = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [custom, content])];
+    expect(runBuiltinRules(roots2, {}).map((v) => v.rule)).not.toContain('content_above_annotation');
+    expect(
+      runBuiltinRules(roots2, { content_above_annotation: { aliases: ['my_custom'] } }).map((v) => v.rule)
+    ).toContain('content_above_annotation');
+  });
+
   test('fill_sizing_orphan / component_description_empty 도 기본 ON, enabled:false 로 끌 수 있다', () => {
     const roots = [
       node('parent', 'NoAutoLayout', 'FRAME', [0, 0, 200, 200], [
@@ -1278,5 +1297,49 @@ describe('content_spread (opt-in, 페이지 루트 전용) — 본진에서 떨�
     expect(rules({ content_spread: { enabled: true } })).not.toContain('content_spread');
     expect(rules({ content_spread: { enabled: true } }, { isPageRoot: true })).toContain('content_spread');
     expect(rules({ content_spread: { enabled: true, maxGap: 60000 } }, { isPageRoot: true })).not.toContain('content_spread');
+  });
+});
+
+describe('annotation-order.ts — content_above_annotation', () => {
+  const anno = (id: string) => node(id, id, 'INSTANCE', [0, 0, 10, 10], [], { specAlias: 'marker' });
+  const content = (id: string) => node(id, id, 'FRAME', [0, 0, 10, 10]);
+
+  test('기획용 뒤(z-order 위)에 일반 콘텐츠가 있으면 위반', () => {
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [anno('a'), content('b')])];
+    const violated = contentAboveAnnotationRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toEqual(['b']);
+  });
+
+  test('일반 콘텐츠가 전부 앞이고 기획용이 뒤에 몰려있으면(여러 개여도) clean', () => {
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [content('a'), content('b'), anno('c'), anno('d')])];
+    expect(contentAboveAnnotationRule(roots)).toHaveLength(0);
+  });
+
+  test('기획용이 여러 개 흩어져 있어도 "마지막 자식"일 필요는 없음 — 뒤에 일반 콘텐츠만 없으면 됨', () => {
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [content('a'), anno('b'), content('c'), anno('d')])];
+    const violated = contentAboveAnnotationRule(roots).map((v) => v.nodes[0]);
+    // b(anno) 뒤의 c(content)만 위반. d(anno) 자체는 위반 아님.
+    expect(violated).toEqual(['c']);
+  });
+
+  test('기획용 컴포넌트가 없으면 clean', () => {
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [content('a'), content('b')])];
+    expect(contentAboveAnnotationRule(roots)).toHaveLength(0);
+  });
+
+  test('extraAliases로 커스텀 alias도 기획용으로 인정', () => {
+    const custom = node('a', 'a', 'INSTANCE', [0, 0, 10, 10], [], { specAlias: 'my_custom_note' });
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [custom, content('b')])];
+    // 기본 셋엔 'my_custom_note'가 없어 'a'는 일반 노드 취급 -> 위반 없음(둘 다 일반)
+    expect(contentAboveAnnotationRule(roots)).toHaveLength(0);
+    // extraAliases로 확장하면 'a'가 기획용이 되어, 뒤의 'b'가 위반
+    expect(contentAboveAnnotationRule(roots, ['my_custom_note'])).toHaveLength(1);
+  });
+
+  test('specAlias 없는 노드는 일반 콘텐츠로 취급', () => {
+    const noAlias = node('a', 'a', 'INSTANCE', [0, 0, 10, 10]);
+    const roots = [node('root', 'root', 'FRAME', [0, 0, 100, 100], [anno('m'), noAlias])];
+    const violated = contentAboveAnnotationRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toEqual(['a']);
   });
 });

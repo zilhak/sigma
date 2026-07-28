@@ -15,7 +15,7 @@ import { getOrCreateFileId } from './page';
  *   nodeId가 유지되므로 기존 인스턴스들이 자동으로 새 형상을 따라간다.
  */
 
-const SPEC_STAMP_KEY = 'sigma-spec';
+export const SPEC_STAMP_KEY = 'sigma-spec';
 export const SLOT_MARK_KEY = 'sigma-slot';
 
 /**

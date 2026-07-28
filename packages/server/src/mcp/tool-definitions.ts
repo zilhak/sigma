@@ -3180,7 +3180,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 {
   "builtins": {
     // 아래 규칙 id. 값은 { enabled?: boolean, ...파라미터 }
-    // 기본 ON(opt-out) 15종은 생략하면 켜짐. opt-in 9종은 { "enabled": true } 로 켜야 실행됨.
+    // 기본 ON(opt-out) 16종은 생략하면 켜짐. opt-in 9종은 { "enabled": true } 로 켜야 실행됨.
     "section_gap": { "gap": 80 },
     "frame_padding": { "enabled": false },
     "raw_node": { "enabled": true }
@@ -3206,12 +3206,13 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 }
 \`\`\`
 
-**빌트인 규칙 24개** — 각 룰의 검사 내용·파라미터·기본값·오탐 한계는 저장소 문서 \`docs/lint/rules/<id>.md\` 에 있습니다(인덱스: \`docs/lint/rules/README.md\`). 여기서는 id 와 한 줄 요약만 싣습니다.
+**빌트인 규칙 25개** — 각 룰의 검사 내용·파라미터·기본값·오탐 한계는 저장소 문서 \`docs/lint/rules/<id>.md\` 에 있습니다(인덱스: \`docs/lint/rules/README.md\`). 여기서는 id 와 한 줄 요약만 싣습니다.
 
-기본 ON (opt-out) 15종:
+기본 ON (opt-out) 16종:
 - 기하 8종(좌표): \`outside_section\`(섹션 밖 배치 노드) · \`section_overlap\`(형제 섹션 겹침) · \`section_gap\`(형제 섹션 간격 부족) · \`card_overlap\`(섹션 안 카드끼리 겹침) · \`frame_padding\`(섹션 안 프레임 여백 부족, **자동수정 있음**) · \`instance_orphan\`(래퍼 없이 뜬 INSTANCE) · \`component_needs_frame\`(섹션 직속 COMPONENT/GROUP) · \`child_overflow\`(자식이 로컬좌표 기준 부모 밖, **자동수정 있음**).
 - 구조/이름/가시성 6종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 기본 이름) · \`empty_container\`(자식 없는 FRAME/GROUP — fill 로 그리는 이미지 프레임은 제외) · \`hidden_leaf\`(visible:false 잔존) · \`fill_sizing_orphan\`(FILL 인데 부모가 오토레이아웃 아님) · \`component_description_empty\`(COMPONENT description 비어있음).
 - occlusion 1종: \`fully_occluded_sibling\`(불투명 형제에 완전히 덮여 절대 안 보임 — **켜져 있으면 get_nodes_info 왕복 1회 추가**).
+- 기획 레이어 순서 1종: \`content_above_annotation\`(anno/wire 컴포넌트 스펙 프리셋보다 나중에 그려지는 일반 콘텐츠가 있으면 위반 — 판별은 컴포넌트 스펙 pluginData 스탬프 기준이라 레이어 리네임에 안전. \`aliases\` 파라미터로 자체 기획용 alias 추가 가능).
 
 opt-in (기본 OFF, \`{ "enabled": true }\` 필요) 9종 — 파라미터는 룰 문서 참조:
 - \`raw_node\`(등록 컴포넌트 대신 raw 도형으로 그린 노드 — "쓰는 건 전부 사전 정의" 정책)

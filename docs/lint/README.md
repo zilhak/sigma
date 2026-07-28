@@ -1,6 +1,6 @@
 # Lint (`sigma_lint`)
 
-Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기본 ON 15종 + opt-in 9종)과
+Figma 문서를 config 하나로 검사하는 시스템. **빌트인 25종**(기본 ON 16종 + opt-in 9종)과
 프로젝트별 **커스텀 규칙**(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
 
 ```
@@ -14,7 +14,7 @@ Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기
 
 | 문서 | 내용 |
 |---|---|
-| **[rules/](rules/)** | **빌트인 24종 — 룰 1개 = 파일 1개.** 인덱스는 [rules/README.md](rules/README.md) |
+| **[rules/](rules/)** | **빌트인 25종 — 룰 1개 = 파일 1개.** 인덱스는 [rules/README.md](rules/README.md) |
 | [config.md](config.md) | config 출처 3순위 · `scope` · `configMode` · 서브트리 검사 · 페이지/문서 데이터 저장 |
 | [suppress.md](suppress.md) | 노드 단위 억제(`lint-ignore`) — page config와의 분업 |
 | [annotation-layer.md](annotation-layer.md) | 기획 레이어 = 면제 계약 |

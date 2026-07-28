@@ -11,6 +11,7 @@ import {
   type RawNodeConfig,
 } from './simple-rules';
 import { contentSpreadRule, DEFAULT_MAX_GAP, DEFAULT_ORIGIN_TOLERANCE, originAnchorRule } from './page-rules';
+import { contentAboveAnnotationRule } from './annotation-order';
 import type { BuiltinRuleId, BuiltinsConfig, Violation } from './types';
 
 export { mergeFixesBySection };
@@ -58,6 +59,7 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   // fills/opacity(get_nodes_info 상세)가 필요해 서버가 LintNode 로 enrich 한 뒤
   // occlusion.ts 의 fullyOccludedSiblingRule 을 별도로 호출한다(isEnabled 로 opt-out 확인은 동일).
   'fully_occluded_sibling',
+  'content_above_annotation',
 ];
 
 /**
@@ -98,6 +100,7 @@ export const BUILTIN_RULE_PARAMS: Record<BuiltinRuleId, string[]> = {
   annotation_marker_gap: ['markerAlias', 'maxGap', 'orphanRadius', 'backgroundAreaRatio', 'minCoverRatio'],
   font_not_default: ['family', 'allow', 'flagMixed'],
   fully_occluded_sibling: [],
+  content_above_annotation: ['aliases'],
 };
 
 export function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean {
@@ -257,6 +260,12 @@ export function runBuiltinRules(
   //    "부모 없음(루트)" 으로 읽혀 정상 FILL 노드가 위반이 된다(selfRoots 주석 참조).
   if (markOptOut('fill_sizing_orphan', isEnabled(builtins, 'fill_sizing_orphan'))) out.push(...fillSizingOrphanRule(roots));
   if (markOptOut('component_description_empty', isEnabled(builtins, 'component_description_empty'))) out.push(...componentDescriptionEmptyRule(selfRoots));
+  // content_above_annotation 도 노드 자신(과 그 자식들)만 보고 판정되는 구조 규칙이라 selfRoots —
+  // roots(자식들)만 쓰면 스코프 루트 자신의 직속 자식 사이 z-order(anno vs 콘텐츠)를 못 본다.
+  if (markOptOut('content_above_annotation', isEnabled(builtins, 'content_above_annotation'))) {
+    const extraAliases = builtins.content_above_annotation?.aliases;
+    out.push(...contentAboveAnnotationRule(selfRoots, Array.isArray(extraAliases) ? extraAliases as string[] : undefined));
+  }
 
   // raw_node 만 opt-in: 미기재/enabled≠true 면 실행 안 함(다른 빌트인의 opt-out 기본 ON 과 반대).
   // ⛔ roots — 조상에 INSTANCE/COMPONENT 가 있으면 면제하는 규칙이라, 조상이 트리 밖인

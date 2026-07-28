@@ -1,5 +1,22 @@
-import type { TreeNode, TreeFilter, TreeFields, FindNodeResult, GetTreeResult } from '@sigma/shared';
+import type { TreeNode, TreeFilter, TreeFields, FindNodeResult, GetTreeResult, ComponentSpecStamp } from '@sigma/shared';
 import { getPageById } from './page';
+import { SPEC_STAMP_KEY } from './component-spec';
+
+/** COMPONENT(자신) 또는 INSTANCE(mainComponent)의 sigma-spec 스탬프에서 alias를 읽는다.
+ *  스탬프 없음/파싱 실패 시 undefined(예외를 던지지 않음 — lint 트리 순회 중 흔한 케이스). */
+function readSpecAlias(node: SceneNode): string | undefined {
+  const stampSource = node.type === 'INSTANCE' ? (node as InstanceNode).mainComponent
+    : node.type === 'COMPONENT' ? (node as ComponentNode)
+    : null;
+  if (!stampSource) return undefined;
+  const raw = stampSource.getPluginData(SPEC_STAMP_KEY);
+  if (!raw) return undefined;
+  try {
+    return (JSON.parse(raw) as ComponentSpecStamp).alias;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * 노드의 전체 경로를 구함 (루트부터)
@@ -264,6 +281,13 @@ export async function serializeTreeNode(node: SceneNode, ctx: SerializeContext):
   }
 
   const meta = buildNodeMeta(node);
+
+  // 컴포넌트 스펙 스탬프의 alias(COMPONENT 자신 또는 INSTANCE의 mainComponent) — 이름과 무관하게
+  // "이 노드가 어떤 스펙에서 왔는지" 식별 가능. content_above_annotation 규칙(anno/wire 판별)에 사용.
+  if (node.type === 'INSTANCE' || node.type === 'COMPONENT') {
+    const specAlias = readSpecAlias(node);
+    if (specAlias) meta.specAlias = specAlias;
+  }
 
   // TreeNode 구성
   const treeNode: TreeNode = {

@@ -56,4 +56,5 @@ export {
   originAnchorRule, contentSpreadRule,
   DEFAULT_ORIGIN_TOLERANCE, DEFAULT_MAX_GAP,
 } from './page-rules';
+export { contentAboveAnnotationRule } from './annotation-order';
 export { flattenTree, buildRelationMaps, type FlatEntry, type RelationMaps } from './tree-utils';

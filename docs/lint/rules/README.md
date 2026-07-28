@@ -1,9 +1,9 @@
-# 빌트인 규칙 24종
+# 빌트인 규칙 25종
 
 룰 1개 = 파일 1개. **룰을 추가하면 여기 행과 `<id>.md` 파일을 함께 만든다** — 파일이 없으면
 정합성 테스트가 실패한다. id의 정본은 `packages/shared/src/lint/engine.ts`의 `ALL_BUILTIN_RULE_IDS`.
 
-## 기본 ON (opt-out) — 15종
+## 기본 ON (opt-out) — 16종
 
 미기재 시 켜져 있다. `{ "enabled": false }`로 끈다.
 
@@ -24,6 +24,7 @@
 | [`fill_sizing_orphan`](fill-sizing-orphan.md) | FILL인데 부모가 오토레이아웃 아님 | — | — |
 | [`component_description_empty`](component-description-empty.md) | COMPONENT description 비어있음 | — | — |
 | [`fully_occluded_sibling`](fully-occluded-sibling.md) | 불투명 형제에 완전히 덮여 절대 안 보임 | `get_nodes_info` | — |
+| [`content_above_annotation`](content-above-annotation.md) | 기획용(anno/wire) 컴포넌트보다 나중에 그려지는 일반 콘텐츠 | — | — |
 
 ## opt-in (기본 OFF) — 9종
 
