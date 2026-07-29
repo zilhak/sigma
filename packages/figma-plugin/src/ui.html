@@ -422,6 +422,28 @@
       color: #333;
     }
 
+    .viewport-goto-input {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 6px;
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      background: #fff;
+    }
+
+    .viewport-goto-input:focus {
+      outline: none;
+      border-color: #18a058;
+    }
+
+    .viewport-goto-input::-webkit-outer-spin-button,
+    .viewport-goto-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
     .info-section-title {
       font-size: 11px;
       font-weight: 500;
@@ -648,23 +670,47 @@
     </div>
 
     <div class="tabs">
-      <div class="tab active" data-tab="info">정보</div>
+      <div class="tab active" data-tab="general">일반</div>
+      <div class="tab" data-tab="page">페이지</div>
       <div class="tab" data-tab="server">서버</div>
       <div class="tab" data-tab="log">로그</div>
       <div class="tab" data-tab="object">개체</div>
     </div>
 
-    <!-- 정보 탭 -->
-    <div id="infoSection" class="section active">
+    <!-- 일반 탭 -->
+    <div id="generalSection" class="section active">
       <div class="info-row">
         <span class="info-label">뷰포트:</span>
         <span class="info-value" id="viewportCenter">-</span>
         <span class="info-label">줌:</span>
         <span class="info-value" id="viewportZoom">-</span>
       </div>
+      <div class="info-row">
+        <span class="info-label">이동:</span>
+        <input type="number" class="viewport-goto-input" id="viewportGotoX" placeholder="x" />
+        <input type="number" class="viewport-goto-input" id="viewportGotoY" placeholder="y" />
+        <button class="btn-small" id="viewportGotoBtn">이동</button>
+      </div>
       <div class="info-section-title">선택한 노드:</div>
       <textarea class="selection-textarea" id="selectionTextArea" readonly placeholder="노드를 선택하면 여기에 표시됩니다..."></textarea>
       <button id="copyNodeInfoBtn" class="copy-node-btn" disabled>노드 정보 복사</button>
+    </div>
+
+    <!-- 페이지 탭 -->
+    <div id="pageSection" class="section">
+      <div class="info-row">
+        <span class="info-label">현재 페이지:</span>
+        <span class="info-value" id="pageLintPageName">-</span>
+      </div>
+      <div class="info-section-title">이 페이지의 lint 설정</div>
+      <div class="filekey-hint" style="margin-bottom: 8px;">
+        페이지에 저장된 lint config(sharedPluginData "sigma"/"lint")입니다.
+        sigma_lint 의 per-page/merge 모드가 이 값을 참조합니다. 실제 lint 실행은 서버가 담당합니다.
+      </div>
+      <div class="object-btn-row">
+        <button class="btn btn-export" id="lintViewBtn">lint 보기</button>
+        <button class="btn btn-import" id="lintSetBtn">lint 설정하기</button>
+      </div>
     </div>
 
     <!-- 서버 탭 -->
@@ -770,6 +816,31 @@
       <div class="modal-buttons">
         <button class="btn btn-secondary" id="serverListClose">닫기</button>
         <button class="btn btn-primary" id="serverListImport" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lint 보기 Modal (읽기전용) -->
+  <div class="modal-overlay" id="lintViewModal">
+    <div class="modal">
+      <div class="modal-title" id="lintViewModalTitle">이 페이지의 lint 설정</div>
+      <textarea id="lintViewTextArea" readonly placeholder="불러오는 중..."></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="lintViewModalClose">닫기</button>
+        <button class="btn btn-secondary" id="lintViewModalCopy">복사</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lint 설정 Modal (편집) -->
+  <div class="modal-overlay" id="lintSetModal">
+    <div class="modal">
+      <div class="modal-title">lint 설정하기</div>
+      <textarea id="lintSetTextArea" placeholder='{ "builtins": { "raw_node": { "enabled": true } } }'></textarea>
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" id="lintSetModalCancel">취소</button>
+        <button class="btn btn-secondary" id="lintSetModalClear">삭제</button>
+        <button class="btn btn-primary" id="lintSetModalSave">저장</button>
       </div>
     </div>
   </div>

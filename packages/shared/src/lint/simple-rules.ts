@@ -105,3 +105,51 @@ export function componentDescriptionEmptyRule(roots: TreeNode[]): Violation[] {
   });
   return out;
 }
+
+export interface RawNodeConfig {
+  /** "정의됐어야 하는" 것으로 볼 노드 타입. 기본 = FRAME + 기본 도형(TEXT/GROUP/SECTION/INSTANCE/COMPONENT 는 비대상). */
+  types?: string[];
+  /** COMPONENT 정의 내부의 raw 노드까지 검사할지. 기본 false(컴포넌트를 이루는 원시 요소는 정상). */
+  checkInsideComponent?: boolean;
+  /** 이 정규식에 매칭되는 이름은 제외(기획 킷/주석 등 의도적 raw 허용). */
+  exemptNamePattern?: string;
+}
+
+const DEFAULT_RAW_TYPES = ['FRAME', 'RECTANGLE', 'ELLIPSE', 'VECTOR', 'LINE', 'POLYGON', 'STAR'];
+
+/**
+ * raw_node (opt-in, 기본 OFF) — "화면(조립 레이어)에서 쓰는 모든 시각 요소는 사전 정의된
+ * 컴포넌트의 INSTANCE 여야 한다"를 강제한다. 등록 컴포넌트를 raw 도형/프레임으로 흉내낸 노드를 전수 검출.
+ * 휴리스틱으로 "이게 컴포넌트여야 했나"를 추측하지 않고, "정의된 것만 쓴다"는 정책을 기계적으로 강제하는 방식.
+ *
+ * 스코프(오탐/노이즈 방지):
+ * - 대상 타입(cfg.types)만 검사. 기본 목록에 TEXT/GROUP/SECTION/INSTANCE/COMPONENT 없음(라벨·구조 컨테이너·정의는 정상).
+ * - INSTANCE 내부 노드는 **항상** 제외(인스턴스 내부는 독립 저작 대상이 아니라 정의의 사본).
+ * - COMPONENT 정의 내부 노드는 기본 제외(컴포넌트를 이루는 원시 요소) — cfg.checkInsideComponent=true 면 포함.
+ * - cfg.exemptNamePattern 매칭 이름 제외.
+ */
+export function rawNodeRule(roots: TreeNode[], cfg: RawNodeConfig = {}): Violation[] {
+  const out: Violation[] = [];
+  const types = new Set(cfg.types && cfg.types.length ? cfg.types : DEFAULT_RAW_TYPES);
+  let exemptRe: RegExp | null = null;
+  if (cfg.exemptNamePattern) {
+    try { exemptRe = new RegExp(cfg.exemptNamePattern); } catch { exemptRe = null; }
+  }
+  const rel = buildRelationMaps(roots);
+
+  for (const { node } of flattenTree(roots)) {
+    if (!types.has(node.type)) continue;
+    if (exemptRe && exemptRe.test(node.name)) continue;
+
+    const ancestorTypes = rel.ancestorsOf(node.id).map((aid) => rel.byId.get(aid)?.node.type);
+    if (ancestorTypes.includes('INSTANCE')) continue;
+    if (!cfg.checkInsideComponent && ancestorTypes.includes('COMPONENT')) continue;
+
+    out.push({
+      rule: 'raw_node', source: 'builtin',
+      message: `"${node.name}" (${node.id}) raw ${node.type} — 등록된 컴포넌트 인스턴스가 아님(컴포넌트로 정의 후 인스턴스로 사용)`,
+      nodes: [node.id],
+    });
+  }
+  return out;
+}

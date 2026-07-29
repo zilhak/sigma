@@ -7,7 +7,8 @@ import type { TreeNode } from '../types';
 import { DEFAULT_PADDING, DEFAULT_SECTION_GAP, lintLayout, mergeFixesBySection, type LayoutRule } from './geometric';
 import {
   componentDescriptionEmptyRule, defaultNameRule, emptyContainerRule,
-  fillSizingOrphanRule, hiddenLeafRule, strayPixelRule,
+  fillSizingOrphanRule, hiddenLeafRule, rawNodeRule, strayPixelRule,
+  type RawNodeConfig,
 } from './simple-rules';
 import type { BuiltinRuleId, BuiltinsConfig, Violation } from './types';
 
@@ -23,6 +24,9 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   ...GEOMETRIC_RULES,
   'stray_pixel', 'default_name', 'empty_container', 'hidden_leaf',
   'fill_sizing_orphan', 'component_description_empty',
+  // raw_node 는 카탈로그엔 있지만 **opt-in(기본 OFF)** — 다른 빌트인의 opt-out 모델과 달리
+  // builtins.raw_node.enabled === true 로 명시해야만 실행된다(runBuiltinRules 참고). strict 정책이라 기본 강제 안 함.
+  'raw_node',
   // fully_occluded_sibling 은 여기 목록엔 있지만 runBuiltinRules 안에서 실행되지 않는다 —
   // fills/opacity(get_nodes_info 상세)가 필요해 서버가 LintNode 로 enrich 한 뒤
   // occlusion.ts 의 fullyOccludedSiblingRule 을 별도로 호출한다(isEnabled 로 opt-out 확인은 동일).
@@ -59,6 +63,9 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
   if (isEnabled(builtins, 'hidden_leaf')) out.push(...hiddenLeafRule(roots));
   if (isEnabled(builtins, 'fill_sizing_orphan')) out.push(...fillSizingOrphanRule(roots));
   if (isEnabled(builtins, 'component_description_empty')) out.push(...componentDescriptionEmptyRule(roots));
+
+  // raw_node 만 opt-in: 미기재/enabled≠true 면 실행 안 함(다른 빌트인의 opt-out 기본 ON 과 반대).
+  if (builtins.raw_node?.enabled === true) out.push(...rawNodeRule(roots, builtins.raw_node as RawNodeConfig));
 
   return out;
 }

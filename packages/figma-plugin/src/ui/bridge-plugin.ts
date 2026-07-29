@@ -2,7 +2,7 @@ import { PLUGIN_MSG } from './constants';
 import {
   getWs,
   getIsConnected, getFileInfo, setFileInfo,
-  log, showMessage, updateFileKeyUI, updateSelectionDisplay, notifyExportResult,
+  log, showMessage, updateFileKeyUI, updateSelectionDisplay, notifyExportResult, notifyPageLintResult,
   type FileInfo, type SelectionNode,
 } from './ui-state';
 
@@ -142,6 +142,62 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
         } else {
           log(`노드 조작 실패: ${msg.error}`, 'error');
         }      }
+      break;
+
+    case PLUGIN_MSG.SET_PAGE_DATA_RESULT:
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        sendToServer({
+          type: 'SET_PAGE_DATA_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        });
+        log(msg.success ? '페이지 데이터 저장 완료' : `페이지 데이터 저장 실패: ${msg.error}`, msg.success ? 'success' : 'error');
+      }
+      break;
+
+    case PLUGIN_MSG.GET_PAGE_DATA_RESULT:
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        sendToServer({
+          type: 'GET_PAGE_DATA_RESULT',
+          commandId: pendingCommandId,
+          success: msg.success,
+          result: msg.result,
+          error: msg.error,
+        });
+        log(msg.success ? '페이지 데이터 조회 완료' : `페이지 데이터 조회 실패: ${msg.error}`, msg.success ? 'success' : 'error');
+      }
+      break;
+
+    case PLUGIN_MSG.SET_NODE_DATA_RESULT:
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        sendToServer({ type: 'SET_NODE_DATA_RESULT', commandId: pendingCommandId, success: msg.success, result: msg.result, error: msg.error });
+        log(msg.success ? '노드 데이터 저장 완료' : `노드 데이터 저장 실패: ${msg.error}`, msg.success ? 'success' : 'error');
+      }
+      break;
+
+    case PLUGIN_MSG.GET_NODE_DATA_RESULT:
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        sendToServer({ type: 'GET_NODE_DATA_RESULT', commandId: pendingCommandId, success: msg.success, result: msg.result, error: msg.error });
+      }
+      break;
+
+    case PLUGIN_MSG.GET_NODES_DATA_RESULT:
+      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
+        sendToServer({ type: 'GET_NODES_DATA_RESULT', commandId: pendingCommandId, success: msg.success, result: msg.result, error: msg.error });
+      }
+      break;
+
+    case PLUGIN_MSG.PAGE_LINT_RESULT:
+      // UI 전용 결과 — 서버로 forward 하지 않고 모달 콜백만 호출한다.
+      notifyPageLintResult({
+        action: msg.action as 'get' | 'set' | 'clear',
+        success: msg.success as boolean,
+        pageName: msg.pageName as string | undefined,
+        value: (msg.value ?? null) as string | null,
+        error: msg.error as string | undefined,
+      });
       break;
 
     case PLUGIN_MSG.INFO:

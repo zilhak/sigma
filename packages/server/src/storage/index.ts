@@ -14,6 +14,8 @@ export interface StoredComponent {
 const BASE_DIR = join(homedir(), '.sigma');
 const EXTRACTED_DIR = join(BASE_DIR, 'extracted');
 const SCREENSHOTS_DIR = join(BASE_DIR, 'screenshots');
+/** sigma_lint scope=file 리포트 저장 위치 — 스크린샷/추출물과 동일하게 TTL·용량 정리 대상 */
+export const REPORTS_DIR = join(BASE_DIR, 'lint-reports');
 
 // Docker 환경에서 컨테이너 내부 경로 → 호스트 경로 변환
 // SIGMA_HOST_DATA_DIR이 설정되면 외부 반환용 경로를 호스트 기준으로 치환
@@ -141,14 +143,15 @@ async function trimToSize(dir: string, targetBytes: number): Promise<{ deleted: 
  * + 7일 지난 파일 삭제
  */
 export async function startupCleanup(): Promise<{
-  expired: { extracted: { deleted: number; freedBytes: number }; screenshots: { deleted: number; freedBytes: number } };
-  sizeTrim: { extracted: { deleted: number; freedBytes: number }; screenshots: { deleted: number; freedBytes: number } } | null;
+  expired: { extracted: { deleted: number; freedBytes: number }; screenshots: { deleted: number; freedBytes: number }; reports: { deleted: number; freedBytes: number } };
+  sizeTrim: { extracted: { deleted: number; freedBytes: number }; screenshots: { deleted: number; freedBytes: number }; reports: { deleted: number; freedBytes: number } } | null;
 }> {
   console.log('[storage] Running startup cleanup...');
 
   // 1. TTL cleanup (7일)
   const expiredExtracted = await cleanupExpiredFiles(EXTRACTED_DIR);
   const expiredScreenshots = await cleanupExpiredFiles(SCREENSHOTS_DIR);
+  const expiredReports = await cleanupExpiredFiles(REPORTS_DIR);
 
   if (expiredExtracted.deleted > 0) {
     console.log(`[storage] TTL cleanup (extracted): ${expiredExtracted.deleted} files, ${(expiredExtracted.freedBytes / 1024 / 1024).toFixed(1)}MB freed`);
@@ -156,40 +159,46 @@ export async function startupCleanup(): Promise<{
   if (expiredScreenshots.deleted > 0) {
     console.log(`[storage] TTL cleanup (screenshots): ${expiredScreenshots.deleted} files, ${(expiredScreenshots.freedBytes / 1024 / 1024).toFixed(1)}MB freed`);
   }
+  if (expiredReports.deleted > 0) {
+    console.log(`[storage] TTL cleanup (lint-reports): ${expiredReports.deleted} files, ${(expiredReports.freedBytes / 1024 / 1024).toFixed(1)}MB freed`);
+  }
 
   // 2. Size check after TTL cleanup
   const extractedFiles = await getFileInfoList(EXTRACTED_DIR);
   const screenshotFiles = await getFileInfoList(SCREENSHOTS_DIR);
+  const reportFiles = await getFileInfoList(REPORTS_DIR);
   const extractedSize = extractedFiles.reduce((sum, f) => sum + f.size, 0);
   const screenshotSize = screenshotFiles.reduce((sum, f) => sum + f.size, 0);
-  const totalSize = extractedSize + screenshotSize;
+  const reportSize = reportFiles.reduce((sum, f) => sum + f.size, 0);
+  const totalSize = extractedSize + screenshotSize + reportSize;
 
-  console.log(`[storage] Current size: extracted=${(extractedSize / 1024 / 1024).toFixed(1)}MB, screenshots=${(screenshotSize / 1024 / 1024).toFixed(1)}MB, total=${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+  console.log(`[storage] Current size: extracted=${(extractedSize / 1024 / 1024).toFixed(1)}MB, screenshots=${(screenshotSize / 1024 / 1024).toFixed(1)}MB, lint-reports=${(reportSize / 1024 / 1024).toFixed(1)}MB, total=${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
   let sizeTrim = null;
 
   if (totalSize > STARTUP_SIZE_THRESHOLD) {
     console.log(`[storage] Total size ${(totalSize / 1024 / 1024).toFixed(1)}MB exceeds ${STARTUP_SIZE_THRESHOLD / 1024 / 1024}MB threshold, trimming to ${STARTUP_SIZE_TARGET / 1024 / 1024}MB...`);
 
-    // Proportionally distribute target between extracted and screenshots
-    const extractedRatio = extractedSize / totalSize;
-    const extractedTarget = Math.floor(STARTUP_SIZE_TARGET * extractedRatio);
-    const screenshotTarget = STARTUP_SIZE_TARGET - extractedTarget;
+    // Proportionally distribute target across extracted / screenshots / lint-reports
+    const extractedTarget = Math.floor(STARTUP_SIZE_TARGET * (extractedSize / totalSize));
+    const screenshotTarget = Math.floor(STARTUP_SIZE_TARGET * (screenshotSize / totalSize));
+    const reportTarget = STARTUP_SIZE_TARGET - extractedTarget - screenshotTarget;
 
     const trimExtracted = await trimToSize(EXTRACTED_DIR, extractedTarget);
     const trimScreenshots = await trimToSize(SCREENSHOTS_DIR, screenshotTarget);
+    const trimReports = await trimToSize(REPORTS_DIR, reportTarget);
 
-    sizeTrim = { extracted: trimExtracted, screenshots: trimScreenshots };
+    sizeTrim = { extracted: trimExtracted, screenshots: trimScreenshots, reports: trimReports };
 
-    const totalDeleted = trimExtracted.deleted + trimScreenshots.deleted;
-    const totalFreed = trimExtracted.freedBytes + trimScreenshots.freedBytes;
+    const totalDeleted = trimExtracted.deleted + trimScreenshots.deleted + trimReports.deleted;
+    const totalFreed = trimExtracted.freedBytes + trimScreenshots.freedBytes + trimReports.freedBytes;
     console.log(`[storage] Size trim: ${totalDeleted} files deleted, ${(totalFreed / 1024 / 1024).toFixed(1)}MB freed`);
   }
 
   console.log('[storage] Startup cleanup complete');
 
   return {
-    expired: { extracted: expiredExtracted, screenshots: expiredScreenshots },
+    expired: { extracted: expiredExtracted, screenshots: expiredScreenshots, reports: expiredReports },
     sizeTrim,
   };
 }
@@ -368,14 +377,16 @@ export async function getStorageStats(): Promise<{ count: number; totalSize: num
   return { count, totalSize };
 }
 
-// Get full storage stats (extracted + screenshots)
+// Get full storage stats (extracted + screenshots + lint-reports)
 export async function getFullStorageStats(): Promise<{
   extracted: { count: number; totalSize: number };
   screenshots: { count: number; totalSize: number };
+  reports: { count: number; totalSize: number };
   total: { count: number; totalSize: number };
 }> {
   const extractedFiles = await getFileInfoList(EXTRACTED_DIR);
   const screenshotFiles = await getFileInfoList(SCREENSHOTS_DIR);
+  const reportFiles = await getFileInfoList(REPORTS_DIR);
 
   const extracted = {
     count: extractedFiles.length,
@@ -385,13 +396,18 @@ export async function getFullStorageStats(): Promise<{
     count: screenshotFiles.length,
     totalSize: screenshotFiles.reduce((sum, f) => sum + f.size, 0),
   };
+  const reports = {
+    count: reportFiles.length,
+    totalSize: reportFiles.reduce((sum, f) => sum + f.size, 0),
+  };
 
   return {
     extracted,
     screenshots,
+    reports,
     total: {
-      count: extracted.count + screenshots.count,
-      totalSize: extracted.totalSize + screenshots.totalSize,
+      count: extracted.count + screenshots.count + reports.count,
+      totalSize: extracted.totalSize + screenshots.totalSize + reports.totalSize,
     },
   };
 }
@@ -401,7 +417,7 @@ export async function getFullStorageStats(): Promise<{
  */
 export async function cleanup(options: {
   olderThanDays?: number;
-  category?: 'extracted' | 'screenshots' | 'all';
+  category?: 'extracted' | 'screenshots' | 'reports' | 'all';
 }): Promise<{ deleted: number; freedBytes: number }> {
   const category = options.category || 'all';
   const olderThanDays = options.olderThanDays != null ? options.olderThanDays : TTL_DAYS;
@@ -413,6 +429,7 @@ export async function cleanup(options: {
   const dirs: string[] = [];
   if (category === 'extracted' || category === 'all') dirs.push(EXTRACTED_DIR);
   if (category === 'screenshots' || category === 'all') dirs.push(SCREENSHOTS_DIR);
+  if (category === 'reports' || category === 'all') dirs.push(REPORTS_DIR);
 
   for (const dir of dirs) {
     const files = await getFileInfoList(dir);

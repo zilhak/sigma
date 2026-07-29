@@ -174,6 +174,57 @@ export function handleServerMessage(msg: ServerMessage) {
       break;
     }
 
+    case SERVER_MSG.SET_PAGE_DATA: {
+      log(`페이지 데이터 저장 요청: ${msg.key}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'set-page-data',
+            key: msg.key,
+            value: msg.value,
+            pageId: msg.pageId,
+            commandId: msg.commandId,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case SERVER_MSG.GET_PAGE_DATA: {
+      log(`페이지 데이터 조회 요청: ${msg.key ?? '(전체)'}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: 'get-page-data',
+            key: msg.key,
+            pageId: msg.pageId,
+            commandId: msg.commandId,
+          },
+        },
+        '*'
+      );
+      break;
+    }
+
+    case SERVER_MSG.SET_NODE_DATA: {
+      log(`노드 데이터 저장 요청: ${msg.nodeId} / ${msg.key}`, 'info');
+      parent.postMessage({ pluginMessage: { type: 'set-node-data', nodeId: msg.nodeId, key: msg.key, value: msg.value, commandId: msg.commandId } }, '*');
+      break;
+    }
+
+    case SERVER_MSG.GET_NODE_DATA: {
+      log(`노드 데이터 조회 요청: ${msg.nodeId} / ${msg.key ?? '(전체)'}`, 'info');
+      parent.postMessage({ pluginMessage: { type: 'get-node-data', nodeId: msg.nodeId, key: msg.key, commandId: msg.commandId } }, '*');
+      break;
+    }
+
+    case SERVER_MSG.GET_NODES_DATA: {
+      log(`노드 데이터 배치 조회: ${(msg.nodeIds as unknown[] | undefined)?.length ?? 0}개 / ${msg.key}`, 'info');
+      parent.postMessage({ pluginMessage: { type: 'get-nodes-data', nodeIds: msg.nodeIds, key: msg.key, commandId: msg.commandId } }, '*');
+      break;
+    }
+
     case SERVER_MSG.PING:
       if (ws) ws.send(JSON.stringify({ type: 'PONG' }));
       break;

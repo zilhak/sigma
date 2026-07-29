@@ -23,6 +23,11 @@ export const SERVER_MSG = {
   CHUNK: 'CHUNK',
   CHUNK_END: 'CHUNK_END',
   CLONE_NODE: 'CLONE_NODE',
+  SET_PAGE_DATA: 'SET_PAGE_DATA',
+  GET_PAGE_DATA: 'GET_PAGE_DATA',
+  SET_NODE_DATA: 'SET_NODE_DATA',
+  GET_NODE_DATA: 'GET_NODE_DATA',
+  GET_NODES_DATA: 'GET_NODES_DATA',
 } as const;
 
 // 플러그인(code.ts) → UI 메시지 타입 상수
@@ -45,5 +50,11 @@ export const PLUGIN_MSG = {
   CREATE_SECTION_RESULT: 'create-section-result',
   MOVE_NODE_RESULT: 'move-node-result',
   CLONE_NODE_RESULT: 'clone-node-result',
+  SET_PAGE_DATA_RESULT: 'set-page-data-result',
+  GET_PAGE_DATA_RESULT: 'get-page-data-result',
+  SET_NODE_DATA_RESULT: 'set-node-data-result',
+  GET_NODE_DATA_RESULT: 'get-node-data-result',
+  GET_NODES_DATA_RESULT: 'get-nodes-data-result',
+  PAGE_LINT_RESULT: 'page-lint-result',
   SELECTION_CHANGED: 'selection-changed',
 } as const;

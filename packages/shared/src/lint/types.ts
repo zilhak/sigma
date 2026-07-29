@@ -50,7 +50,8 @@ export type BuiltinRuleId =
   | 'outside_section' | 'section_overlap' | 'section_gap' | 'card_overlap'
   | 'frame_padding' | 'instance_orphan' | 'component_needs_frame' | 'child_overflow'
   | 'stray_pixel' | 'default_name' | 'empty_container' | 'hidden_leaf'
-  | 'fill_sizing_orphan' | 'component_description_empty' | 'fully_occluded_sibling';
+  | 'fill_sizing_orphan' | 'component_description_empty' | 'fully_occluded_sibling'
+  | 'raw_node';
 
 export interface BuiltinRuleConfig {
   /** 생략하면 기본 ON (opt-out 모델 — 8개 기하 규칙의 기존 동작을 그대로 유지하기 위함) */

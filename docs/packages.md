@@ -30,19 +30,31 @@ src/
 ├── mcp/
 │   ├── server.ts             # MCP 서버 인스턴스 + 세션 관리
 │   ├── router.ts             # /api/mcp 라우팅
-│   ├── tool-definitions.ts   # 119개 MCP 도구 스키마 정의
+│   ├── tool-definitions.ts   # 128개 MCP 도구 스키마 정의
 │   ├── tool-handler.ts       # Record 기반 핸들러 라우터
 │   ├── helpers.ts            # 공통 헬퍼 (인증, 검증)
+│   ├── spec-presets.ts       # 내장 스펙 프리셋 (anno/wire)
 │   └── handlers/
 │       ├── auth.ts           # 토큰 로그인/바인딩/상태
 │       ├── figma.ts          # Figma 노드 생성/조작 명령 전달
 │       ├── storage.ts        # 추출 데이터 저장/조회
 │       ├── scripts.ts        # 임베드 스크립트 경로 정보
-│       └── management.ts     # 스토리지 통계/정리/상태
+│       ├── management.ts     # 스토리지 통계/정리/상태
+│       ├── lint.ts           # sigma_lint (scope/configMode 해석 + 실행)
+│       └── component-spec.ts # 컴포넌트 스펙 등록/사용
+├── lint/                     # 서버측 lint 지원
+│   ├── resolve-config.ts     # config 출처 3순위 + configMode 병합
+│   ├── load-config.ts        # config 파일 로드/검증
+│   ├── enrich.ts             # 노드 상세 보강 (fills/opacity 등)
+│   ├── run-custom-rule.ts    # predicate 규칙 Worker 격리 실행
+│   └── report.ts             # scope:file 결과 → markdown 리포트
+├── image/
+│   └── process.ts            # 이미지 후처리
 ├── auth/
 │   └── token.ts              # SigmaTokenStore (stk-{hex}, 10분 만료)
 ├── storage/
-│   └── index.ts              # 파일 스토리지 (~/.sigma/)
+│   ├── index.ts              # 파일 스토리지 (~/.sigma/)
+│   └── component-specs.ts    # 컴포넌트 스펙 레지스트리
 ├── scripts/
 │   └── registry.ts           # 임베드 스크립트 경로 레지스트리
 └── dashboard/                # 웹 대시보드 HTML
@@ -52,7 +64,7 @@ src/
 
 - **HTTP API**: 헬스체크, 추출 데이터 CRUD, Figma 상태/임포트
 - **WebSocket**: Plugin 연결 관리, 1MB 청킹, 비동기 명령 대기 (PendingCommand)
-- **MCP**: 119개 도구를 stdio와 Streamable HTTP 두 가지 방식으로 제공
+- **MCP**: 128개 도구를 stdio와 Streamable HTTP 두 가지 방식으로 제공
 - **토큰 관리**: `stk-{16자리 hex}`, 10분 만료 (사용 시 자동 갱신), 100회마다 자동 정리
 - **스토리지**: TTL 7일, 100MB 초과 시 50MB로 자동 축소
 
@@ -77,7 +89,8 @@ src/
 │   ├── styles.ts             # CSS → Figma 스타일
 │   ├── layout.ts             # Flexbox 레이아웃
 │   ├── grid.ts               # CSS Grid 레이아웃
-│   └── html-parser.ts        # HTML → ExtractedNode 파싱
+│   ├── html-parser.ts        # HTML → ExtractedNode 파싱
+│   └── font-loader.ts        # 폰트 로드/폴백
 ├── node-ops/                 # Figma 노드 조작 (73개 modify 메서드)
 │   ├── modify.ts             # 노드 속성 수정
 │   ├── create.ts             # 도형/텍스트/프레임/이미지 생성
@@ -85,6 +98,9 @@ src/
 │   ├── batch.ts              # 배치 작업
 │   ├── selection.ts          # 선택 관리 + 뷰포트
 │   ├── components.ts         # 컴포넌트/인스턴스
+│   ├── component-spec.ts     # 스펙 기반 컴포넌트 빌드/사용
+│   ├── library.ts            # Team Library 조회/임포트
+│   ├── figjam.ts             # FigJam 스티키/커넥터
 │   ├── annotations.ts        # 주석
 │   ├── prototyping.ts        # 프로토타이핑/인터랙션
 │   ├── frames.ts             # 프레임 목록/삭제
@@ -99,6 +115,8 @@ src/
 ├── extractor/                # Figma → JSON/HTML 역추출
 │   ├── extract.ts            # Figma 노드 → ExtractedNode
 │   └── html-export.ts        # ExtractedNode → HTML
+├── testing/
+│   └── roundtrip.ts          # 추출→재생성 라운드트립 테스트
 └── ui/                       # Plugin UI 모듈
     ├── constants.ts           # 메시지 타입 상수
     ├── ui-state.ts            # 공유 상태 + DOM 업데이트
@@ -163,7 +181,30 @@ src/
 ├── colors.ts                 # parseColor(), rgbaToString()
 ├── extractor/                # 추출 로직 (Single Source of Truth)
 │   ├── core.ts               # extractElement() + 고수준 함수
+│   ├── styles.ts             # 계산 스타일 → ExtractedNode 스타일
+│   ├── text.ts               # 텍스트 노드 추출
 │   ├── svg.ts                # SVG 처리
+│   ├── icons.ts              # 아이콘 폰트/이미지 처리
+│   ├── pseudo.ts             # ::before/::after 의사요소
+│   ├── visibility.ts         # 가시성 판정
+│   ├── utils.ts              # 공통 유틸
+│   └── index.ts
+├── lint/                     # Lint 엔진 (순수 함수, 유닛테스트)
+│   ├── engine.ts             # 규칙 실행/집계 + 자동수정 계획
+│   ├── types.ts              # LintConfig, BuiltinRuleId(16종) 등
+│   ├── geometric.ts          # 기하 8종 (좌표 기반)
+│   ├── simple-rules.ts       # 구조/이름/가시성 6종 + raw_node
+│   ├── occlusion.ts          # fully_occluded_sibling
+│   ├── json-rule.ts          # JSON 선언적 커스텀 규칙
+│   └── tree-utils.ts         # 트리 순회 헬퍼
+├── component-spec/           # 컴포넌트 스펙 시스템
+│   ├── types.ts              # ComponentSpecRecord, ComponentParam 등
+│   ├── validate.ts           # 스펙 HTML 검증 (CSS 화이트리스트, slot 규칙)
+│   └── index.ts
+├── enhancer/                 # CDP 보강 레이어
+│   ├── core.ts               # enhance(cdp, node, options)
+│   ├── font.ts               # 플랫폼 실제 폰트 해석
+│   ├── types.ts              # CDPClient, EnhanceOptions
 │   └── index.ts
 ├── discovery/                # 요소 탐색 API
 │   ├── core.ts               # findByText, findByAlt, findForm 등

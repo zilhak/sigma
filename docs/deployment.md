@@ -108,9 +108,12 @@ Docker 모드에서는 다음 기능이 제한됩니다:
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `SIGMA_SCRIPTS_DIR` | `packages/shared/dist/` | 임베드 스크립트 디렉토리 경로 |
-| `SIGMA_HOST_DATA_DIR` | — | Docker: 컨테이너→호스트 경로 변환 |
-| `SIGMA_DATA_DIR` | `~/.sigma` | 데이터 저장 경로 override |
+| `SIGMA_SCRIPTS_DIR` | `packages/shared/dist/` | 임베드 스크립트 디렉토리 경로 (서버가 읽는 경로) |
+| `SIGMA_SCRIPTS_HOST_DIR` | — | Docker: `sigma_get_playwright_scripts`가 반환할 호스트 기준 스크립트 경로 |
+| `SIGMA_HOST_DATA_DIR` | — | Docker: 컨테이너→호스트 데이터 경로 변환 (`toHostPath`) |
+
+데이터 저장 경로는 `~/.sigma` **고정**이다(코드 상수). 컨테이너 안에서는 `/root/.sigma`가 되고,
+호스트로 반환할 경로만 `SIGMA_HOST_DATA_DIR`로 치환한다.
 
 ## 임베드 스크립트 설치 (.env)
 

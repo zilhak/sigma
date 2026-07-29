@@ -1,6 +1,6 @@
 # MCP 도구 레퍼런스
 
-Sigma MCP 서버가 제공하는 122개 도구의 전체 목록입니다.
+Sigma MCP 서버가 제공하는 128개 도구의 전체 목록입니다.
 
 ## 사용 흐름
 
@@ -105,16 +105,21 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 ## Lint (빌트인 카탈로그 + 커스텀 규칙)
 
-config 파일 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종)과 커스텀 규칙(JSON 선언적 / JS predicate)을
-함께 검사·수정. Figma 파일마다 다른 config를 쓸 수 있도록 서버는 config를 저장하지 않고
-매 호출 시 지정된 경로를 그대로 읽는다.
+config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + 컴포넌트 강제 1종)과
+커스텀 규칙(JSON 선언적 / JS predicate)을 함께 검사·수정. Figma 파일마다 다른 config를 쓸 수 있도록
+서버는 config를 저장하지 않고 매 호출 시 지정된 것을 그대로 읽는다.
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_lint` | config 기반 검사(read-only 기본) + 빌트인 안전수정(`apply:true`) | `token`, `configPath` | `nodeId`, `path`, `apply` |
+| `sigma_lint` | config 기반 검사(read-only 기본) + 빌트인 안전수정(`apply:true`) | `token` | `config`, `configPath`, `scope`, `configMode`, `nodeId`, `path`, `apply` |
 
-**빌트인 15종(파라미터·기본값), JSON/predicate 커스텀 규칙 스키마, `configPath`의 Docker
-배포 주의사항, 복붙용 예제 config, 설계 근거는 [lint.md](lint.md) 참조.**
+- **base config 출처 3순위**: inline `config` 객체 > `configPath` 파일 > 문서 노드 저장값(`sigma_set_page_data`, `pageId:"document"`).
+- **`scope`**: `page`(기본, 바인딩 1페이지, `apply` 지원) | `file`(전 페이지 순회, read-only, markdown 리포트 파일 + `reportPath` 반환).
+- **`configMode`**: `uniform`(기본, base 하나로 일괄) | `per-page`(페이지 저장 config) | `merge`(base + 페이지 override).
+
+**빌트인 16종(파라미터·기본값 — `raw_node`만 opt-in), JSON/predicate 커스텀 규칙 스키마,
+`scope`/`configMode` 상세, `configPath`의 Docker 배포 주의사항, 복붙용 예제 config,
+설계 근거는 [lint.md](lint.md) 참조.**
 
 ## 조회/검색
 
@@ -223,6 +228,32 @@ config 파일 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6
 | `sigma_delete_page` | 페이지 삭제 (마지막 불가) | `token`, `pageId` |
 | `sigma_reorder_page` | 페이지 순서 변경 | `token`, `pageId`, `index` |
 
+### 페이지/문서 메타데이터
+
+PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어 전용 도구로만 다룬다.
+저장소는 해당 노드의 `sharedPluginData`(namespace 고정 `"sigma"`)이며 `.fig` 파일에 영속된다.
+`key`는 `^[a-zA-Z0-9_.-]+$`, `value`는 유효한 JSON 문자열이어야 한다.
+`pageId`는 미지정=바인딩 페이지 / 페이지 ID / `"document"`(문서 루트).
+예약 key `"lint"`는 그 페이지(또는 문서)의 LintConfig로, `sigma_lint`의 `per-page`/`merge` 모드가 참조한다.
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_set_page_data` | 페이지/문서 노드에 메타데이터 저장 | `token`, `key`, `value` | `pageId` |
+| `sigma_get_page_data` | 저장된 메타데이터 조회 (`key` 미지정 시 전체 맵) | `token` | `key`, `pageId` |
+| `sigma_delete_page_data` | 메타데이터 키 삭제 | `token`, `key` | `pageId` |
+
+### 노드 메타데이터
+
+일반 노드(scene node)의 sigma 메타데이터. 저장소·형식 규칙은 페이지 메타데이터와 같다.
+예약 key **`"lint-ignore"`** = 그 노드에서만 lint 룰을 억제(inline suppress, `eslint-disable` 대응).
+`sigma_lint`는 위반이 난 노드만 이 값을 배치 조회해 억제된 위반을 걸러내고, 응답/리포트에 `suppressed` 건수를 표기한다.
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_set_node_data` | 노드에 메타데이터 저장 (예약 key `"lint-ignore"`) | `token`, `nodeId`, `key`, `value` | — |
+| `sigma_get_node_data` | 노드 메타데이터 조회 (`key` 미지정 시 전체 맵) | `token`, `nodeId` | `key` |
+| `sigma_delete_node_data` | 노드 메타데이터 키 삭제 | `token`, `nodeId`, `key` | — |
+
 ## 스타일
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
@@ -289,7 +320,7 @@ config 파일 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6
 |------|------|
 | `sigma_get_playwright_scripts` | 임베드 스크립트 경로 + API 정보 |
 | `sigma_storage_stats` | 스토리지 용량 현황 |
-| `sigma_cleanup` | 스토리지 일괄 정리 |
+| `sigma_cleanup` | 스토리지 일괄 정리 (`extracted`/`screenshots`/`reports`/`all`) |
 | `sigma_list_screenshots` | 저장된 스크린샷 목록 |
 | `sigma_delete_screenshot` | 스크린샷 삭제 |
 | `sigma_server_status` | 서버 전체 상태 |

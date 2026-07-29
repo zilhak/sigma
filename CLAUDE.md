@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 122개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 128개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -66,9 +66,12 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 ### 커밋 · 버전 규칙
 
-**커밋 시점**
-- **반영이 확실한(되돌리지 않을) 변경이 생길 때마다** 커밋한다.
+**커밋 시점 — 작업 1건 완료 = 즉시 커밋 (묻지 않는다)**
+- **작업(사용자가 요청한 한 단위) 을 끝냈으면 그 자리에서 곧바로 커밋한다.** "커밋할까요?"라고 **묻지 않는다** — 이 규칙이 이미 답이다. 사용자가 별도로 요청하지 않아도 커밋은 작업 완료 절차의 일부다.
+- 완료 판정은 **검증까지** 포함한다: 빌드·타입체크·테스트가 통과한 상태에서 커밋한다. 실패 중이면 커밋하지 말고 먼저 고친다.
+- 작업 하나가 여러 축(플러그인/서버/shared/문서)을 건드려도 **한 작업이면 한 커밋**으로 묶는다. 반대로 성격이 다른 작업 여러 개를 한 커밋에 섞지 않는다.
 - 버그 재현·디버깅용 **임시 변경(되돌릴 예정)은 커밋하지 않는다.**
+- **이미 있던 남의 미커밋 변경이 작업 트리에 섞여 있으면** 그것까지 끌어들여 커밋하지 말고, 사용자에게 함께 커밋해도 되는지 확인한다 (이 경우만 예외적으로 물어본다).
 - 커밋 메시지는 Conventional Commits + 한국어 설명 (`fix(converter): …`, `feat(plugin): …`). `Co-Authored-By` 등 트레일러는 넣지 않는다.
 - **`push`는 자동으로 하지 않는다.** 커밋까지만 하고, 원격 push는 사용자가 명시적으로 요청할 때만 수행한다.
 
@@ -180,9 +183,9 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_ungroup` | 그룹 해제 | `token`, `nodeId` | — |
 | `sigma_flatten` | 여러 노드를 하나의 벡터로 평탄화 | `token`, `nodeIds` | `name` |
 | `sigma_boolean_operation` | Boolean 연산 (Union, Subtract, Intersect, Exclude) | `token`, `nodeIds`, `operation` | `name` |
-| `sigma_lint` | config 기반 빌트인(기하 8종+구조/이름/가시성 6종+occlusion 1종) + 커스텀 규칙(JSON/predicate) 검사, 안전 자동수정(`apply:true`) | `token`, `configPath` | `nodeId`, `path`, `apply` |
+| `sigma_lint` | config 기반 빌트인(기하 8종+구조/이름/가시성 6종+occlusion 1종+컴포넌트 강제 1종) + 커스텀 규칙(JSON/predicate) 검사, 안전 자동수정(`apply:true`) | `token` | `config`, `configPath`, `scope`, `configMode`, `nodeId`, `path`, `apply` |
 
-> **공간 규약(빌트인 기하 8종)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · **이웃 섹션 간 ≥80px 간격**(section_gap — 라벨이 경계 가림 방지, `gap` 조절) · 섹션 안 프레임 ≥20px 여백(`padding` 조절) · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_lint`로 회귀 검사. 빌트인 15종 전체 목록·파라미터, 커스텀 규칙(JSON 선언적/JS predicate) 스키마, `configPath`의 Docker 배포 주의사항은 **[`docs/lint.md`](docs/lint.md)** 참조. 엔진은 `packages/shared/src/lint/`(순수 함수, 유닛테스트).
+> **공간 규약(빌트인 기하 8종)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · **이웃 섹션 간 ≥80px 간격**(section_gap — 라벨이 경계 가림 방지, `gap` 조절) · 섹션 안 프레임 ≥20px 여백(`padding` 조절) · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_lint`로 회귀 검사. 빌트인 16종 전체 목록·파라미터(`raw_node`만 opt-in), 커스텀 규칙(JSON 선언적/JS predicate) 스키마, `scope`(`page`/`file`)·`configMode`(`uniform`/`per-page`/`merge`)와 md 리포트, `configPath`의 Docker 배포 주의사항은 **[`docs/lint.md`](docs/lint.md)** 참조. 엔진은 `packages/shared/src/lint/`(순수 함수, 유닛테스트), 서버측 config 해석/리포트는 `packages/server/src/lint/`.
 
 **`sigma_modify_node` 지원 메서드:**
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove
@@ -284,6 +287,16 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_switch_page` | 페이지 전환 | `token`, `pageId` | — |
 | `sigma_delete_page` | 페이지 삭제 (마지막 페이지 불가) | `token`, `pageId` | — |
 | `sigma_reorder_page` | 페이지 순서 변경 | `token`, `pageId`, `index` | — |
+| `sigma_set_page_data` | 페이지/문서 노드에 sigma 메타데이터 저장 | `token`, `key`, `value` | `pageId` |
+| `sigma_get_page_data` | 저장된 메타데이터 조회 (`key` 미지정 시 전체 맵) | `token` | `key`, `pageId` |
+| `sigma_delete_page_data` | 메타데이터 키 삭제 | `token`, `key` | `pageId` |
+| `sigma_set_node_data` | 일반 노드에 sigma 메타데이터 저장 | `token`, `nodeId`, `key`, `value` | — |
+| `sigma_get_node_data` | 노드 메타데이터 조회 (`key` 미지정 시 전체 맵) | `token`, `nodeId` | `key` |
+| `sigma_delete_node_data` | 노드 메타데이터 키 삭제 | `token`, `nodeId`, `key` | — |
+
+> **페이지/문서/노드 메타데이터**: PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어 위 전용 도구로만 다룬다. 저장소는 그 노드의 `sharedPluginData`(namespace 고정 `"sigma"`)이며 `.fig`에 영속된다. `key`는 `^[a-zA-Z0-9_.-]+$`, `value`는 **유효한 JSON 문자열**. `pageId`는 미지정=바인딩 페이지 / 페이지 ID / `"document"`(문서 루트).
+> - 예약 key **`"lint"`**(페이지/문서) = LintConfig. `sigma_lint`의 `per-page`/`merge` 모드가 참조하며, 플러그인 UI "페이지" 탭의 `lint 보기`/`lint 설정하기`가 같은 저장소를 편집한다.
+> - 예약 key **`"lint-ignore"`**(일반 노드) = 그 노드만 룰 억제(inline suppress, `eslint-disable` 대응). `sigma_lint`가 위반 노드만 배치 조회해 걸러내고 `suppressed` 건수를 보고한다. 상세는 [`docs/lint.md`](docs/lint.md).
 
 ### 스타일 (토큰 필수)
 
@@ -356,7 +369,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 |------|------|
 | `sigma_get_playwright_scripts` | Sigma 임베드 스크립트 경로 + API 정보 반환 |
 | `sigma_storage_stats` | 스토리지 용량 현황 (카테고리별) |
-| `sigma_cleanup` | 스토리지 일괄 정리 (기간/카테고리 조건) |
+| `sigma_cleanup` | 스토리지 일괄 정리 (기간/카테고리 조건 — `extracted`/`screenshots`/`reports`/`all`) |
 | `sigma_list_screenshots` | 저장된 스크린샷 목록 |
 | `sigma_delete_screenshot` | 스크린샷 삭제 |
 | `sigma_server_status` | 서버 전체 상태 확인 |
@@ -379,6 +392,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 - `extractAt(x, y)` — 좌표로 요소 추출
 - `extractAll(selector)` — 선택자에 매칭되는 모든 요소 추출
 - `extractVisible(options?)` — 화면에 보이는 요소 추출 (`minWidth`, `minHeight` 옵션)
+- `extractAndSave(name, selectorOrElement, serverUrl?)` — 추출 + 서버 저장 (저장 결과 반환)
 - `findByAlt(altText)` — alt 텍스트로 요소 검색
 - `findByText(text, tagName?)` — 텍스트 내용으로 요소 검색
 - `findForm(action?)` — 폼 요소 검색
@@ -500,6 +514,7 @@ packages/
 │       │   ├── layout.ts      # Flexbox 레이아웃
 │       │   ├── grid.ts        # CSS Grid 레이아웃
 │       │   ├── html-parser.ts # HTML → ExtractedNode 파싱
+│       │   ├── font-loader.ts # 폰트 로드/폴백
 │       │   └── index.ts       # Barrel export
 │       ├── node-ops/          # Figma 노드 조작
 │       │   ├── index.ts       # Barrel export
@@ -520,10 +535,14 @@ packages/
 │       │   ├── variables.ts   # 변수/컬렉션 관리
 │       │   ├── export.ts      # 이미지 export
 │       │   ├── tree.ts        # 트리 탐색/검색
-│       │   └── page.ts        # 페이지 관리
+│       │   ├── page.ts        # 페이지 관리
+│       │   ├── library.ts     # Team Library 조회/임포트
+│       │   └── figjam.ts      # FigJam 스티키/커넥터
 │       ├── extractor/         # Figma → JSON/HTML 역추출
 │       │   ├── extract.ts     # Figma 노드 → ExtractedNode JSON
-│       │   └── html-export.ts # ExtractedNode → HTML 변환
+│       │   ├── html-export.ts # ExtractedNode → HTML 변환
+│       │   └── index.ts       # Barrel export
+│       ├── testing/roundtrip.ts # 추출→재생성 라운드트립 테스트
 │       └── utils.ts           # createSolidPaint, createDefaultStyles
 │
 ├── server/                    # Local Server
@@ -538,13 +557,22 @@ packages/
 │       │   ├── tool-definitions.ts # 도구 스키마 정의
 │       │   ├── tool-handler.ts # Record 기반 핸들러 라우터
 │       │   ├── helpers.ts     # 공통 헬퍼 (인증, 검증)
+│       │   ├── spec-presets.ts # 내장 스펙 프리셋 (anno/wire)
 │       │   └── handlers/      # 도구 핸들러 모듈
 │       │       ├── auth.ts    # 인증/바인딩
 │       │       ├── figma.ts   # Figma 프레임/노드 조작
 │       │       ├── storage.ts # 데이터 저장/조회
 │       │       ├── scripts.ts # 스크립트 정보
 │       │       ├── management.ts # 스토리지/상태 관리
+│       │       ├── lint.ts    # sigma_lint (scope/configMode 해석 + 실행)
 │       │       └── component-spec.ts # 컴포넌트 스펙 등록/사용
+│       ├── lint/               # 서버측 lint 지원
+│       │   ├── resolve-config.ts # config 출처 3순위 + configMode 병합
+│       │   ├── load-config.ts  # config 파일 로드/검증
+│       │   ├── enrich.ts       # 노드 상세 보강 (fills/opacity 등)
+│       │   ├── run-custom-rule.ts # predicate 규칙 Worker 격리 실행
+│       │   └── report.ts       # scope:file 결과 → markdown 리포트
+│       ├── image/process.ts    # 이미지 후처리
 │       ├── scripts/registry.ts # 임베드 스크립트 레지스트리
 │       ├── storage/index.ts   # 파일 스토리지
 │       ├── storage/component-specs.ts # 컴포넌트 스펙 레지스트리 (~/.sigma/component-specs)
@@ -557,7 +585,26 @@ packages/
     │   ├── colors.ts          # CSS 색상 파싱 (parseColor)
     │   ├── extractor/         # 추출 로직 (Single Source of Truth)
     │   │   ├── core.ts        # extractElement + 고수준 함수
+    │   │   ├── styles.ts      # 계산 스타일 → ExtractedNode 스타일
+    │   │   ├── text.ts        # 텍스트 노드 추출
     │   │   ├── svg.ts         # SVG 처리
+    │   │   ├── icons.ts       # 아이콘 폰트/이미지 처리
+    │   │   ├── pseudo.ts      # ::before/::after 의사요소
+    │   │   ├── visibility.ts  # 가시성 판정
+    │   │   ├── utils.ts       # 공통 유틸
+    │   │   └── index.ts
+    │   ├── lint/              # Lint 엔진 (순수 함수, 유닛테스트)
+    │   │   ├── engine.ts      # 규칙 실행/집계 + 자동수정 계획
+    │   │   ├── types.ts       # LintConfig, BuiltinRuleId 등
+    │   │   ├── geometric.ts   # 기하 8종 (좌표 기반)
+    │   │   ├── simple-rules.ts # 구조/이름/가시성 6종 + raw_node
+    │   │   ├── occlusion.ts   # fully_occluded_sibling
+    │   │   ├── json-rule.ts   # JSON 선언적 커스텀 규칙
+    │   │   └── tree-utils.ts  # 트리 순회 헬퍼
+    │   ├── enhancer/          # CDP 보강 레이어 (추출 결과를 CDP로 보강)
+    │   │   ├── core.ts        # enhance(cdp, node, options)
+    │   │   ├── font.ts        # 플랫폼 실제 폰트 해석
+    │   │   ├── types.ts       # CDPClient, EnhanceOptions
     │   │   └── index.ts
     │   ├── discovery/         # 요소 탐색 API
     │   │   ├── core.ts        # findByText, findByAlt, findForm, findContainer, getPageStructure

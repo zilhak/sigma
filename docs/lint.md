@@ -29,7 +29,77 @@ occlusion 1종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicat
   나머지(겹침·orphan 등 재배치가 필요한 것, 모든 커스텀 규칙)는 보고만 하고
   자동수정하지 않는다(check-first).
 
-## 빌트인 규칙 15종
+## 검사 범위 · config 모드 (scope / configMode)
+
+`sigma_lint`는 두 개의 직교 축을 가진다.
+
+- **`scope`**: `page`(기본, 바인딩된 1페이지) | `file`(파일의 전 페이지 순회, read-only)
+- **`configMode`**: `uniform`(기본) | `per-page` | `merge`
+
+**config 출처 3순위** (base config 결정): inline `config` 객체 > `configPath` 파일 > 문서 노드에 저장된 `lint`.
+
+| configMode | 각 페이지에 적용할 config |
+|---|---|
+| `uniform` | base config 하나로 일괄 (base 필수) |
+| `per-page` | 그 페이지에 저장된 config → 없으면 base 폴백 → base도 없으면 skip(명시) |
+| `merge` | `deepMerge(base, 페이지 저장 config)` — 페이지가 `builtins`를 rule 단위로 override |
+
+`merge`는 "문서=공통 base + 페이지=override" 패턴에 쓴다(문서 base = `sigma_set_page_data({ pageId: "document", key: "lint", ... })`).
+
+### 전체 파일 lint (`scope: "file"`)
+
+- 파일의 모든 페이지를 **현재 페이지 전환 없이** 순회한다(플러그인이 임의 페이지 트리를 동기 조회 가능).
+- read-only(자동수정 없음). 결과는 **markdown 리포트 파일**로 `~/.sigma/lint-reports/`에 떨구고,
+  MCP 응답에는 **페이지별 요약 + 리포트 경로(`reportPath`)**만 싣는다(위반이 수백 건일 수 있어 인라인 금지).
+- 리포트 경로는 스크린샷과 동일하게 `toHostPath`로 호스트 기준으로 반환되며, 서버 자동정리(7일/100MB) 대상이다.
+- 응답의 `reportPath`를 Read 도구로 열면 페이지별 위반 표 + 룰별 집계가 정리돼 있다.
+
+## 페이지/문서 노드에 데이터 저장 (`sigma_set_page_data` / `sigma_get_page_data`)
+
+PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어, 전용 도구로만 메타데이터를 붙인다.
+저장소는 해당 노드의 `sharedPluginData`(**namespace 고정 `"sigma"`**)이며 `.fig` 파일에 영속된다.
+
+- **형식 강제**: `key`는 `^[a-zA-Z0-9_.-]+$`, `value`는 **유효한 JSON 문자열**이어야 함(서버 핸들러가 검증).
+- **대상(`pageId`)**: 미지정=바인딩 페이지 / 페이지 ID / `"document"`(문서 루트).
+- **예약 key `"lint"`**: 그 페이지(또는 문서)의 LintConfig. `sigma_lint`의 per-page/merge 모드가 이 값을 참조한다.
+- Figma 플러그인 UI **"페이지" 탭**의 `lint 보기`/`lint 설정하기`가 같은 저장소(현재 페이지 `"sigma"/"lint"`)를 편집한다 —
+  플러그인에서 편집한 게 서버 lint(per-page)에 그대로 반영되고 역도 성립. (플러그인은 메타데이터 편집/뷰잉만, lint 실행은 항상 서버.)
+
+```jsonc
+// 이 페이지에 raw_node 만 켜는 config 저장
+sigma_set_page_data({ token, key: "lint", value: '{"builtins":{"raw_node":{"enabled":true}}}' })
+// 전체 파일을 페이지별 저장 config로 검사 → md 리포트
+sigma_lint({ token, scope: "file", configMode: "per-page" })
+```
+
+## 노드 단위 억제 (inline suppress · `sigma_set_node_data`)
+
+페이지/파일 config가 "어떤 룰을 켜는가"라면, 노드 단위 억제는 "이 노드에서만 이 룰을 봐준다"이다 —
+ESLint의 `// eslint-disable-next-line`, mypy의 `# type: ignore`에 해당한다. 억제 의도가 **노드에 붙어**
+있어 이름을 오염시키지 않고, 리네임에 견디며, 새 예외를 만든 자리에서 국소적으로 표시된다.
+
+- 저장 위치: 그 노드의 sharedPluginData("sigma", **"lint-ignore"**) — `sigma_set_node_data`로 세팅.
+- 값 형태(JSON):
+  - `true` → 이 노드의 **모든** 룰 억제
+  - `["raw_node"]` → 지정 룰만
+  - `{"rules":["raw_node"],"reason":"primitive"}` → 지정 룰 + **의도(reason)** 기록 (primitive/stub 등)
+- 동작: `sigma_lint`는 룰을 다 돌린 뒤 **위반이 난 노드만** "lint-ignore"를 배치 조회해 억제된 위반을 걸러낸다
+  (eslint-disable와 동일. 위반 없는 노드는 조회 안 하므로 왕복 비용 최소). page/file 스코프 모두 적용.
+- 응답/리포트에 `suppressed`(억제 건수)가 표기된다.
+
+**page-config vs node-suppress는 상호보완**: 페이지 통짜로 성격이 같으면 page config(`raw_node.enabled=false`)가 싸고,
+한 페이지에 정당 raw와 진짜 위반이 섞이면 node-suppress로 정밀 면제한다.
+
+```jsonc
+// 이 스와치는 토큰 프리미티브라 raw_node 영구 면제
+sigma_set_node_data({ token, nodeId:"1:23", key:"lint-ignore", value:'{"rules":["raw_node"],"reason":"primitive"}' })
+// 이 회색 박스는 임시 플레이스홀더라 전면 면제
+sigma_set_node_data({ token, nodeId:"1:24", key:"lint-ignore", value:'{"rules":"all","reason":"stub"}' })
+// 해제
+sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
+```
+
+## 빌트인 규칙 16종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -48,8 +118,9 @@ occlusion 1종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicat
 | `fill_sizing_orphan` | `layoutSizingHorizontal/Vertical`이 `FILL`인데 부모가 오토레이아웃(`layoutMode !== 'NONE'`)이 아님 — FILL은 오토레이아웃 부모 안에서만 의미가 있어, 이 상태는 `resize()`/reparent 이후 남은 무효 상태가 거의 유일한 원인 | — | — |
 | `component_description_empty` | COMPONENT/COMPONENT_SET의 `description`이 비어있거나 공백만 있음 | — | — |
 | `fully_occluded_sibling` | 같은 부모 안에서 나중에 그려지는(z-order 위) 형제가 완전 불투명한 SOLID fill로 바운딩박스 전체를 덮어, 어떤 상태에서도 절대 안 보이는 노드 — `hidden_leaf`의 암묵적 버전. **fills/opacity 조회가 필요해 켜져 있으면 config.custom 유무와 무관하게 `get_nodes_info` 왕복이 한 번 추가된다.** 덮는 노드는 RECTANGLE/FRAME/COMPONENT/INSTANCE만 인정(원·별 등 비사각형은 바운딩박스 근사가 부정확해 제외), 그라디언트/이미지 fill은 완전 불투명을 증명 못 해 제외, 형제 여럿이 조각조각 합쳐 덮는 경우는 못 잡음(모두 의도적 스코프 축소 — 오탐 방지 우선) | — | — |
+| `raw_node` **(opt-in, 기본 OFF)** | 화면 조립 레이어에서 등록 컴포넌트의 INSTANCE 가 아니라 raw 도형/프레임으로 그린 노드를 전수 검출("쓰는 건 전부 사전 정의" 정책). INSTANCE 내부 노드는 항상 제외(정의의 사본). strict 정책이라 켜는 파일만 opt-in | `types`·`checkInsideComponent`·`exemptNamePattern` | `types`=FRAME/RECTANGLE/ELLIPSE/VECTOR/LINE/POLYGON/STAR, `checkInsideComponent`=false |
 
-파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`는 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
 
 ## 커스텀 규칙
 

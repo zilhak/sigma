@@ -28,6 +28,11 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
         size: formatSize(fullStats.screenshots.totalSize),
         sizeBytes: fullStats.screenshots.totalSize,
       },
+      reports: {
+        count: fullStats.reports.count,
+        size: formatSize(fullStats.reports.totalSize),
+        sizeBytes: fullStats.reports.totalSize,
+      },
       total: {
         count: fullStats.total.count,
         size: formatSize(fullStats.total.totalSize),
@@ -43,7 +48,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
 
   async sigma_cleanup(args) {
     const olderThanDays = args.olderThanDays != null ? (args.olderThanDays as number) : 7;
-    const category = (args.category as 'extracted' | 'screenshots' | 'all') || 'all';
+    const category = (args.category as 'extracted' | 'screenshots' | 'reports' | 'all') || 'all';
 
     const result = await storage.cleanup({ olderThanDays, category });
 

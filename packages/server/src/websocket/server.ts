@@ -432,6 +432,15 @@ export class FigmaWebSocketServer {
   }
 
   /**
+   * 특정 플러그인의 전체 페이지 목록 (파일 전체 lint 순회용)
+   */
+  getPluginPages(pluginId: string): Array<{ pageId: string; pageName: string }> | null {
+    const plugin = this.pluginsById.get(pluginId);
+    if (!plugin || !plugin.fileInfo) return null;
+    return plugin.fileInfo.pages.map(p => ({ pageId: p.pageId, pageName: p.pageName }));
+  }
+
+  /**
    * 특정 플러그인의 페이지 정보 조회
    */
   getPluginPageInfo(pluginId: string, pageId: string): { fileName: string; pageName: string } | null {
@@ -754,6 +763,88 @@ export class FigmaWebSocketServer {
       pluginId,
       timeoutMs: 60000,  // 60초 (트리가 클 수 있음)
       logSuffix: ` (depth: ${options.depth || 1})`,
+    });
+  }
+
+  /**
+   * 페이지/문서 노드에 sigma 전용 sharedPluginData 저장
+   * pageId 미지정 시 바인딩(현재) 페이지, "document" 지정 시 문서 루트
+   */
+  async setPageData(
+    key: string,
+    value: string,
+    options?: { pageId?: string },
+    pluginId?: string
+  ): Promise<{ targetId: string; targetType: string; targetName: string; key: string }> {
+    return this.sendCommand('SET_PAGE_DATA', { key, value, pageId: options?.pageId }, {
+      pluginId,
+      logSuffix: ` (key: ${key}${options?.pageId ? `, page: ${options.pageId}` : ''})`,
+    });
+  }
+
+  /**
+   * 페이지/문서 노드의 sigma 전용 sharedPluginData 조회
+   * key 지정 시 단일 값, 미지정 시 전체 key/value 맵
+   */
+  async getPageData(
+    options?: { key?: string; pageId?: string },
+    pluginId?: string
+  ): Promise<{
+    targetId: string;
+    targetName: string;
+    key?: string;
+    value?: string | null;
+    keys?: string[];
+    data?: Record<string, string>;
+  }> {
+    return this.sendCommand('GET_PAGE_DATA', { key: options?.key, pageId: options?.pageId }, {
+      pluginId,
+      logSuffix: ` (key: ${options?.key ?? '(all)'}${options?.pageId ? `, page: ${options.pageId}` : ''})`,
+    });
+  }
+
+  /**
+   * 임의 노드에 sigma sharedPluginData 저장 (예약 키 "lint-ignore" = 룰 억제)
+   */
+  async setNodeData(
+    nodeId: string,
+    key: string,
+    value: string,
+    pluginId?: string
+  ): Promise<{ nodeId: string; nodeType: string; nodeName: string; key: string }> {
+    return this.sendCommand('SET_NODE_DATA', { nodeId, key, value }, {
+      pluginId,
+      logSuffix: ` (node: ${nodeId}, key: ${key})`,
+    });
+  }
+
+  /**
+   * 노드의 sigma sharedPluginData 조회 (key 지정 시 단일, 미지정 시 전체 맵)
+   */
+  async getNodeData(
+    nodeId: string,
+    options?: { key?: string },
+    pluginId?: string
+  ): Promise<{ nodeId: string; nodeName: string; key?: string; value?: string | null; keys?: string[]; data?: Record<string, string> }> {
+    return this.sendCommand('GET_NODE_DATA', { nodeId, key: options?.key }, {
+      pluginId,
+      logSuffix: ` (node: ${nodeId}, key: ${options?.key ?? '(all)'})`,
+    });
+  }
+
+  /**
+   * 여러 노드의 특정 sigma sharedPluginData 키를 배치 조회 (lint suppress 필터용).
+   * 값이 없는 노드는 결과 맵에서 생략된다.
+   */
+  async getNodesData(
+    nodeIds: string[],
+    key: string,
+    pluginId?: string
+  ): Promise<{ key: string; data: Record<string, string> }> {
+    return this.sendCommand('GET_NODES_DATA', { nodeIds, key }, {
+      pluginId,
+      timeoutMs: 60000,
+      logSuffix: ` (${nodeIds.length} nodes, key: ${key})`,
     });
   }
 

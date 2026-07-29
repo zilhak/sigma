@@ -36,6 +36,7 @@ DOM 요소를 ExtractedNode JSON으로 추출하고, 페이지 내 요소를 탐
 | `extractAt(x, y)` | 좌표로 요소 추출 | `ExtractedNode` |
 | `extractAll(selector)` | 선택자 매칭 모든 요소 추출 | `ExtractedNode[]` |
 | `extractVisible(options?)` | 화면에 보이는 요소 추출 | `ExtractedNode[]` |
+| `extractAndSave(name, selectorOrElement, serverUrl?)` | 추출 + 서버 저장, 저장 결과 반환 | `Promise<SaveResult>` |
 
 **extractVisible 옵션:**
 ```javascript
@@ -49,13 +50,13 @@ window.__sigma__.extractVisible({
 
 | 메서드 | 설명 | 반환 |
 |--------|------|------|
-| `findByText(text, tagName?)` | 텍스트 내용으로 요소 검색 | `Element[]` |
-| `findByAlt(altText)` | alt 텍스트로 요소 검색 | `Element[]` |
-| `findForm(action?)` | 폼 요소 검색 | `Element[]` |
-| `findContainer(options)` | 컨테이너 요소 검색 | `Element[]` |
-| `getElementInfo(selector)` | 요소 상세 정보 | `Object` |
-| `getPageStructure()` | 페이지 전체 구조 | `Object` |
-| `getDesignTokens(selectorOrElement?)` | CSS 변수 기반 디자인 토큰 | `Object` |
+| `findByText(text, tagName?)` | 텍스트 내용으로 요소 검색 (첫 매칭) | `ElementInfo \| null` |
+| `findByAlt(altText)` | alt 텍스트로 요소 검색 (첫 매칭) | `ElementInfo \| null` |
+| `findForm(action?)` | 폼 요소 검색 | `ElementInfo \| null` |
+| `findContainer(options)` | 컨테이너 요소 검색 | `ElementInfo \| null` |
+| `getElementInfo(selector)` | 요소 상세 정보 | `ElementInfo \| null` |
+| `getPageStructure()` | 페이지 전체 구조 | `PageStructure` |
+| `getDesignTokens(selectorOrElement?)` | CSS 변수 기반 디자인 토큰 | `Record<string, string>` |
 
 ### 사용 예시
 
@@ -68,8 +69,8 @@ const data = await page.evaluate(() =>
   window.__sigma__.extract('.my-component')
 );
 
-// 3. 텍스트로 요소 찾기
-const elements = await page.evaluate(() =>
+// 3. 텍스트로 요소 찾기 (첫 매칭 1건)
+const element = await page.evaluate(() =>
   window.__sigma__.findByText('로그인')
 );
 

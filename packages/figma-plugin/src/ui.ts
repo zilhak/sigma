@@ -4,7 +4,7 @@ import {
   getPollingInterval, setPollingInterval,
   setIsMinimized,
   log, showMessage, hideMessage, updateStatus,
-  setExportResultCallback, escapeHtml,
+  setExportResultCallback, setPageLintResultCallback, escapeHtml,
   copyNodeInfoToClipboard,
 } from './ui/ui-state';
 import { sendToPlugin } from './ui/bridge-server';
@@ -58,7 +58,8 @@ dom.expandBtn.addEventListener('click', () => {
 
 // === 탭 전환 ===
 const sectionMap: Record<string, HTMLDivElement> = {
-  info: dom.infoSection,
+  general: dom.generalSection,
+  page: dom.pageSection,
   server: dom.serverSection,
   log: dom.logSection,
   object: dom.objectSection,
@@ -79,9 +80,128 @@ dom.tabs.forEach((tab) => {
   });
 });
 
-// === 정보 탭: 노드 정보 복사 ===
+// === 일반 탭: 노드 정보 복사 ===
 dom.copyNodeInfoBtn.addEventListener('click', () => {
   copyNodeInfoToClipboard();
+});
+
+// === 일반 탭: 뷰포트 좌표 이동 ===
+// code.ts의 기존 'set-viewport'(figma.viewport.center 대입)를 그대로 재사용한다.
+// sendToPlugin은 positional 인자에 center가 없어 직접 postMessage로 보낸다.
+// 결과는 상단 뷰포트 표시(code.ts의 500ms 폴링)로 확인된다.
+function gotoViewportCenter() {
+  const rawX = dom.viewportGotoX.value.trim();
+  const rawY = dom.viewportGotoY.value.trim();
+  const x = Number(rawX);
+  const y = Number(rawY);
+
+  if (rawX === '' || rawY === '' || !Number.isFinite(x) || !Number.isFinite(y)) {
+    showMessage('x, y 좌표를 숫자로 입력하세요', 'error');
+    return;
+  }
+
+  parent.postMessage({ pluginMessage: { type: 'set-viewport', center: { x, y } } }, '*');
+  log(`뷰포트 이동 요청: (${x}, ${y})`, 'info');
+}
+
+dom.viewportGotoBtn.addEventListener('click', gotoViewportCenter);
+
+[dom.viewportGotoX, dom.viewportGotoY].forEach((input) => {
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') gotoViewportCenter();
+  });
+});
+
+// === 페이지 탭: lint 설정 보기/편집 (현재 페이지, UI 전용) ===
+// lint 실행은 서버가 담당하고, 여기서는 페이지 저장 config 메타데이터의 조회/편집만 한다.
+// 열려는 모달을 기억해 get-page-lint 응답으로 채운다.
+let lintModalPending: 'view' | 'set' | null = null;
+
+dom.lintViewBtn.addEventListener('click', () => {
+  lintModalPending = 'view';
+  dom.lintViewTextArea.value = '';
+  dom.lintViewTextArea.placeholder = '불러오는 중...';
+  dom.lintViewModal.classList.add('active');
+  sendToPlugin('get-page-lint');
+});
+
+dom.lintSetBtn.addEventListener('click', () => {
+  lintModalPending = 'set';
+  dom.lintSetTextArea.value = '';
+  dom.lintSetTextArea.placeholder = '불러오는 중...';
+  dom.lintSetModal.classList.add('active');
+  sendToPlugin('get-page-lint');  // 기존 값 프리필용
+});
+
+setPageLintResultCallback((result) => {
+  if (result.pageName) dom.pageLintPageName.textContent = result.pageName;
+
+  if (result.action === 'get') {
+    // 저장값(있으면 pretty-print)으로 열린 모달을 채운다
+    let pretty = '';
+    if (result.value) {
+      try { pretty = JSON.stringify(JSON.parse(result.value), null, 2); }
+      catch { pretty = result.value; }
+    }
+    if (lintModalPending === 'view') {
+      dom.lintViewTextArea.value = pretty;
+      dom.lintViewTextArea.placeholder = pretty ? '' : '(이 페이지에 저장된 lint 설정 없음)';
+    } else if (lintModalPending === 'set') {
+      dom.lintSetTextArea.value = pretty;
+      dom.lintSetTextArea.placeholder = '{ "builtins": { "raw_node": { "enabled": true } } }';
+    }
+    lintModalPending = null;
+    return;
+  }
+
+  // set / clear 결과
+  if (result.success) {
+    showMessage(result.action === 'clear' ? '이 페이지 lint 설정을 삭제했습니다.' : 'lint 설정을 저장했습니다.', 'success');
+    dom.lintSetModal.classList.remove('active');
+  } else {
+    showMessage(result.error || 'lint 설정 저장 실패', 'error');
+  }
+});
+
+dom.lintViewModalClose.addEventListener('click', () => {
+  dom.lintViewModal.classList.remove('active');
+});
+
+dom.lintViewModalCopy.addEventListener('click', async () => {
+  const text = dom.lintViewTextArea.value;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showMessage('클립보드에 복사되었습니다.', 'success');
+  } catch {
+    dom.lintViewTextArea.select();
+    document.execCommand('copy');
+    showMessage('클립보드에 복사되었습니다.', 'success');
+  }
+});
+
+dom.lintSetModalCancel.addEventListener('click', () => {
+  dom.lintSetModal.classList.remove('active');
+  hideMessage();
+});
+
+dom.lintSetModalClear.addEventListener('click', () => {
+  sendToPlugin('set-page-lint', '');  // 빈 문자열 = 삭제
+});
+
+dom.lintSetModalSave.addEventListener('click', () => {
+  const value = dom.lintSetTextArea.value.trim();
+  if (!value) {
+    showMessage('내용이 비어 있습니다. 삭제하려면 "삭제" 버튼을 누르세요.', 'error');
+    return;
+  }
+  try {
+    JSON.parse(value);
+  } catch {
+    showMessage('유효한 JSON이 아닙니다.', 'error');
+    return;
+  }
+  sendToPlugin('set-page-lint', value);
 });
 
 // === 개체 탭: Import/Export (직접 포맷 버튼) ===

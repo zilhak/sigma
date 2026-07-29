@@ -34,13 +34,17 @@ export const dom = {
   statusText: document.getElementById('statusText') as HTMLSpanElement,
   tabs: document.querySelectorAll('.tab'),
   // 섹션
-  infoSection: document.getElementById('infoSection') as HTMLDivElement,
+  generalSection: document.getElementById('generalSection') as HTMLDivElement,
+  pageSection: document.getElementById('pageSection') as HTMLDivElement,
   serverSection: document.getElementById('serverSection') as HTMLDivElement,
   logSection: document.getElementById('logSection') as HTMLDivElement,
   objectSection: document.getElementById('objectSection') as HTMLDivElement,
-  // 정보 탭
+  // 일반 탭
   viewportCenter: document.getElementById('viewportCenter') as HTMLSpanElement,
   viewportZoom: document.getElementById('viewportZoom') as HTMLSpanElement,
+  viewportGotoX: document.getElementById('viewportGotoX') as HTMLInputElement,
+  viewportGotoY: document.getElementById('viewportGotoY') as HTMLInputElement,
+  viewportGotoBtn: document.getElementById('viewportGotoBtn') as HTMLButtonElement,
   selectionTextArea: document.getElementById('selectionTextArea') as HTMLTextAreaElement,
   copyNodeInfoBtn: document.getElementById('copyNodeInfoBtn') as HTMLButtonElement,
   // 서버 탭
@@ -50,6 +54,21 @@ export const dom = {
   fileKeyStatus: document.getElementById('fileKeyStatus') as HTMLSpanElement,
   fileKeyHint: document.getElementById('fileKeyHint') as HTMLDivElement,
   saveFileKeyBtn: document.getElementById('saveFileKeyBtn') as HTMLButtonElement,
+  // 페이지 탭
+  pageLintPageName: document.getElementById('pageLintPageName') as HTMLSpanElement,
+  lintViewBtn: document.getElementById('lintViewBtn') as HTMLButtonElement,
+  lintSetBtn: document.getElementById('lintSetBtn') as HTMLButtonElement,
+  // Lint 보기 Modal
+  lintViewModal: document.getElementById('lintViewModal') as HTMLDivElement,
+  lintViewTextArea: document.getElementById('lintViewTextArea') as HTMLTextAreaElement,
+  lintViewModalClose: document.getElementById('lintViewModalClose') as HTMLButtonElement,
+  lintViewModalCopy: document.getElementById('lintViewModalCopy') as HTMLButtonElement,
+  // Lint 설정 Modal
+  lintSetModal: document.getElementById('lintSetModal') as HTMLDivElement,
+  lintSetTextArea: document.getElementById('lintSetTextArea') as HTMLTextAreaElement,
+  lintSetModalCancel: document.getElementById('lintSetModalCancel') as HTMLButtonElement,
+  lintSetModalClear: document.getElementById('lintSetModalClear') as HTMLButtonElement,
+  lintSetModalSave: document.getElementById('lintSetModalSave') as HTMLButtonElement,
   // 로그 탭
   logContainer: document.getElementById('logContainer') as HTMLDivElement,
   // 개체 탭
@@ -292,6 +311,24 @@ export function notifyExportResult(format: string, success: boolean, data: unkno
   if (exportResultCallback) {
     exportResultCallback(format, success, data, error);
   }
+}
+
+// 페이지 lint 설정 조회/저장 결과 콜백 (ui.ts에서 설정) — UI 전용, 서버로 forward 하지 않음
+export interface PageLintResult {
+  action: 'get' | 'set' | 'clear';
+  success: boolean;
+  pageName?: string;
+  value?: string | null;  // get 시 저장된 config JSON 문자열(없으면 null)
+  error?: string;
+}
+let pageLintResultCallback: ((result: PageLintResult) => void) | null = null;
+
+export function setPageLintResultCallback(cb: (result: PageLintResult) => void) {
+  pageLintResultCallback = cb;
+}
+
+export function notifyPageLintResult(result: PageLintResult) {
+  if (pageLintResultCallback) pageLintResultCallback(result);
 }
 
 // FileKey UI 업데이트

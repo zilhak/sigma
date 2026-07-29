@@ -493,6 +493,144 @@ path: ["icon/arrow/left"] (원소 1개짜리 배열)
   },
 
   {
+    name: 'sigma_set_page_data',
+    description: `Figma **페이지(또는 문서 루트) 노드**에 sigma 전용 메타데이터를 저장합니다.
+
+일반 노드는 sigma_modify_node로 다루지만 PAGE/DOCUMENT 노드는 가드로 막혀 있어,
+이 전용 도구로만 페이지/문서 레벨 데이터를 붙일 수 있습니다.
+저장 위치는 해당 노드의 sharedPluginData(namespace 고정 **"sigma"**)이며 .fig 파일에 영속됩니다.
+
+**형식 강제:**
+- namespace는 항상 "sigma" (호출자가 못 바꿈).
+- \`key\`는 \`^[a-zA-Z0-9_.-]+$\` 만 허용.
+- \`value\`는 반드시 **유효한 JSON 문자열**이어야 함(문자열/숫자/객체/배열 모두 JSON으로 직렬화해 전달). JSON parse 실패 시 거부.
+
+**대상(pageId):**
+- 미지정: 바인딩된 페이지.
+- 페이지 ID(예 "13:62"): 그 페이지.
+- "document": 문서 루트(파일 전역 기본값 저장용).
+
+**예약 key:** \`"lint"\` = 그 페이지의 lint 설정(LintConfig JSON). sigma_lint의 per-page/merge 모드가 이 값을 참조합니다.
+
+**예시:**
+- 페이지 lint 설정 저장: sigma_set_page_data({ token, key: "lint", value: '{"builtins":{"raw_node":{"enabled":true}}}' })
+- 문서 전역 base 저장: sigma_set_page_data({ token, key: "lint", value: '{...}', pageId: "document" })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        key: { type: 'string', description: '데이터 키 (^[a-zA-Z0-9_.-]+$). 예약: "lint"' },
+        value: { type: 'string', description: '저장할 값 — 유효한 JSON 문자열이어야 함' },
+        pageId: { type: 'string', description: '대상 페이지 ID. 미지정=바인딩 페이지, "document"=문서 루트' },
+      },
+      required: ['token', 'key', 'value'],
+    },
+  },
+
+  {
+    name: 'sigma_get_page_data',
+    description: `Figma **페이지(또는 문서 루트) 노드**에 저장된 sigma 전용 메타데이터를 조회합니다.
+sigma_set_page_data로 저장한 값(namespace "sigma")을 읽습니다.
+
+**동작:**
+- \`key\` 지정: 그 key의 값(JSON 문자열, 미저장 시 null)을 반환.
+- \`key\` 미지정: 해당 노드의 sigma namespace 전체 key 목록 + key/value 맵 반환.
+
+**대상(pageId):** sigma_set_page_data와 동일 (미지정=바인딩 페이지 / 페이지 ID / "document").
+
+**예시:**
+- 이 페이지 lint 설정 읽기: sigma_get_page_data({ token, key: "lint" })
+- 이 페이지 전체 메타 보기: sigma_get_page_data({ token })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        key: { type: 'string', description: '조회할 키 (미지정 시 전체 맵)' },
+        pageId: { type: 'string', description: '대상 페이지 ID. 미지정=바인딩 페이지, "document"=문서 루트' },
+      },
+      required: ['token'],
+    },
+  },
+
+  {
+    name: 'sigma_delete_page_data',
+    description: `sigma_set_page_data로 저장한 페이지/문서 메타데이터 키를 **삭제**합니다.
+해당 노드의 sharedPluginData(namespace "sigma")에서 그 key를 제거합니다(빈 값 저장 = Figma가 키 삭제).
+
+**대상(pageId):** 미지정=바인딩 페이지 / 페이지 ID / "document"(문서 루트).
+
+**예시:**
+- 이 페이지 lint 설정 제거: sigma_delete_page_data({ token, key: "lint" })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        key: { type: 'string', description: '삭제할 키 (^[a-zA-Z0-9_.-]+$)' },
+        pageId: { type: 'string', description: '대상 페이지 ID. 미지정=바인딩 페이지, "document"=문서 루트' },
+      },
+      required: ['token', 'key'],
+    },
+  },
+
+  {
+    name: 'sigma_set_node_data',
+    description: `임의의 **노드**에 sigma 전용 메타데이터를 저장합니다 (페이지/문서는 sigma_set_page_data).
+저장 위치는 그 노드의 sharedPluginData(namespace 고정 **"sigma"**)이며 .fig 파일에 영속됩니다.
+
+**형식 강제:** namespace는 항상 "sigma", \`key\`는 \`^[a-zA-Z0-9_.-]+$\`, \`value\`는 **유효한 JSON 문자열**.
+
+**예약 key \`"lint-ignore"\` = 노드 단위 lint 억제(inline suppress, eslint-disable 대응):**
+- \`true\` → 이 노드의 **모든** 룰 억제
+- \`["raw_node"]\` → 지정 룰만 억제
+- \`{"rules":["raw_node"],"reason":"primitive token swatch"}\` → 지정 룰 + **의도(reason) 기록**
+
+sigma_lint(page/file 무관)는 위반을 낸 뒤 그 주체 노드의 "lint-ignore"를 확인해 억제된 위반을 걸러냅니다.
+
+**예시:**
+- 이 스와치는 primitive라 raw_node 면제: sigma_set_node_data({ token, nodeId:"1:23", key:"lint-ignore", value:'{"rules":["raw_node"],"reason":"primitive"}' })
+- 이 플레이스홀더는 임시라 전면 면제: sigma_set_node_data({ token, nodeId:"1:24", key:"lint-ignore", value:'{"rules":"all","reason":"stub"}' })`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '대상 노드 ID (예 "1:23")' },
+        key: { type: 'string', description: '데이터 키 (^[a-zA-Z0-9_.-]+$). 예약: "lint-ignore"' },
+        value: { type: 'string', description: '저장할 값 — 유효한 JSON 문자열이어야 함' },
+      },
+      required: ['token', 'nodeId', 'key', 'value'],
+    },
+  },
+
+  {
+    name: 'sigma_get_node_data',
+    description: `노드에 저장된 sigma 전용 메타데이터를 조회합니다.
+\`key\` 지정 시 그 값(JSON 문자열, 미저장 시 null), 미지정 시 그 노드의 sigma namespace 전체 key/value 맵.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '대상 노드 ID' },
+        key: { type: 'string', description: '조회할 키 (미지정 시 전체 맵)' },
+      },
+      required: ['token', 'nodeId'],
+    },
+  },
+
+  {
+    name: 'sigma_delete_node_data',
+    description: `노드에 저장된 sigma 메타데이터 키를 삭제합니다 (예: "lint-ignore" 억제 해제).`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        nodeId: { type: 'string', description: '대상 노드 ID' },
+        key: { type: 'string', description: '삭제할 키 (^[a-zA-Z0-9_.-]+$)' },
+      },
+      required: ['token', 'nodeId', 'key'],
+    },
+  },
+
+  {
     name: 'sigma_create_section',
     description: `Figma에 Section을 생성합니다.
 
@@ -876,7 +1014,7 @@ extracted(추출 데이터)와 screenshots(스크린샷) 각각의 파일 수, �
     description: `스토리지를 조건부로 일괄 정리합니다.
 
 기본적으로 7일 경과 파일을 삭제합니다. olderThanDays로 기간을 조정할 수 있습니다.
-category로 extracted/screenshots/all 중 대상을 선택할 수 있습니다.
+category로 extracted/screenshots/reports/all 중 대상을 선택할 수 있습니다.
 
 **참고:** 서버 시작 시 자동 정리가 실행되므로, 수동 정리는 급한 경우에만 사용하세요.`,
     inputSchema: {
@@ -889,9 +1027,9 @@ category로 extracted/screenshots/all 중 대상을 선택할 수 있습니다.
         },
         category: {
           type: 'string',
-          enum: ['extracted', 'screenshots', 'all'],
+          enum: ['extracted', 'screenshots', 'reports', 'all'],
           default: 'all',
-          description: "정리 대상 카테고리 (기본값: 'all')",
+          description: "정리 대상 카테고리 (extracted=추출물, screenshots=스크린샷, reports=lint 리포트, all=전체. 기본값: 'all')",
         },
       },
     },
@@ -2253,6 +2391,11 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '[slot] <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> → Figma TEXT 속성으로 승격. ' +
       '텍스트 태그에만, 루트 불가, 기본 텍스트 필수, 순수 텍스트 속성만 허용. ' +
       '고정폭 직계 부모 안의 slot에 text-overflow: ellipsis(단일 행 …처리) 또는 white-space: normal(다중 행 줄바꿈)을 줄 수 있습니다. ' +
+      '[조합 — 중요] 스펙 HTML은 정적 div/text/svg leaf만 만듭니다. **다른 등록 컴포넌트(예: oneui/*)의 인스턴스를 스펙 HTML 안에 넣을 수 없습니다** — ' +
+      'HTML로 그 외형을 raw로 흉내내지 마세요(디자인시스템과 어긋납니다). 이미 등록된 컴포넌트(OneUI 등)를 재사용해 더 큰 컴포넌트를 조립하려면 **네이티브 경로**를 쓰세요: ' +
+      'sigma_create_component(빈 COMPONENT) → 그 안에 sigma_create_component_spec_instance(parentId=그 컴포넌트) 또는 sigma_create_component_instance로 실제 인스턴스를 자식으로 삽입 → ' +
+      '인스턴스를 찍은 뒤 per-instance로 바꿀 부분은 중첩 노드 id(I<instance>;<child>)에 sigma_modify_node(setCharacters) / sigma_set_component_spec_instance_props로 override. ' +
+      '(Figma 네이티브 컴포넌트는 인스턴스를 자식으로 품지만, 스펙 HTML은 못 품습니다. 표·차트 등 등록 컴포넌트에 없는 조각만 스펙으로 만들어 이 조합에 끼워넣으세요.) ' +
       '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
       'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
       '등록 후 sigma_create_component_spec_instance로 삽입, 카탈로그는 sigma_list_component_specs.',
@@ -2310,7 +2453,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         y: { type: 'number', description: '(선택) Y 좌표' },
         width: { type: 'number', description: '(선택) 인스턴스 너비 — 생성 직후 resize (hug 축은 FIXED로 전환, placeholder 용도)' },
         height: { type: 'number', description: '(선택) 인스턴스 높이 — 생성 직후 resize' },
-        parentId: { type: 'string', description: '(선택) 부모 노드 ID (Auto Layout 프레임에 삽입 가능)' },
+        parentId: { type: 'string', description: '(선택) 부모 노드 ID (Auto Layout 프레임에 삽입 가능). parentId로 **COMPONENT 노드**를 주면 그 컴포넌트의 자식으로 삽입돼, 등록 컴포넌트(OneUI 등)를 재사용한 조합 컴포넌트를 만들 수 있습니다 — sigma_create_component로 빈 컴포넌트를 만든 뒤 이 방식으로 실제 인스턴스들을 채우세요. 스펙 HTML 안에 인스턴스를 넣는 것은 불가능하므로, 조립은 이 네이티브 경로로 합니다.' },
       },
       required: ['token', 'alias'],
     },
@@ -2771,15 +2914,17 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     name: 'sigma_lint',
     description: `**config 파일에 정의된 규칙으로 문서를 검사**하고, 안전한 것만 자동수정합니다. **바인딩 필수**.
 
-**configPath 필수** — Figma 파일마다 다른 규칙을 쓸 수 있어, 서버는 config를 저장하지 않고 매 호출 시 지정된 로컬 JSON 파일을 그대로 읽습니다. **서버 자신의 파일시스템 기준**이라, Docker로 배포했다면 컨테이너에 보이는 경로(보통 바인드 마운트된 \`~/.sigma\` 하위)여야 합니다 — 프로젝트 저장소 경로는 컨테이너 안에서 안 보입니다.
+**base config 는 inline \`config\` / \`configPath\` / 문서 저장값 중 하나로 제공**합니다(아래 "config 출처" 참조). Figma 파일마다 다른 규칙을 쓸 수 있어, 서버는 config를 저장하지 않고 매 호출 시 지정된 것을 그대로 읽습니다. \`configPath\` 는 **서버 자신의 파일시스템 기준**이라, Docker로 배포했다면 컨테이너에 보이는 경로(보통 바인드 마운트된 \`~/.sigma\` 하위)여야 합니다 — 프로젝트 저장소 경로는 컨테이너 안에서 안 보입니다.
 
 **config 스키마**:
 \`\`\`jsonc
 {
   "builtins": {
-    // 아래 15개 규칙 id. 생략하면 기본 ON(opt-out). 값은 { enabled?: boolean, ...파라미터 }
+    // 아래 규칙 id. 대부분 생략하면 기본 ON(opt-out). 값은 { enabled?: boolean, ...파라미터 }
+    // 예외: raw_node 만 opt-in(기본 OFF) — { "enabled": true } 로 켜야 실행됨.
     "section_gap": { "gap": 80 },
-    "frame_padding": { "enabled": false }
+    "frame_padding": { "enabled": false },
+    "raw_node": { "enabled": true }
   },
   "custom": [
     // (a) JSON 선언적 — 필드 등가/범위/정규식/열거/존재 검사만. 이 이상은 (b)로.
@@ -2792,10 +2937,11 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 }
 \`\`\`
 
-**빌트인 규칙 15개**:
+**빌트인 규칙 16개**:
 - 기하 8종(좌표, sigma_layout_lint 시절과 동일): \`outside_section\`(섹션 밖 배치 노드) · \`section_overlap\`(형제 섹션 겹침) · \`section_gap\`(형제 섹션 간격 부족, 기본 80px — 섹션 라벨이 경계를 가림) · \`card_overlap\`(섹션 안 카드끼리 겹침) · \`frame_padding\`(섹션 안 프레임 여백 부족, 기본 20px) · \`instance_orphan\`(래퍼 없이 뜬 INSTANCE) · \`component_needs_frame\`(섹션 직속 COMPONENT/GROUP) · \`child_overflow\`(자식이 로컬좌표 기준 부모 밖).
 - 구조/이름/가시성 6종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 Figma 기본 이름 방치) · \`empty_container\`(자식 없는 FRAME/GROUP) · \`hidden_leaf\`(visible:false 로 트리에 잔존) · \`fill_sizing_orphan\`(layoutSizing이 FILL인데 부모가 오토레이아웃 아님 — 무효 상태) · \`component_description_empty\`(COMPONENT/COMPONENT_SET의 description 비어있음).
 - occlusion 1종: \`fully_occluded_sibling\`(같은 부모 안에서 나중에 그려지는 형제가 불투명 SOLID fill로 완전히 덮어 절대 안 보임 — 켜져 있으면 fills/opacity 조회를 위해 get_nodes_info 왕복이 추가됨).
+- 컴포넌트 강제 1종 **(opt-in, 기본 OFF)**: \`raw_node\`(화면 조립 레이어에서 등록 컴포넌트의 INSTANCE 가 아니라 raw 도형/프레임으로 그린 노드를 전수 검출 — "쓰는 건 전부 사전 정의" 정책 강제). 파라미터: \`types\`(대상 노드 타입, 기본 \`["FRAME","RECTANGLE","ELLIPSE","VECTOR","LINE","POLYGON","STAR"]\` — TEXT/GROUP/SECTION/INSTANCE/COMPONENT 비대상) · \`checkInsideComponent\`(COMPONENT 정의 내부의 raw 요소까지 검사, 기본 false) · \`exemptNamePattern\`(정규식 매칭 이름 제외, 기획 킷/주석 등). **INSTANCE 내부 노드는 항상 제외**(정의의 사본이라 독립 저작 대상 아님). strict 정책이라 켜는 파일만 적용하도록 opt-in.
 
 **JSON \`check.op\`**: \`equals | range(min/max) | regex(pattern) | oneOf(values) | exists\` — 5개뿐이며 더 늘리지 않습니다(새 언어 발명 방지). 형제/조상 조회나 유도값 계산이 필요하면 \`kind:"predicate"\`를 쓰세요.
 
@@ -2803,17 +2949,33 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 
 **apply**: 기본 false(dry-run, 위반 목록 + 수정 계획만 반환). true 면 **빌트인 안전수정(섹션 확장, grow container)만** 실제 적용 — section_overlap/instance_orphan/outside_section 및 모든 커스텀 규칙은 재배치·수동 판단이 필요해 보고만 합니다. 적용 후 자동 회귀 검사 결과(after)를 반환합니다.
 
-배치/resize 후 이 도구로 회귀 검사하는 습관을 권장합니다.`,
+배치/resize 후 이 도구로 회귀 검사하는 습관을 권장합니다.
+
+**검사 범위 (scope):**
+- \`page\`(기본): 바인딩된 페이지 1개. \`apply\` 자동수정 지원.
+- \`file\`: 파일의 전 페이지 순회(read-only). 결과를 **markdown 리포트 파일**로 떨구고 응답엔 페이지별 요약 + 리포트 경로만 반환(위반이 수백 건일 수 있어 인라인 금지). 리포트는 \`~/.sigma/lint-reports/\` 에 저장되고 서버 자동정리(7일/100MB) 대상.
+
+**config 출처 (3순위):** inline \`config\` 객체 > \`configPath\` 파일 > 문서 노드에 저장된 \`lint\`(sigma_set_page_data, pageId:"document").
+
+**config 모드 (configMode):**
+- \`uniform\`(기본): 위 base config 하나로 전 대상 일괄. base 필수.
+- \`per-page\`: 각 페이지에 저장된 lint config(sigma_set_page_data, key:"lint")로 각각. 저장 없으면 base 폴백, base도 없으면 그 페이지 skip(명시).
+- \`merge\`: base + 페이지 저장 config 병합(페이지가 builtins 를 rule 단위로 override). 문서=base + 페이지=override 패턴.
+
+페이지 저장 config 는 sigma_set_page_data({ key:"lint", value }) 로, 문서 base 는 pageId:"document" 로 저장합니다.`,
     inputSchema: {
       type: 'object' as const,
       properties: {
         token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
-        configPath: { type: 'string', description: '검사 규칙을 정의한 로컬 JSON 파일 경로 (필수)' },
-        nodeId: { type: 'string', description: '(선택) 검사 시작 노드. 미지정 시 페이지 전체' },
-        path: { type: 'string', description: '(선택) 검사 시작 경로 ("A/B/C")' },
-        apply: { type: 'boolean', description: '(선택) true 면 빌트인 안전수정 실제 적용. 기본 false(dry-run)' },
+        configPath: { type: 'string', description: '(선택) 검사 규칙 JSON 파일 경로. config/configPath/문서저장 중 하나로 base 제공(uniform은 base 필수)' },
+        config: { type: 'object', description: '(선택) inline LintConfig 객체. configPath 대신 직접 전달(우선순위 최상)' },
+        scope: { type: 'string', enum: ['page', 'file'], description: '(선택) page(기본, 바인딩 1페이지) | file(전 페이지 순회, md 리포트)' },
+        configMode: { type: 'string', enum: ['uniform', 'per-page', 'merge'], description: '(선택) uniform(기본) | per-page(페이지 저장 config) | merge(base+override)' },
+        nodeId: { type: 'string', description: '(선택, scope=page) 검사 시작 노드. 미지정 시 페이지 전체' },
+        path: { type: 'string', description: '(선택, scope=page) 검사 시작 경로 ("A/B/C")' },
+        apply: { type: 'boolean', description: '(선택, scope=page) true 면 빌트인 안전수정 실제 적용. 기본 false(dry-run). file 범위에선 무시(read-only)' },
       },
-      required: ['token', 'configPath'],
+      required: ['token'],
     },
   },
 

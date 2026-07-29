@@ -271,6 +271,150 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
+  async sigma_set_page_data(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId, pageId: boundPageId } = access;
+
+    const key = args.key as string;
+    const value = args.value as string;
+    const argPageId = args.pageId as string | undefined;
+
+    // 형식 강제 — namespace는 항상 "sigma"(플러그인 고정), key/value는 여기서 검증
+    if (!key || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return jsonResponse({ error: `유효하지 않은 key입니다. ^[a-zA-Z0-9_.-]+$ 만 허용됩니다: ${key}` });
+    }
+    if (typeof value !== 'string') {
+      return jsonResponse({ error: 'value는 JSON 문자열이어야 합니다' });
+    }
+    try {
+      JSON.parse(value);
+    } catch {
+      return jsonResponse({ error: 'value가 유효한 JSON이 아닙니다. 객체/배열/원시값을 JSON 문자열로 직렬화해 전달하세요.' });
+    }
+
+    // pageId 미지정 시 바인딩 페이지 사용("document"는 명시 시에만)
+    const targetPageId = argPageId !== undefined ? argPageId : boundPageId;
+
+    try {
+      const result = await wsServer.setPageData(key, value, { pageId: targetPageId }, pluginId);
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async sigma_get_page_data(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId, pageId: boundPageId } = access;
+
+    const key = args.key as string | undefined;
+    const argPageId = args.pageId as string | undefined;
+    if (key !== undefined && !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return jsonResponse({ error: `유효하지 않은 key입니다: ${key}` });
+    }
+    const targetPageId = argPageId !== undefined ? argPageId : boundPageId;
+
+    try {
+      const result = await wsServer.getPageData({ key, pageId: targetPageId }, pluginId);
+      return jsonResponse(result);
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async sigma_delete_page_data(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId, pageId: boundPageId } = access;
+
+    const key = args.key as string;
+    const argPageId = args.pageId as string | undefined;
+    if (!key || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return jsonResponse({ error: `유효하지 않은 key입니다: ${key}` });
+    }
+    const targetPageId = argPageId !== undefined ? argPageId : boundPageId;
+
+    // 빈 문자열 저장 = Figma sharedPluginData 키 삭제(plugin set-page-data 경로 재사용).
+    try {
+      await wsServer.setPageData(key, '', { pageId: targetPageId }, pluginId);
+      return jsonResponse({ success: true, deleted: key, pageId: targetPageId ?? '(bound)' });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async sigma_set_node_data(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId } = access;
+
+    const nodeId = args.nodeId as string;
+    const key = args.key as string;
+    const value = args.value as string;
+    if (!nodeId) return jsonResponse({ error: 'nodeId 가 필요합니다' });
+    if (!key || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return jsonResponse({ error: `유효하지 않은 key입니다. ^[a-zA-Z0-9_.-]+$ 만 허용됩니다: ${key}` });
+    }
+    if (typeof value !== 'string') return jsonResponse({ error: 'value는 JSON 문자열이어야 합니다' });
+    try {
+      JSON.parse(value);
+    } catch {
+      return jsonResponse({ error: 'value가 유효한 JSON이 아닙니다. 객체/배열/원시값을 JSON 문자열로 직렬화해 전달하세요.' });
+    }
+    try {
+      const result = await wsServer.setNodeData(nodeId, key, value, pluginId);
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async sigma_get_node_data(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId } = access;
+
+    const nodeId = args.nodeId as string;
+    const key = args.key as string | undefined;
+    if (!nodeId) return jsonResponse({ error: 'nodeId 가 필요합니다' });
+    if (key !== undefined && !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return jsonResponse({ error: `유효하지 않은 key입니다: ${key}` });
+    }
+    try {
+      const result = await wsServer.getNodeData(nodeId, { key }, pluginId);
+      return jsonResponse(result);
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  async sigma_delete_node_data(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId } = access;
+
+    const nodeId = args.nodeId as string;
+    const key = args.key as string;
+    if (!nodeId) return jsonResponse({ error: 'nodeId 가 필요합니다' });
+    if (!key || !/^[a-zA-Z0-9_.-]+$/.test(key)) {
+      return jsonResponse({ error: `유효하지 않은 key입니다: ${key}` });
+    }
+    try {
+      await wsServer.setNodeData(nodeId, key, '', pluginId);  // 빈 값 = 키 삭제
+      return jsonResponse({ success: true, deleted: key, nodeId });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
   async sigma_screenshot(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);

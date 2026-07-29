@@ -236,6 +236,176 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
+    case 'set-page-data': {
+      // sigma 전용 페이지/문서 메타데이터 저장 (modify_node 가드 우회 전용 경로).
+      // namespace는 항상 "sigma"로 고정 — 형식/검증은 서버 핸들러가 담당하고
+      // 여기서는 대상 노드 해석 + sharedPluginData 저장만 한다.
+      const setKey = msg.key as string;
+      const setValue = msg.value as string;
+      const setPageId = msg.pageId as string | undefined;
+      if (!setKey) {
+        sendError('set-page-data-result', 'key가 필요합니다');
+        break;
+      }
+      const setTarget: BaseNode | null =
+        setPageId === 'document' ? figma.root
+          : setPageId ? getPageById(setPageId)
+          : figma.currentPage;
+      if (!setTarget) {
+        sendError('set-page-data-result', `페이지를 찾을 수 없습니다: ${setPageId}`);
+        break;
+      }
+      try {
+        setTarget.setSharedPluginData('sigma', setKey, setValue);
+        sendResult('set-page-data-result', {
+          targetId: setTarget.id,
+          targetType: setTarget.type,
+          targetName: setTarget.name,
+          key: setKey,
+        });
+      } catch (error) {
+        sendError('set-page-data-result', error instanceof Error ? error.message : 'Unknown error');
+      }
+      break;
+    }
+
+    case 'get-page-data': {
+      const getKey = msg.key as string | undefined;
+      const getPageId = msg.pageId as string | undefined;
+      const getTarget: BaseNode | null =
+        getPageId === 'document' ? figma.root
+          : getPageId ? getPageById(getPageId)
+          : figma.currentPage;
+      if (!getTarget) {
+        sendError('get-page-data-result', `페이지를 찾을 수 없습니다: ${getPageId}`);
+        break;
+      }
+      try {
+        if (getKey) {
+          const raw = getTarget.getSharedPluginData('sigma', getKey);
+          sendResult('get-page-data-result', {
+            targetId: getTarget.id,
+            targetName: getTarget.name,
+            key: getKey,
+            value: raw === '' ? null : raw,
+          });
+        } else {
+          // key 미지정 → sigma namespace 전체 key/value 맵
+          const keys = getTarget.getSharedPluginDataKeys('sigma');
+          const data: Record<string, string> = {};
+          for (const k of keys) {
+            data[k] = getTarget.getSharedPluginData('sigma', k);
+          }
+          sendResult('get-page-data-result', {
+            targetId: getTarget.id,
+            targetName: getTarget.name,
+            keys,
+            data,
+          });
+        }
+      } catch (error) {
+        sendError('get-page-data-result', error instanceof Error ? error.message : 'Unknown error');
+      }
+      break;
+    }
+
+    case 'set-node-data': {
+      // 임의(scene) 노드에 sigma sharedPluginData 저장. 예약 키 "lint-ignore" = 룰 억제.
+      const snKey = msg.key as string;
+      const snValue = msg.value as string;
+      const snNodeId = msg.nodeId as string;
+      if (!snNodeId) { sendError('set-node-data-result', 'nodeId가 필요합니다'); break; }
+      if (!snKey) { sendError('set-node-data-result', 'key가 필요합니다'); break; }
+      const snNode = figma.getNodeById(snNodeId);
+      if (!snNode) { sendError('set-node-data-result', `노드를 찾을 수 없습니다: ${snNodeId}`); break; }
+      try {
+        snNode.setSharedPluginData('sigma', snKey, snValue);
+        sendResult('set-node-data-result', { nodeId: snNode.id, nodeType: snNode.type, nodeName: snNode.name, key: snKey });
+      } catch (error) {
+        sendError('set-node-data-result', error instanceof Error ? error.message : 'Unknown error');
+      }
+      break;
+    }
+
+    case 'get-node-data': {
+      const gnKey = msg.key as string | undefined;
+      const gnNodeId = msg.nodeId as string;
+      if (!gnNodeId) { sendError('get-node-data-result', 'nodeId가 필요합니다'); break; }
+      const gnNode = figma.getNodeById(gnNodeId);
+      if (!gnNode) { sendError('get-node-data-result', `노드를 찾을 수 없습니다: ${gnNodeId}`); break; }
+      try {
+        if (gnKey) {
+          const raw = gnNode.getSharedPluginData('sigma', gnKey);
+          sendResult('get-node-data-result', { nodeId: gnNode.id, nodeName: gnNode.name, key: gnKey, value: raw === '' ? null : raw });
+        } else {
+          const keys = gnNode.getSharedPluginDataKeys('sigma');
+          const data: Record<string, string> = {};
+          for (const k of keys) data[k] = gnNode.getSharedPluginData('sigma', k);
+          sendResult('get-node-data-result', { nodeId: gnNode.id, nodeName: gnNode.name, keys, data });
+        }
+      } catch (error) {
+        sendError('get-node-data-result', error instanceof Error ? error.message : 'Unknown error');
+      }
+      break;
+    }
+
+    case 'get-nodes-data': {
+      // 배치 조회: nodeIds 각각의 sigma sharedPluginData[key] (lint suppress 필터용).
+      const gndKey = msg.key as string;
+      const gndIds = (msg.nodeIds as string[] | undefined) || [];
+      if (!gndKey) { sendError('get-nodes-data-result', 'key가 필요합니다'); break; }
+      try {
+        const map: Record<string, string> = {};
+        for (const id of gndIds) {
+          const n = figma.getNodeById(id);
+          if (!n) continue;
+          const raw = n.getSharedPluginData('sigma', gndKey);
+          if (raw !== '') map[id] = raw;
+        }
+        sendResult('get-nodes-data-result', { key: gndKey, data: map });
+      } catch (error) {
+        sendError('get-nodes-data-result', error instanceof Error ? error.message : 'Unknown error');
+      }
+      break;
+    }
+
+    case 'get-page-lint': {
+      // 플러그인 UI 전용 — 현재 페이지의 lint config 를 읽어 UI 로만 돌려준다(서버 forward 안 함).
+      // 저장소는 서버 도구(set/get-page-data)와 동일: sharedPluginData("sigma","lint").
+      const raw = figma.currentPage.getSharedPluginData('sigma', 'lint');
+      figma.ui.postMessage({
+        type: 'page-lint-result',
+        action: 'get',
+        success: true,
+        pageName: figma.currentPage.name,
+        value: raw === '' ? null : raw,
+      });
+      break;
+    }
+
+    case 'set-page-lint': {
+      // data 가 빈 문자열/미지정이면 삭제(clear), 아니면 JSON 검증 후 저장.
+      const rawInput = (msg.data as string | undefined) ?? '';
+      const trimmed = rawInput.trim();
+      if (trimmed === '') {
+        figma.currentPage.setSharedPluginData('sigma', 'lint', '');
+        figma.ui.postMessage({ type: 'page-lint-result', action: 'clear', success: true, pageName: figma.currentPage.name });
+        break;
+      }
+      try {
+        JSON.parse(trimmed);
+      } catch (error) {
+        figma.ui.postMessage({
+          type: 'page-lint-result', action: 'set', success: false,
+          error: `유효한 JSON 이 아닙니다: ${error instanceof Error ? error.message : 'parse error'}`,
+        });
+        break;
+      }
+      figma.currentPage.setSharedPluginData('sigma', 'lint', trimmed);
+      figma.ui.postMessage({ type: 'page-lint-result', action: 'set', success: true, pageName: figma.currentPage.name });
+      break;
+    }
+
     case 'get-pages': {
       const pages = getAllPages();
       figma.ui.postMessage({

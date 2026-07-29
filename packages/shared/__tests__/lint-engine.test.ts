@@ -7,7 +7,7 @@ import { lintLayout, mergeFixesBySection, type LayoutFix } from '../src/lint/geo
 import { runBuiltinRules } from '../src/lint/engine';
 import {
   componentDescriptionEmptyRule, defaultNameRule, emptyContainerRule,
-  fillSizingOrphanRule, hiddenLeafRule, strayPixelRule,
+  fillSizingOrphanRule, hiddenLeafRule, rawNodeRule, strayPixelRule,
 } from '../src/lint/simple-rules';
 import { compileMatchRule, runMatchRule } from '../src/lint/json-rule';
 import { fullyOccludedSiblingRule } from '../src/lint/occlusion';
@@ -418,6 +418,71 @@ describe('simple-rules.ts (신규 빌트인 2종 — fill_sizing_orphan, compone
     expect(violated).toContain('c');
     expect(violated).not.toContain('d');
     expect(violated).not.toContain('e');
+  });
+});
+
+describe('simple-rules.ts (raw_node — opt-in, 컴포넌트 강제)', () => {
+  test('화면의 raw FRAME/도형은 위반, INSTANCE 는 통과', () => {
+    const roots = [
+      node('screen', 'Screen', 'FRAME', [0, 0, 1000, 800], [
+        node('inst', 'OneUI/switch/on', 'INSTANCE', [0, 0, 42, 26]),
+        node('rawpill', 'toggle', 'FRAME', [50, 0, 36, 20]),
+        node('rawrect', 'bar', 'RECTANGLE', [0, 40, 100, 8]),
+        node('label', '자동 갱신', 'TEXT', [0, 60, 48, 16]),
+      ]),
+    ];
+    const violated = rawNodeRule(roots).map((v) => v.nodes[0]);
+    expect(violated).toContain('rawpill'); // raw FRAME
+    expect(violated).toContain('rawrect'); // raw RECTANGLE
+    expect(violated).toContain('screen');  // 최상위 화면 프레임도 raw(strict)
+    expect(violated).not.toContain('inst'); // INSTANCE 는 정의된 컴포넌트
+    expect(violated).not.toContain('label'); // TEXT 는 기본 비대상
+  });
+
+  test('INSTANCE 내부의 raw 노드는 항상 제외(정의의 사본)', () => {
+    const roots = [
+      node('inst', 'OneUI/button', 'INSTANCE', [0, 0, 70, 32], [
+        node('innerframe', 'bg', 'FRAME', [0, 0, 70, 32]),
+      ]),
+    ];
+    expect(rawNodeRule(roots)).toHaveLength(0);
+  });
+
+  test('COMPONENT 정의 내부는 기본 제외, checkInsideComponent=true 면 포함', () => {
+    const roots = [
+      node('comp', 'MyButton', 'COMPONENT', [0, 0, 70, 32], [
+        node('innerframe', 'bg', 'FRAME', [0, 0, 70, 32]),
+      ]),
+    ];
+    expect(rawNodeRule(roots).map((v) => v.nodes[0])).not.toContain('innerframe');
+    expect(rawNodeRule(roots, { checkInsideComponent: true }).map((v) => v.nodes[0])).toContain('innerframe');
+  });
+
+  test('types 재정의 시 그 타입만 검사(FRAME 빼면 프레임은 통과)', () => {
+    const roots = [
+      node('screen', 'Screen', 'FRAME', [0, 0, 100, 100], [
+        node('rawrect', 'bar', 'RECTANGLE', [0, 0, 50, 8]),
+      ]),
+    ];
+    const violated = rawNodeRule(roots, { types: ['RECTANGLE'] }).map((v) => v.nodes[0]);
+    expect(violated).toContain('rawrect');
+    expect(violated).not.toContain('screen');
+  });
+
+  test('exemptNamePattern 매칭 이름은 제외', () => {
+    const roots = [
+      node('a', 'wire/box', 'FRAME', [0, 0, 50, 50]),
+      node('b', 'toggle', 'FRAME', [0, 60, 36, 20]),
+    ];
+    const violated = rawNodeRule(roots, { exemptNamePattern: '^(wire|anno)/' }).map((v) => v.nodes[0]);
+    expect(violated).not.toContain('a');
+    expect(violated).toContain('b');
+  });
+
+  test('engine: raw_node 는 opt-in — enabled:true 없으면 실행 안 됨', () => {
+    const roots = [node('screen', 'Screen', 'FRAME', [0, 0, 100, 100])];
+    expect(runBuiltinRules(roots, {}).map((v) => v.rule)).not.toContain('raw_node');
+    expect(runBuiltinRules(roots, { raw_node: { enabled: true } }).map((v) => v.rule)).toContain('raw_node');
   });
 });
 

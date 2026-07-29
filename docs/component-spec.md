@@ -50,6 +50,35 @@
    사용 시 검증에 실패하면 명시적 "계약 위반" 에러를 낸다
    (컴포넌트가 삭제된 limbo 상태 포함).
 
+## 다른 컴포넌트와 조합 — 스펙 HTML은 인스턴스를 못 품는다
+
+⚠️ **가장 흔한 함정.** 스펙 HTML은 정적 `div/text/svg` leaf만 만든다.
+**이미 등록된 다른 컴포넌트(OneUI 등)의 인스턴스를 스펙 HTML 안에 넣을 수 없다.**
+그래서 "검색창·버튼이 든 리스트 화면"을 만들려고 스펙 하나에 다 담으려 하면,
+OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이는 디자인시스템과 어긋나는 잘못된 길이다.**
+
+기존 컴포넌트를 재사용해 더 큰 컴포넌트를 조립하려면 **스펙이 아니라 네이티브 컴포넌트 경로**를 쓴다
+(Figma 네이티브 컴포넌트는 인스턴스를 자식으로 품지만, 스펙 HTML은 못 품는다):
+
+```
+1) sigma_create_component(x,y,width,height,name)         → 빈 COMPONENT
+2) sigma_create_component_spec_instance(parentId=comp)    → OneUI 등 실제 인스턴스를 자식으로 삽입
+   sigma_create_component_instance(parentId=comp)         → (다른 네이티브 컴포넌트 인스턴스도 동일)
+   sigma_create_text(parentId=comp)                       → 순수 텍스트(제목·라벨)는 raw 텍스트로
+3) 이 조합 컴포넌트의 인스턴스를 화면마다 찍고(sigma_create_component_instance),
+   per-instance로 바꿀 부분만 중첩 노드 id로 override:
+     - 중첩 raw 텍스트     → sigma_modify_node(setCharacters), nodeId="I<instance>;<childId>"
+     - 중첩 스펙 인스턴스   → sigma_set_component_spec_instance_props, nodeId="I<instance>;<childId>"
+```
+
+**역할 분담**: 등록 컴포넌트에 **있는** 조각(배지·버튼·검색·셀렉트·페이지네이션…)은 그 인스턴스를 삽입해 쓰고,
+등록 컴포넌트에 **없는** 조각(표·차트 등)만 스펙으로 새로 만들어 이 조합에 끼워넣는다.
+스펙은 "없는 프리미티브를 채우는 도구"이지, "OneUI를 재현하는 도구"가 아니다.
+
+> 중첩 인스턴스의 텍스트·스펙 props는 per-instance override가 되고(검증됨), 중첩 인스턴스의
+> 메인 컴포넌트 교체는 sigma_swap_component로 가능하다. 즉 조합 + override + swap으로
+> 재사용성과 실제 디자인시스템 컴포넌트 사용을 동시에 얻는다.
+
 ## 스펙 HTML 규칙
 
 ### 구조

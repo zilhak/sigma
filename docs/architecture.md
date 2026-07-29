@@ -104,7 +104,7 @@ CSS computed style에서 추출한 40개 이상의 속성 (display, flexbox, gri
 Server (index.ts)
 ├── HTTP API (Hono)            ← /api/health, /api/extracted, /api/figma/*
 ├── WebSocket Server           ← Plugin 연결 관리, 청킹 전송 (1MB 단위)
-├── MCP Server                 ← 119개 도구 제공 (stdio + Streamable HTTP)
+├── MCP Server                 ← 128개 도구 제공 (stdio + Streamable HTTP)
 ├── Auth (Token Store)         ← stk-{hex} 토큰, 10분 만료
 ├── Storage                    ← ~/.sigma/extracted/, screenshots/
 └── Script Registry            ← 임베드 스크립트 경로 관리

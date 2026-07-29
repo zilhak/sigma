@@ -30,6 +30,14 @@ export async function loadLintConfig(configPath: string): Promise<LintConfig> {
   return validateShape(parsed, absPath);
 }
 
+/**
+ * 이미 파싱된 객체(inline config / 페이지 저장 config)를 LintConfig 로 형태검증.
+ * loadLintConfig 의 파일 경로 없는 버전 — 검증 실패 시 LintConfigError.
+ */
+export function validateLintConfigShape(parsed: unknown, sourceLabel: string): LintConfig {
+  return validateShape(parsed, sourceLabel);
+}
+
 function validateShape(parsed: unknown, path: string): LintConfig {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new LintConfigError(`config 최상위는 객체여야 합니다: ${path}`);
