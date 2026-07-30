@@ -329,11 +329,6 @@ export async function buildComponentFromSpec(
   const propertyIds = bindSlots(component, options.params);
   stampComponent(component, options.alias, options.params, propertyIds);
 
-  if (targetPage.id === figma.currentPage.id) {
-    figma.currentPage.selection = [component];
-    figma.viewport.scrollAndZoomIntoView([component]);
-  }
-
   return {
     nodeId: component.id,
     key: component.key,

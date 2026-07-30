@@ -169,18 +169,12 @@ export function removeReactions(nodeId: string, triggerType?: string): RemoveRea
   };
 }
 
-export function getReactions(nodeId?: string): GetReactionsResult {
-  let node: BaseNode | null;
-
-  if (nodeId) {
-    node = figma.getNodeById(nodeId);
-  } else {
-    const selection = figma.currentPage.selection;
-    if (selection.length === 0) throw new Error('노드를 선택하거나 nodeId를 지정하세요');
-    node = selection[0];
-  }
-
-  if (!node) throw new Error('노드를 찾을 수 없습니다');
+export function getReactions(nodeId: string): GetReactionsResult {
+  // nodeId 필수 — 예전에는 미지정 시 "현재 선택"으로 폴백했으나, 도구 결과가
+  // 사용자의 캔버스 선택 상태에 따라 달라져 재현이 불가능했다(뷰 상태 의존).
+  if (!nodeId) throw new Error('nodeId가 필요합니다');
+  const node = figma.getNodeById(nodeId);
+  if (!node) throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
 
   const reactions: ReactionInfo[] = [];
   if ('reactions' in node) {

@@ -133,7 +133,7 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지) | `token` | — |
 | `sigma_get_styles` | 로컬 스타일 조회 | `token` | — |
 | `sigma_get_selection` | 현재 선택 노드 | `token` | — |
-| `sigma_set_selection` | 노드 선택 + 뷰포트 이동 | `token`, `nodeIds` | `zoomToFit` |
+| `sigma_set_selection` | 노드 선택 (화면 고정 — 뷰 이동은 `zoomToFit:true`) | `token`, `nodeIds` | `zoomToFit` |
 | `sigma_get_viewport` | 뷰포트 정보 (center, zoom) | `token` | — |
 | `sigma_set_viewport` | 뷰포트 설정 | `token` | `center`, `zoom`, `nodeIds` |
 | `sigma_get_selection_details` | 선택 노드 상세 정보 | `token` | — |
@@ -179,7 +179,7 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_get_local_components` | 로컬 컴포넌트 목록 | `token` | — |
-| `sigma_get_instance_overrides` | 인스턴스 오버라이드 조회 | `token` | `nodeId` |
+| `sigma_get_instance_overrides` | 인스턴스 오버라이드 조회 | `token`, `nodeId` | — |
 | `sigma_set_instance_overrides` | 인스턴스 오버라이드 설정 | `token`, `nodeId`, `overrides` | — |
 | `sigma_convert_to_component` | 프레임 → 컴포넌트 변환 | `token`, `nodeId` | — |
 | `sigma_create_component_set` | Variants 세트 결합 | `token`, `componentIds` | `name` |
@@ -194,7 +194,7 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_annotations` | 주석 목록 | `token` | `nodeId` |
+| `sigma_get_annotations` | 주석 목록 | `token`, `nodeId` | — |
 | `sigma_set_annotation` | 주석 추가 | `token`, `nodeId`, `label` | `labelType` |
 | `sigma_set_multiple_annotations` | 주석 일괄 추가 | `token`, `items` | — |
 
@@ -202,7 +202,7 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_reactions` | 인터랙션 목록 | `token` | `nodeId` |
+| `sigma_get_reactions` | 인터랙션 목록 | `token`, `nodeId` | — |
 | `sigma_add_reaction` | 인터랙션 추가 | `token`, `nodeId`, `trigger`, `action` | `destinationId`, `url`, `transition`, `preserveScrollPosition` |
 | `sigma_delete_reactions` | 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
 

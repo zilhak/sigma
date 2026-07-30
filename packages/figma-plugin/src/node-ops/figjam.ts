@@ -3,6 +3,8 @@
  * FigJam 환경에서만 사용 가능
  */
 
+import { placeNode } from './create';
+
 function ensureFigJam(): void {
   if (figma.editorType !== 'figjam') {
     throw new Error('이 기능은 FigJam 환경에서만 사용 가능합니다 (현재: ' + figma.editorType + ')');
@@ -14,6 +16,8 @@ export interface CreateStickyOptions {
   x?: number;
   y?: number;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지) */
+  targetPage?: PageNode;
 }
 
 export interface CreateStickyResult {
@@ -34,12 +38,7 @@ export async function createSticky(options: CreateStickyOptions): Promise<Create
     await figma.loadFontAsync(sticky.text.fontName as FontName);
     sticky.text.characters = options.text;
   }
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (parent && 'appendChild' in parent) {
-      (parent as ChildrenMixin).appendChild(sticky);
-    }
-  }
+  placeNode(sticky, options.parentId, options.targetPage);
   return {
     nodeId: sticky.id,
     name: sticky.name,
@@ -55,6 +54,8 @@ export interface CreateConnectorOptions {
   endNodeId: string;
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
+  /** 커넥터를 붙일 페이지(바인딩 페이지) */
+  targetPage?: PageNode;
 }
 
 export interface CreateConnectorResult {
@@ -86,6 +87,8 @@ export function createConnector(options: CreateConnectorOptions): CreateConnecto
   if (options.strokeWeight !== undefined) {
     connector.strokeWeight = options.strokeWeight;
   }
+
+  placeNode(connector, undefined, options.targetPage);
 
   return { nodeId: connector.id, name: connector.name };
 }

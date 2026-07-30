@@ -80,6 +80,12 @@ dom.tabs.forEach((tab) => {
   });
 });
 
+// 사람이 플러그인 UI 에서 직접 가져오는 경로 — 생성 후 그 프레임으로 뷰를 옮긴다
+// (focusView). MCP(에이전트) 경로는 focusView 를 보내지 않아 뷰/선택이 그대로 유지된다.
+function sendImportToPlugin(type: 'create-from-json' | 'create-from-html', data: unknown) {
+  parent.postMessage({ pluginMessage: { type, data, focusView: true } }, '*');
+}
+
 // === 일반 탭: 노드 정보 복사 ===
 dom.copyNodeInfoBtn.addEventListener('click', () => {
   copyNodeInfoToClipboard();
@@ -278,13 +284,13 @@ dom.importModalSubmit.addEventListener('click', () => {
   if (importFormat === 'json') {
     try {
       const data = JSON.parse(value);
-      sendToPlugin('create-from-json', data);
+      sendImportToPlugin('create-from-json', data);
     } catch {
       showMessage('JSON 파싱 오류', 'error');
       return;
     }
   } else {
-    sendToPlugin('create-from-html', value);
+    sendImportToPlugin('create-from-html', value);
   }
 
   dom.importModal.classList.remove('active');
@@ -353,7 +359,7 @@ dom.serverListImport.addEventListener('click', async () => {
     const comp = result.component;
 
     if (comp && comp.data) {
-      sendToPlugin('create-from-json', comp.data);
+      sendImportToPlugin('create-from-json', comp.data);
       dom.serverListModal.classList.remove('active');
       log(`서버에서 "${comp.name}" 불러옴`, 'success');
     } else {

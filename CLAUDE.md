@@ -45,6 +45,27 @@ MCP 도구를 **새로 만들거나 이름/스키마를 바꾸거나 정리(그�
 - 스키마: 열거 필드는 `enum` 필수, 색상 `{r,g,b,a}`, `validateFigmaAccess` 사용
 - 도구를 추가/변경하면 `docs/mcp-tools.md`·`README.md`·이 파일의 도구 표도 함께 갱신
 
+### 사용자 포커스 불변 (뷰·페이지·선택) — CRITICAL
+
+**어떤 도구도 부작용으로 사용자의 페이지/뷰/선택 포커스를 바꾸지 않는다.**
+MCP 도구는 에이전트가 호출하는 것이고, 그 시각 Figma 화면을 보고 있는 것은 사람이다.
+작업 결과를 보여주려고 화면을 옮기면 사람의 작업 흐름을 끊는 부작용만 남는다.
+
+- **동작과 뷰 설정은 별개의 2단계다.** 노드를 만들거나 고치는 도구는 절대 `figma.viewport.*`,
+  `figma.currentPage`, `currentPage.selection` 을 건드리지 않는다.
+- **포커스를 바꿔도 되는 경우는 셋뿐이다:**
+  1. 포커스 변경 자체가 목적인 도구 — `sigma_set_viewport`, `sigma_switch_page`, `sigma_set_selection`(선택만; 뷰는 `zoomToFit:true` 명시 시에만)
+  2. 포커스 정보를 **읽는** 도구 — `sigma_get_viewport`, `sigma_get_selection`, `sigma_get_selection_details`, `sigma_get_document_info`
+  3. **사람이 플러그인 UI에서 직접** 실행한 동작 — 개체 탭 붙여넣기(`focusView: true`로 명시 전달), 일반 탭의 좌표/노드 ID 이동 버튼
+- **`figma.currentPage` 를 동작 대상으로 삼지 않는다.** 대상 페이지는 항상 바인딩 `pageId`
+  → `getTargetPage(pageId)` 로 정한다. `figma.createX()` 가 노드를 활성 page 에 자동 append
+  하더라도, `placeNode(node, parentId, targetPage)` 로 직접 재배치한다
+  (`node-ops/create.ts`). 활성 page 를 전환해 맞추는 방식은 금지.
+- **`nodeId` 를 "현재 선택"으로 폴백하지 않는다.** 같은 호출이 캔버스 선택 상태에 따라 다른
+  결과를 내면 재현이 불가능하다. 대상 노드는 인자로 명시받는다.
+
+새 도구를 추가할 때 이 규칙을 어기는지 자문한다: "이 도구가 사람이 보던 화면을 움직이는가?"
+
 ### Figma Plugin 코드 제약
 
 Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
@@ -211,7 +232,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지 목록) | `token` | — |
 | `sigma_get_styles` | 로컬 스타일 조회 (Paint, Text, Effect, Grid) | `token` | — |
 | `sigma_get_selection` | 현재 선택된 노드 목록 | `token` | — |
-| `sigma_set_selection` | 특정 노드 선택 + 뷰포트 이동 | `token`, `nodeIds` | `zoomToFit` |
+| `sigma_set_selection` | 특정 노드 선택 (화면은 그대로 — 뷰까지 옮기려면 `zoomToFit:true`) | `token`, `nodeIds` | `zoomToFit` |
 | `sigma_get_viewport` | 현재 뷰포트 정보 조회 (center, zoom, bounds) | `token` | — |
 | `sigma_set_viewport` | 뷰포트 직접 설정 (center+zoom 또는 nodeIds로 이동) | `token` | `center`, `zoom`, `nodeIds` |
 | `sigma_get_selection_details` | 현재 선택된 노드의 상세 정보 조회 | `token` | — |
@@ -240,7 +261,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_get_local_components` | 로컬 컴포넌트 목록 (key, name, 크기) | `token` | — |
-| `sigma_get_instance_overrides` | 인스턴스의 오버라이드 속성 조회 | `token` | `nodeId` |
+| `sigma_get_instance_overrides` | 인스턴스의 오버라이드 속성 조회 | `token`, `nodeId` | — |
 | `sigma_set_instance_overrides` | 인스턴스 오버라이드 설정 | `token`, `nodeId`, `overrides` | — |
 | `sigma_convert_to_component` | 프레임을 컴포넌트로 변환 | `token`, `nodeId` | — |
 | `sigma_create_component_set` | 컴포넌트들을 Variants 세트로 결합 | `token`, `componentIds` | `name` |
@@ -255,7 +276,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_annotations` | 노드의 주석 목록 조회 | `token` | `nodeId` |
+| `sigma_get_annotations` | 노드의 주석 목록 조회 | `token`, `nodeId` | — |
 | `sigma_set_annotation` | 노드에 주석 추가 | `token`, `nodeId`, `label` | `labelType` |
 | `sigma_set_multiple_annotations` | 여러 노드에 주석 일괄 추가 | `token`, `items` | — |
 
@@ -263,7 +284,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_reactions` | 노드의 인터랙션 목록 조회 | `token` | `nodeId` |
+| `sigma_get_reactions` | 노드의 인터랙션 목록 조회 | `token`, `nodeId` | — |
 | `sigma_add_reaction` | 노드에 인터랙션 추가 (클릭→이동, 호버→팝업 등) | `token`, `nodeId`, `trigger`, `action` | `destinationId`, `url`, `transition`, `preserveScrollPosition` |
 | `sigma_delete_reactions` | 노드의 인터랙션 제거 | `token`, `nodeId` | `triggerType` |
 

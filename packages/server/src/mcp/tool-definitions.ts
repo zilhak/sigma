@@ -1941,7 +1941,7 @@ base64 인코딩된 이미지 데이터를 받아 Rectangle에 IMAGE fill로 적
   },
   {
     name: 'sigma_set_selection',
-    description: `Figma에서 특정 노드들을 선택하고, 뷰포트를 해당 노드로 이동합니다.
+    description: `Figma에서 특정 노드들을 선택합니다. **기본적으로 화면(뷰포트)은 움직이지 않습니다** — 뷰까지 옮기려면 zoomToFit: true 를 명시하세요(또는 sigma_set_viewport 사용).
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.`,
     inputSchema: {
@@ -1953,7 +1953,7 @@ base64 인코딩된 이미지 데이터를 받아 Rectangle에 IMAGE fill로 적
           items: { type: 'string' },
           description: '선택할 노드 ID 배열',
         },
-        zoomToFit: { type: 'boolean', description: '선택 후 뷰포트 이동 여부 (기본 true)' },
+        zoomToFit: { type: 'boolean', description: '선택 후 뷰포트도 그 노드로 옮길지 (기본 false — 선택만 하고 화면은 그대로 둔다)' },
       },
       required: ['token', 'nodeIds'],
     },
@@ -1997,14 +1997,14 @@ sigma_get_local_components에서 얻은 key를 사용하세요.`,
     description: `컴포넌트 인스턴스의 오버라이드 가능한 속성을 조회합니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
-nodeId를 지정하지 않으면 현재 선택된 인스턴스를 사용합니다.`,
+nodeId는 필수입니다 — 결과가 사용자의 캔버스 선택 상태에 따라 달라지지 않도록, 현재 선택 폴백을 제공하지 않습니다.`,
     inputSchema: {
       type: 'object' as const,
       properties: {
         token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
-        nodeId: { type: 'string', description: '인스턴스 노드 ID (선택, 미지정 시 현재 선택)' },
+        nodeId: { type: 'string', description: '인스턴스 노드 ID' },
       },
-      required: ['token'],
+      required: ['token', 'nodeId'],
     },
   },
   {
@@ -2257,14 +2257,14 @@ sigma_get_selection + sigma_get_node_info를 합친 편의 도구입니다.
     description: `노드의 주석(Annotation) 목록을 조회합니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
-nodeId를 지정하지 않으면 현재 선택된 노드를 사용합니다.`,
+nodeId는 필수입니다 — 결과가 사용자의 캔버스 선택 상태에 따라 달라지지 않도록, 현재 선택 폴백을 제공하지 않습니다.`,
     inputSchema: {
       type: 'object' as const,
       properties: {
         token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
-        nodeId: { type: 'string', description: '조회할 노드 ID (선택, 미지정 시 현재 선택)' },
+        nodeId: { type: 'string', description: '조회할 노드 ID' },
       },
-      required: ['token'],
+      required: ['token', 'nodeId'],
     },
   },
   {
@@ -2290,15 +2290,15 @@ nodeId를 지정하지 않으면 현재 선택된 노드를 사용합니다.`,
     description: `노드의 프로토타이핑 인터랙션(Reaction) 목록을 조회합니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
-nodeId를 지정하지 않으면 현재 선택된 노드를 사용합니다.
+nodeId는 필수입니다 — 결과가 사용자의 캔버스 선택 상태에 따라 달라지지 않도록, 현재 선택 폴백을 제공하지 않습니다.
 각 Reaction은 trigger(트리거)와 actions(액션) 배열로 구성됩니다.`,
     inputSchema: {
       type: 'object' as const,
       properties: {
         token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
-        nodeId: { type: 'string', description: '조회할 노드 ID (선택, 미지정 시 현재 선택)' },
+        nodeId: { type: 'string', description: '조회할 노드 ID' },
       },
-      required: ['token'],
+      required: ['token', 'nodeId'],
     },
   },
 

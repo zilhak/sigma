@@ -57,7 +57,8 @@ export async function createFrameFromJSON(
   position?: { x: number; y: number },
   pageId?: string,
   getTargetPage?: (pageId?: string) => PageNode,
-  forceAbsolute?: boolean
+  forceAbsolute?: boolean,
+  focusView?: boolean
 ): Promise<{ nodeId: string; name: string; childCount: number; pageName: string }> {
   // 대상 페이지 결정
   const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
@@ -95,8 +96,10 @@ export async function createFrameFromJSON(
   // 대상 페이지에 추가
   targetPage.appendChild(frame);
 
-  // 현재 페이지인 경우에만 선택 및 뷰포트 이동
-  if (isCurrentPage) {
+  // 뷰 포커스는 "동작"과 분리된 별개 단계다 — 사람이 플러그인 UI 에서 직접
+  // 붙여넣은 경우(focusView)에만 선택 + 뷰포트를 옮긴다. MCP 경로에서는 에이전트가
+  // 화면을 볼 일이 없고, 사용자가 보던 뷰/선택을 말없이 덮는 부작용만 남는다.
+  if (focusView && isCurrentPage) {
     figma.currentPage.selection = [frame];
     figma.viewport.scrollAndZoomIntoView([frame]);
   }
@@ -118,7 +121,8 @@ export async function createFrameFromHTML(
   position?: { x: number; y: number },
   pageId?: string,
   getTargetPage?: (pageId?: string) => PageNode,
-  forceAbsolute?: boolean
+  forceAbsolute?: boolean,
+  focusView?: boolean
 ): Promise<{ nodeId: string; name: string; childCount: number; pageName: string }> {
   // 대상 페이지 결정
   const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
@@ -160,8 +164,10 @@ export async function createFrameFromHTML(
   // 대상 페이지에 추가
   targetPage.appendChild(frame);
 
-  // 현재 페이지인 경우에만 선택 및 뷰포트 이동
-  if (isCurrentPage) {
+  // 뷰 포커스는 "동작"과 분리된 별개 단계다 — 사람이 플러그인 UI 에서 직접
+  // 붙여넣은 경우(focusView)에만 선택 + 뷰포트를 옮긴다. MCP 경로에서는 에이전트가
+  // 화면을 볼 일이 없고, 사용자가 보던 뷰/선택을 말없이 덮는 부작용만 남는다.
+  if (focusView && isCurrentPage) {
     figma.currentPage.selection = [frame];
     figma.viewport.scrollAndZoomIntoView([frame]);
   }

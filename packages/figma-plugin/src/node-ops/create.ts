@@ -20,6 +20,34 @@ function getStyleFromWeight(weight: number): string {
   return WEIGHT_TO_STYLE[weight] !== undefined ? WEIGHT_TO_STYLE[weight] : 'Regular';
 }
 
+/**
+ * 생성된 노드를 최종 컨테이너에 배치한다.
+ * - parentId 지정: 그 부모의 자식으로
+ * - 미지정: targetPage(바인딩 페이지)의 직속으로
+ *
+ * figma.createX()는 노드를 호출 시점의 figma.currentPage에 자동으로 append한다.
+ * 그 상태로 방치하면 "활성 page를 미리 바인딩 page로 바꿔놔야" 올바른 곳에 생기므로
+ * 사용자가 보던 화면이 강제 전환됐다. targetPage로 직접 append하면 currentPage를
+ * 건드릴 필요가 없어, MCP 작업이 사용자의 페이지/뷰 포커스를 흔들지 않는다.
+ * (await를 끼고 생성하는 함수에서도 currentPage 드리프트와 무관해져 race도 사라진다.)
+ */
+export function placeNode(
+  node: SceneNode,
+  parentId: string | undefined,
+  targetPage: PageNode | undefined
+): void {
+  if (parentId) {
+    const parent = figma.getNodeById(parentId);
+    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${parentId}`);
+    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
+    (parent as ChildrenMixin).appendChild(node);
+    return;
+  }
+  if (targetPage && node.parent?.id !== targetPage.id) {
+    targetPage.appendChild(node);
+  }
+}
+
 export interface CreateRectangleOptions {
   x: number;
   y: number;
@@ -27,6 +55,8 @@ export interface CreateRectangleOptions {
   height: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fillColor?: { r: number; g: number; b: number; a?: number };
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
@@ -75,12 +105,7 @@ export function createRectangle(options: CreateRectangleOptions): CreateRectangl
     rect.cornerRadius = options.cornerRadius;
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(rect);
-  }
+  placeNode(rect, options.parentId, options.targetPage);
 
   return {
     nodeId: rect.id,
@@ -98,6 +123,8 @@ export interface CreateTextOptions {
   text: string;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: number;
@@ -120,19 +147,11 @@ export async function createText(options: CreateTextOptions): Promise<CreateText
   const weight = options.fontWeight !== undefined ? options.fontWeight : 400;
   const style = getStyleFromWeight(weight);
 
-  // await 이전에 의도된 page(디스패치 초크포인트가 설정한 바인딩 page)를 캡처.
-  // loadFontAsync await 동안 다른 create 명령이 인터리브되어 figma.currentPage를
-  // 바꾸면, 아래 createText()가 엉뚱한 page에 생성될 수 있다(race).
-  const intendedPage = figma.currentPage;
-
   await figma.loadFontAsync({ family, style });
 
+  // createText()는 노드를 현재 activePage 에 붙이지만, 아래 placeNode 가 targetPage/
+  // parentId 로 다시 배치하므로 await 중 currentPage 가 드리프트해도 무관하다.
   const text = figma.createText();
-  // currentPage가 드리프트했으면 의도된 page로 재고정 (parentId가 있으면 이후
-  // 블록에서 해당 부모로 다시 이동하므로 무관).
-  if (figma.currentPage.id !== intendedPage.id) {
-    intendedPage.appendChild(text);
-  }
   text.fontName = { family, style };
   text.characters = options.text;
   text.x = options.x;
@@ -156,12 +175,7 @@ export async function createText(options: CreateTextOptions): Promise<CreateText
     text.textAlignHorizontal = options.textAlignHorizontal;
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(text);
-  }
+  placeNode(text, options.parentId, options.targetPage);
 
   return {
     nodeId: text.id,
@@ -181,6 +195,8 @@ export interface CreateEmptyFrameOptions {
   height: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fillColor?: { r: number; g: number; b: number; a?: number };
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
@@ -278,12 +294,7 @@ export function createEmptyFrame(options: CreateEmptyFrameOptions): CreateEmptyF
     }
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(frame);
-  }
+  placeNode(frame, options.parentId, options.targetPage);
 
   return {
     nodeId: frame.id,
@@ -305,6 +316,8 @@ export interface CreateEllipseOptions {
   height: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fillColor?: { r: number; g: number; b: number; a?: number };
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
@@ -361,12 +374,7 @@ export function createEllipse(options: CreateEllipseOptions): CreateEllipseResul
     };
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(ellipse);
-  }
+  placeNode(ellipse, options.parentId, options.targetPage);
 
   return {
     nodeId: ellipse.id,
@@ -387,6 +395,8 @@ export interface CreatePolygonOptions {
   height: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fillColor?: { r: number; g: number; b: number; a?: number };
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
@@ -436,12 +446,7 @@ export function createPolygon(options: CreatePolygonOptions): CreatePolygonResul
     }
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(polygon);
-  }
+  placeNode(polygon, options.parentId, options.targetPage);
 
   return {
     nodeId: polygon.id,
@@ -463,6 +468,8 @@ export interface CreateStarOptions {
   height: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fillColor?: { r: number; g: number; b: number; a?: number };
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
@@ -518,12 +525,7 @@ export function createStar(options: CreateStarOptions): CreateStarResult {
     }
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(star);
-  }
+  placeNode(star, options.parentId, options.targetPage);
 
   return {
     nodeId: star.id,
@@ -545,6 +547,8 @@ export interface CreateLineOptions {
   length: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
   rotation?: number;
@@ -589,12 +593,7 @@ export function createLine(options: CreateLineOptions): CreateLineResult {
     line.dashPattern = options.dashPattern;
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(line);
-  }
+  placeNode(line, options.parentId, options.targetPage);
 
   return {
     nodeId: line.id,
@@ -612,6 +611,8 @@ export interface CreateVectorOptions {
   y: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   fillColor?: { r: number; g: number; b: number; a?: number };
   strokeColor?: { r: number; g: number; b: number; a?: number };
   strokeWeight?: number;
@@ -662,12 +663,7 @@ export function createVector(options: CreateVectorOptions): CreateVectorResult {
     }
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(vector);
-  }
+  placeNode(vector, options.parentId, options.targetPage);
 
   return {
     nodeId: vector.id,
@@ -691,6 +687,8 @@ export interface CreateImageNodeOptions {
   imageData: string;  // base64 encoded image
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
   scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
   cornerRadius?: number;
 }
@@ -727,12 +725,7 @@ export function createImageNode(options: CreateImageNodeOptions): CreateImageNod
     scaleMode: scaleMode,
   }];
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (!parent) throw new Error(`부모 노드를 찾을 수 없습니다: ${options.parentId}`);
-    if (!('appendChild' in parent)) throw new Error(`대상 노드(${parent.type})는 자식을 가질 수 없습니다`);
-    (parent as ChildrenMixin).appendChild(rect);
-  }
+  placeNode(rect, options.parentId, options.targetPage);
 
   return {
     nodeId: rect.id,
@@ -753,6 +746,8 @@ export interface CreateNodeFromSvgOptions {
   y?: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지). currentPage 전환을 없애기 위함 */
+  targetPage?: PageNode;
 }
 
 export interface CreateNodeFromSvgResult {
@@ -771,12 +766,7 @@ export function createNodeFromSvg(options: CreateNodeFromSvgOptions): CreateNode
   if (options.x !== undefined) node.x = options.x;
   if (options.y !== undefined) node.y = options.y;
   if (options.name) node.name = options.name;
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (parent && 'appendChild' in parent) {
-      (parent as ChildrenMixin).appendChild(node);
-    }
-  }
+  placeNode(node, options.parentId, options.targetPage);
   return {
     nodeId: node.id, name: node.name, x: node.x, y: node.y,
     width: node.width, height: node.height, childCount: node.children.length,

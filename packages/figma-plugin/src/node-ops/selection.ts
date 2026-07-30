@@ -50,7 +50,9 @@ export function setSelection(nodeIds: string[], zoomToFit?: boolean): SetSelecti
 
   figma.currentPage.selection = nodes;
 
-  if (zoomToFit !== false && nodes.length > 0) {
+  // 기본은 "선택만" — 뷰 이동은 zoomToFit: true 로 명시할 때만 한다.
+  // (선택의 부작용으로 사용자 화면이 튀지 않도록. 뷰 이동만 원하면 sigma_set_viewport)
+  if (zoomToFit === true && nodes.length > 0) {
     figma.viewport.scrollAndZoomIntoView(nodes);
   }
 

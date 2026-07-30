@@ -126,12 +126,10 @@ setInterval(() => {
   }
 }, 500);
 
-// currentPage에 의존해 노드를 생성하는 create 계열 command 집합.
-// 이들은 figma.createX()가 호출 즉시 figma.currentPage에 노드를 append하므로,
-// 디스패치 직전에 활성 page를 바인딩 page로 맞춰야 올바른 page에 생성된다.
-// create-from-json/html, create-section, find-node, get-tree 등은 자체적으로
-// pageId를 getTargetPage로 처리(currentPage를 바꾸지 않음)하므로 제외한다
-// — 포함하면 불필요한 활성 page 전환(뷰 점프)이 발생한다.
+// pageId(바인딩 page)를 대상으로 노드를 생성하는 command 집합 — 아래 유효성 검증에만 쓴다.
+// 각 명령은 getTargetPage(pageId)로 얻은 page에 노드를 직접 배치하므로 활성 page를
+// 전환하지 않는다. create-from-json/html, create-section 등은 자체적으로 동일하게
+// 처리하므로 여기 없어도 무방하다(검증 범위만의 차이).
 const PAGE_SCOPED_CREATE = new Set([
   'create-rectangle', 'create-text', 'create-empty-frame', 'create-ellipse',
   'create-polygon', 'create-star', 'create-line', 'create-vector',
@@ -151,21 +149,16 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
   const sendError = (type: string, error: string) =>
     figma.ui.postMessage({ type, commandId, success: false, error });
 
-  // ── 바인딩 page 활성화 초크포인트 (옵션 A) ──
-  // create 계열 명령이 바인딩된 pageId를 갖고 있으면, switch 분기 이전에 활성
-  // page를 그 page로 1회 설정한다. 이후 모든 figma.createX()가 자동으로 올바른
-  // page에 붙는다. (await을 포함해 생성이 인터리브될 수 있는 createText/
-  //  createComponentInstance는 함수 내부에서 생성 직후 재고정으로 race를 막는다.)
+  // ── 바인딩 page 유효성 검증 ──
+  // create 계열은 targetPage(=getTargetPage(pageId))로 노드를 직접 배치한다(placeNode 참조).
+  // getTargetPage는 stale한 pageId를 만나면 조용히 currentPage로 폴백하므로, 여기서
+  // 존재 여부만 미리 끊어 엉뚱한 page에 생성되는 것을 막는다.
+  // (과거에는 이 지점에서 figma.currentPage를 바인딩 page로 전환했다. 사용자가 보던
+  //  page/뷰를 MCP 작업이 강제로 흔드는 부작용이 있어 제거했다.)
   if (PAGE_SCOPED_CREATE.has(msg.type) && typeof msg.pageId === 'string' && msg.pageId) {
-    const targetPage = getPageById(msg.pageId);
-    if (!targetPage) {
-      // 바인딩된 page가 삭제됐거나 stale → 조용한 currentPage 폴백 대신 명시적
-      // 에러로 알린다(엉뚱한 page 생성 방지).
+    if (!getPageById(msg.pageId)) {
       sendError(`${msg.type}-result`, `바인딩된 페이지(${msg.pageId})를 찾을 수 없습니다. sigma_bind로 다시 바인딩하세요.`);
       return;
-    }
-    if (targetPage.id !== figma.currentPage.id) {
-      figma.currentPage = targetPage;
     }
   }
 
@@ -174,7 +167,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const position = msg.position as { x: number; y: number } | undefined;
       const pageId = msg.pageId as string | undefined;
       const forceAbsolute = msg.forceAbsolute as boolean | undefined;
-      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId, getTargetPage, forceAbsolute);
+      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId, getTargetPage, forceAbsolute, msg.focusView === true);
       break;
     }
 
@@ -182,7 +175,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const htmlPosition = msg.position as { x: number; y: number } | undefined;
       const htmlPageId = msg.pageId as string | undefined;
       const htmlForceAbsolute = msg.forceAbsolute as boolean | undefined;
-      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId, getTargetPage, htmlForceAbsolute);
+      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId, getTargetPage, htmlForceAbsolute, msg.focusView === true);
       break;
     }
 
@@ -939,6 +932,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-rectangle': {
       try {
         const result = await createRectangle({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           width: msg.width as number,
@@ -961,6 +955,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-text': {
       try {
         const result = await createText({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           text: msg.text as string,
@@ -982,7 +977,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
     case 'create-empty-frame': {
       try {
-        const result = createEmptyFrame(msg as any);
+        const result = createEmptyFrame({ ...(msg as any), targetPage: getTargetPage(msg.pageId as string | undefined) });
         sendResult('create-empty-frame-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -994,6 +989,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-ellipse': {
       try {
         const result = createEllipse({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           width: msg.width as number,
@@ -1016,6 +1012,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-polygon': {
       try {
         const result = createPolygon({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           width: msg.width as number,
@@ -1038,6 +1035,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-star': {
       try {
         const result = createStar({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           width: msg.width as number,
@@ -1061,6 +1059,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-line': {
       try {
         const result = createLine({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           length: msg.length as number,
@@ -1082,6 +1081,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-vector': {
       try {
         const result = createVector({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           name: msg.name as string | undefined,
@@ -1102,6 +1102,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-image-node': {
       try {
         const result = createImageNode({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           width: msg.width as number,
@@ -1365,7 +1366,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           msg.componentKey as string,
           Number(msg.x),
           Number(msg.y),
-          msg.parentId as string | undefined
+          msg.parentId as string | undefined,
+          getTargetPage(msg.pageId as string | undefined)
         );
         sendResult('create-component-instance-result', result);
       } catch (error) {
@@ -1377,7 +1379,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
     case 'get-instance-overrides': {
       try {
-        const result = getInstanceOverrides(msg.nodeId as string | undefined);
+        const result = getInstanceOverrides(msg.nodeId as string);
         sendResult('get-instance-overrides-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -1516,7 +1518,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     // === Annotations ===
     case 'get-annotations': {
       try {
-        const result = getAnnotations(msg.nodeId as string | undefined);
+        const result = getAnnotations(msg.nodeId as string);
         sendResult('get-annotations-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -1554,7 +1556,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     // === Prototyping ===
     case 'get-reactions': {
       try {
-        const result = getReactions(msg.nodeId as string | undefined);
+        const result = getReactions(msg.nodeId as string);
         sendResult('get-reactions-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -1601,6 +1603,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-component': {
       try {
         const result = createComponent({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           x: msg.x as number,
           y: msg.y as number,
           width: msg.width as number,
@@ -1693,7 +1696,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       try {
         const result = createComponentSet(
           msg.componentIds as string[],
-          msg.name as string | undefined
+          msg.name as string | undefined,
+          getTargetPage(msg.pageId as string | undefined)
         );
         sendResult('create-component-set-result', result);
       } catch (error) {
@@ -1789,6 +1793,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-node-from-svg': {
       try {
         const result = createNodeFromSvg({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           svgString: msg.svgString as string,
           x: msg.x as number | undefined,
           y: msg.y as number | undefined,
@@ -2042,6 +2047,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-sticky': {
       try {
         const result = await createSticky({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           text: msg.text as string | undefined,
           x: msg.x as number | undefined,
           y: msg.y as number | undefined,
@@ -2058,6 +2064,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
     case 'create-connector': {
       try {
         const result = createConnector({
+          targetPage: getTargetPage(msg.pageId as string | undefined),
           startNodeId: msg.startNodeId as string,
           endNodeId: msg.endNodeId as string,
           strokeColor: msg.strokeColor as { r: number; g: number; b: number; a?: number } | undefined,

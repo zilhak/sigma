@@ -4,6 +4,8 @@
  * get_instance_overrides, set_instance_overrides 참고
  */
 
+import { placeNode } from './create';
+
 export interface ComponentInfo {
   nodeId: string;
   name: string;
@@ -41,13 +43,9 @@ export async function createComponentInstance(
   componentKey: string,
   x: number,
   y: number,
-  parentId?: string
+  parentId?: string,
+  targetPage?: PageNode
 ): Promise<CreateInstanceResult> {
-  // await(importComponentByKeyAsync) 이전에 의도된 page를 캡처. await 동안 다른
-  // create 명령이 figma.currentPage를 바꾸면 createInstance()가 엉뚱한 page에
-  // 인스턴스를 생성할 수 있다(race).
-  const intendedPage = figma.currentPage;
-
   let component: ComponentNode | null = null;
 
   // 먼저 로컬 컴포넌트에서 key 또는 nodeId로 검색
@@ -63,21 +61,13 @@ export async function createComponentInstance(
     }
   }
 
+  // createInstance()는 노드를 현재 activePage 에 붙이지만, placeNode 가 targetPage/
+  // parentId 로 다시 배치하므로 await 중 currentPage 가 드리프트해도 무관하다.
   const instance = component.createInstance();
-  // currentPage가 드리프트했으면 의도된 page로 재고정 (parentId가 있으면 이후
-  // 블록에서 해당 부모로 다시 이동하므로 무관).
-  if (figma.currentPage.id !== intendedPage.id) {
-    intendedPage.appendChild(instance);
-  }
   instance.x = x;
   instance.y = y;
 
-  if (parentId) {
-    const parent = figma.getNodeById(parentId);
-    if (parent && 'appendChild' in parent) {
-      (parent as ChildrenMixin).appendChild(instance);
-    }
-  }
+  placeNode(instance, parentId, targetPage);
 
   return {
     nodeId: instance.id,
@@ -97,18 +87,12 @@ export interface InstanceOverrides {
   properties: Record<string, { type: string; value: unknown }>;
 }
 
-export function getInstanceOverrides(nodeId?: string): InstanceOverrides {
-  let node: BaseNode | null;
-
-  if (nodeId) {
-    node = figma.getNodeById(nodeId);
-  } else {
-    const selection = figma.currentPage.selection;
-    if (selection.length === 0) throw new Error('노드를 선택하거나 nodeId를 지정하세요');
-    node = selection[0];
-  }
-
-  if (!node) throw new Error('노드를 찾을 수 없습니다');
+export function getInstanceOverrides(nodeId: string): InstanceOverrides {
+  // nodeId 필수 — 예전에는 미지정 시 "현재 선택"으로 폴백했으나, 도구 결과가
+  // 사용자의 캔버스 선택 상태에 따라 달라져 재현이 불가능했다(뷰 상태 의존).
+  if (!nodeId) throw new Error('nodeId가 필요합니다');
+  const node = figma.getNodeById(nodeId);
+  if (!node) throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
   if (node.type !== 'INSTANCE') throw new Error(`INSTANCE 타입이 아닙니다: ${node.type}`);
 
   const instance = node as InstanceNode;
@@ -164,6 +148,8 @@ export interface CreateComponentOptions {
   height: number;
   name?: string;
   parentId?: string;
+  /** parentId 미지정 시 노드를 붙일 페이지(바인딩 페이지) */
+  targetPage?: PageNode;
 }
 
 export interface CreateComponentResult {
@@ -186,12 +172,7 @@ export function createComponent(options: CreateComponentOptions): CreateComponen
     component.name = options.name;
   }
 
-  if (options.parentId) {
-    const parent = figma.getNodeById(options.parentId);
-    if (parent && 'appendChild' in parent) {
-      (parent as ChildrenMixin).appendChild(component);
-    }
-  }
+  placeNode(component, options.parentId, options.targetPage);
 
   return {
     nodeId: component.id,
@@ -266,7 +247,7 @@ export interface CreateComponentSetResult {
   componentCount: number;
 }
 
-export function createComponentSet(componentIds: string[], name?: string): CreateComponentSetResult {
+export function createComponentSet(componentIds: string[], name?: string, targetPage?: PageNode): CreateComponentSetResult {
   if (componentIds.length < 2) {
     throw new Error('ComponentSet을 만들려면 최소 2개의 컴포넌트가 필요합니다');
   }
@@ -281,7 +262,10 @@ export function createComponentSet(componentIds: string[], name?: string): Creat
     components.push(node as ComponentNode);
   }
 
-  const componentSet = figma.combineAsVariants(components, figma.currentPage);
+  // combineAsVariants 는 부모를 명시해야 한다 — currentPage 를 쓰면 사용자가 보던
+  // 페이지에 만들어지므로, 바인딩 페이지(targetPage)를 우선한다.
+  const parentPage = targetPage !== undefined ? targetPage : figma.currentPage;
+  const componentSet = figma.combineAsVariants(components, parentPage);
 
   if (name) {
     componentSet.name = name;
