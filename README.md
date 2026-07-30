@@ -195,7 +195,7 @@ AI Agent:
 | | `sigma_group_nodes` / `sigma_ungroup` | 그룹 묶기 / 해제 |
 | | `sigma_flatten` / `sigma_boolean_operation` | 벡터 평탄화 / Boolean 연산 |
 | Lint | `sigma_lint` | config 기반 빌트인 16종(기하 8+구조/이름/가시성 6+occlusion 1+`raw_node` opt-in 1)+커스텀 규칙 검사, 안전 자동수정(`apply:true`), 전체 파일 검사(`scope:"file"` → md 리포트) |
-| 조회 | `sigma_find_node` / `sigma_get_tree` | 노드 검색 / 계층 탐색 |
+| 조회 | `sigma_find_node` / `sigma_get_tree` | 노드 검색(경로 또는 `where` 속성 조건) / 계층 탐색 |
 | | `sigma_get_node_info` / `sigma_get_nodes_info` | 노드 상세 정보 (단일/배치) |
 | | `sigma_get_frames` / `sigma_get_document_info` | 프레임 목록 / 문서 정보 |
 | | `sigma_get_styles` / `sigma_get_selection` | 스타일 / 선택 노드 조회 |

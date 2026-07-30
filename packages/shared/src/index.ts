@@ -80,7 +80,7 @@ export {
   runBuiltinRules,
   isEnabled,
 } from './lint/engine';
-export { compileMatchRule, runMatchRule, type CompiledMatchRule } from './lint/json-rule';
+export { compileMatchRule, runMatchRule, matchesQuery, queryNodes, type CompiledMatchRule, type NodeQuery } from './lint/json-rule';
 export {
   strayPixelRule, defaultNameRule, emptyContainerRule, hiddenLeafRule,
   fillSizingOrphanRule, componentDescriptionEmptyRule,

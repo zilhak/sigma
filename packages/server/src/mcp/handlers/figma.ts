@@ -1,4 +1,6 @@
 import type { ExtractedNode } from '@sigma/shared';
+import { queryNodes, type NodeQuery, type TreeNode } from '@sigma/shared';
+import { buildLintNodes, collectNodeIds, type NodeInfoLike } from '../../lint/enrich.js';
 import * as storage from '../../storage/index.js';
 import { tokenStore } from '../../auth/token.js';
 import {
@@ -9,6 +11,32 @@ import {
   type ToolResult,
 } from '../helpers.js';
 import { processImage, saveSingleScreenshot, saveTiledScreenshots, type ScreenshotMode } from '../../image/process.js';
+
+/**
+ * 트리 조회만으로 채워지는 노드 필드. 이 밖의 field 를 조건에 쓰면 상세 조회
+ * (get_nodes_info) 왕복이 한 번 추가된다 — sigma_lint 의 enrich 와 동일한 비용 구조.
+ */
+const TREE_ONLY_QUERY_FIELDS = new Set([
+  'id', 'name', 'type', 'x', 'y', 'width', 'height', 'childCount', 'visible', 'locked',
+]);
+
+/** 조건이 상세 조회를 필요로 하는지 (field 의 첫 세그먼트로 판정) */
+function queryNeedsNodeInfo(query: NodeQuery): boolean {
+  return (query.checks || []).some((c) => {
+    const root = String(c.field !== undefined ? c.field : '').split(/[.[]/)[0];
+    return !TREE_ONLY_QUERY_FIELDS.has(root);
+  });
+}
+
+function asNodesInfoArray(raw: unknown): NodeInfoLike[] {
+  if (Array.isArray(raw)) return raw as NodeInfoLike[];
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { nodes?: unknown }).nodes)) {
+    return (raw as { nodes: NodeInfoLike[] }).nodes;
+  }
+  return [];
+}
+
+const QUERY_DEFAULT_LIMIT = 200;
 
 /**
  * Figma 작업 관련 핸들러 (토큰 필수)
@@ -216,6 +244,58 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
       if (!plugin) {
         return jsonResponse({ error: `바인딩된 플러그인(${pluginId})이 연결되어 있지 않습니다.` });
       }
+    }
+
+    // where 모드: 속성 조건으로 여러 노드를 찾는다(경로 매칭과 상호배타).
+    // 조건 평가는 sigma_lint 와 같은 부품(select 매칭 · 필드 접근 · 5개 연산자)을 쓴다.
+    const where = args.where as NodeQuery | undefined;
+    if (where) {
+      const rawLimit = args.limit as number | undefined;
+      const limit = rawLimit !== undefined && rawLimit > 0 ? Math.floor(rawLimit) : QUERY_DEFAULT_LIMIT;
+      const startNodeId = args.nodeId as string | undefined;
+
+      try {
+        const tree = await wsServer.getTree(
+          { nodeId: startNodeId, depth: 'full', pageId },
+          pluginId
+        );
+        const roots = (tree as { children?: unknown }).children as TreeNode[];
+
+        // 기본 필드만 쓰는 조건이면 트리 하나로 끝난다(왕복 없음).
+        const nodesInfo = queryNeedsNodeInfo(where)
+          ? asNodesInfoArray(await wsServer.getNodesInfo(collectNodeIds(roots), pluginId))
+          : [];
+        const { nodes } = buildLintNodes(roots, nodesInfo);
+
+        const matched = queryNodes(nodes, where);
+        const truncated = matched.length > limit;
+
+        return jsonResponse({
+          matchCount: matched.length,
+          returned: truncated ? limit : matched.length,
+          truncated,
+          ...(truncated
+            ? { note: `조건에 맞는 노드가 ${matched.length}개입니다. 앞 ${limit}개만 반환했습니다 — limit 을 올리거나 조건을 좁히세요.` }
+            : {}),
+          enriched: nodesInfo.length > 0,
+          nodes: matched.slice(0, limit).map((n) => ({
+            nodeId: n.id,
+            name: n.name,
+            type: n.type,
+            x: n.x,
+            y: n.y,
+            width: n.width,
+            height: n.height,
+          })),
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        return jsonResponse({ error: errMsg });
+      }
+    }
+
+    if (!path) {
+      return jsonResponse({ error: 'path 또는 where 중 하나가 필요합니다.' });
     }
 
     try {

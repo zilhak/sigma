@@ -79,3 +79,28 @@ export function runMatchRule(rule: MatchRule, nodes: LintNode[]): Violation[] {
   }
   return out;
 }
+
+// === 검색(query) 용도 ===
+// lint 는 "조건에 맞으면 위반", 검색은 "조건에 맞으면 결과"로 의미가 반대지만
+// 판정에 쓰는 부품(select 매칭 · 필드 접근 · 연산자)은 완전히 같다. 여기서 그 부품을
+// 그대로 재사용한다 — 연산자를 늘리지 않는 이 파일의 가드레일도 함께 상속한다.
+
+/** 검색 조건. checks 는 모두 만족해야 하는 AND 결합(OR 는 호출을 나눈다). */
+export interface NodeQuery {
+  select?: { type?: string; namePattern?: string };
+  checks?: JsonCheck[];
+}
+
+/** 노드 하나가 검색 조건을 만족하는지. */
+export function matchesQuery(node: LintNode, query: NodeQuery): boolean {
+  if (query.select && !matchesSelect(node, query.select)) return false;
+  for (const check of query.checks || []) {
+    if (!evalCheck(check, getByPath(node, check.field))) return false;
+  }
+  return true;
+}
+
+/** 평탄화된 노드 목록에서 조건에 맞는 노드를 고른다(입력 순서 유지). */
+export function queryNodes(nodes: LintNode[], query: NodeQuery): LintNode[] {
+  return nodes.filter((n) => matchesQuery(n, query));
+}

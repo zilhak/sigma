@@ -126,7 +126,7 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_get_frames` | 페이지 모든 프레임 위치/크기 | `token` | — |
-| `sigma_find_node` | 경로/이름으로 노드 검색 | `token`, `path` | `type` |
+| `sigma_find_node` | 경로/이름 검색, 또는 `where`로 속성 조건 검색 | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
 | `sigma_get_tree` | 문서 계층 구조 탐색 | `token` | `nodeId`, `path`, `depth`, `filter`, `limit` |
 | `sigma_get_node_info` | 노드 상세 정보 | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 일괄 조회 | `token`, `nodeIds` | — |
@@ -141,6 +141,37 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 | `sigma_scan_nodes_by_types` | 하위 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능 폰트 목록 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
+
+### sigma_find_node 의 `where` — 속성 조건 검색
+
+`path`(경로로 하나 찾기)와 **상호배타**. `select`로 대상을 좁히고 `checks` 배열로 조건을 건다.
+
+| 필드 | 의미 |
+|------|------|
+| `select.type` / `select.namePattern` | 노드 타입 / 이름 정규식 |
+| `checks[]` | 조건 목록 — **모두 만족(AND)**. OR 은 호출을 나눈다 |
+| `checks[].op` | `equals` · `range`(min/max) · `regex`(pattern) · `oneOf`(values) · `exists` — `sigma_lint` 커스텀 규칙과 동일한 5개 |
+| `checks[].field` | 노드 필드 경로. `width`, `fills[0].opacity` 처럼 중첩 가능 |
+| `nodeId` | 검색 시작 노드 (미지정 = 바인딩 페이지 전체) |
+| `limit` | 반환 상한 (기본 200, 초과 시 `truncated: true`) |
+
+```jsonc
+// width 가 1000 넘는 노드 전부
+sigma_find_node({ token, where: { checks: [{ op: "range", field: "width", min: 1000 }] } })
+
+// 이름이 Card 로 시작하는 FRAME 중 높이 200~400
+sigma_find_node({ token, where: {
+  select: { type: "FRAME", namePattern: "^Card" },
+  checks: [{ op: "range", field: "height", min: 200, max: 400 }],
+} })
+```
+
+**비용**: `id·name·type·x·y·width·height·childCount·visible·locked` 만 쓰면 트리 조회 1회로 끝난다.
+그 밖의 필드(`fills`·`opacity`·`cornerRadius`·`characters`·`fontSize`·`layoutMode`·`layoutSizing*`·
+`strokes`·`strokeWeight`·`description`)를 쓰면 상세 조회 왕복이 1회 추가된다(응답 `enriched: true`).
+
+**반환**: `{ matchCount, returned, truncated, enriched, nodes: [{ nodeId, name, type, x, y, width, height }] }`.
+`nodeId` 들을 `sigma_batch_modify` / `sigma_batch_delete` 에 그대로 넘길 수 있다.
 
 ## 컴포넌트 스펙 (스펙 기반 컴포넌트)
 

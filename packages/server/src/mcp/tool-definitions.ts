@@ -382,7 +382,9 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
   },
   {
     name: 'sigma_find_node',
-    description: `경로 또는 이름으로 Figma 노드를 찾습니다.
+    description: `Figma 노드를 찾습니다. **두 가지 방식** 중 하나를 씁니다 (상호배타).
+- \`path\`: 경로/이름으로 특정 노드 하나를 찾음
+- \`where\`: **속성 조건**으로 맞는 노드를 전부 찾음 (예: width 가 1000 넘는 노드 전부)
 
 **바인딩 필수**: 토큰이 바인딩된 페이지 내에서 검색합니다.
 바인딩되지 않은 토큰으로는 사용할 수 없습니다. 먼저 sigma_bind로 대상 페이지를 지정하세요.
@@ -401,7 +403,39 @@ path: ["icon/arrow/left"] (원소 1개짜리 배열)
 **사용 예시:**
 - "Button" — 바인딩된 페이지 최상위에서 Button 이름의 노드 찾기
 - "Components/Button" — Components 안의 Button 찾기
-- "Design System/Buttons/Primary" — 깊은 경로 탐색`,
+- "Design System/Buttons/Primary" — 깊은 경로 탐색
+
+## where — 속성 조건 검색
+
+\`select\`(대상 좁히기) + \`checks\`(조건들, **모두 만족해야 하는 AND**) 형태입니다.
+OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를 늘리지 않습니다).
+연산자는 sigma_lint 의 커스텀 규칙과 **완전히 동일한 5개**뿐입니다:
+\`equals\` · \`range\`(min/max) · \`regex\`(pattern) · \`oneOf\`(values) · \`exists\`
+
+\`\`\`jsonc
+// width 가 1000 넘는 노드 전부
+{ "where": { "checks": [{ "op": "range", "field": "width", "min": 1000 }] } }
+
+// 이름이 Card 로 시작하는 FRAME 중 높이 200~400
+{ "where": {
+    "select": { "type": "FRAME", "namePattern": "^Card" },
+    "checks": [{ "op": "range", "field": "height", "min": 200, "max": 400 }]
+} }
+
+// 오토레이아웃이 아닌 프레임 (상세 필드 → 왕복 1회 추가)
+{ "where": { "select": { "type": "FRAME" }, "checks": [{ "op": "equals", "field": "layoutMode", "value": "NONE" }] } }
+\`\`\`
+
+**비용**: \`id·name·type·x·y·width·height·childCount·visible·locked\` 만 쓰면 트리 조회 1회로 끝납니다.
+그 밖의 필드(\`fills\`·\`opacity\`·\`cornerRadius\`·\`characters\`·\`fontSize\`·\`layoutMode\`·
+\`layoutSizing*\`·\`strokes\`·\`strokeWeight\`·\`description\`)를 조건에 쓰면 상세 조회 왕복이
+한 번 추가됩니다(응답의 \`enriched: true\`로 확인). \`fills[0].color.r\` 처럼 중첩 경로도 됩니다.
+
+**범위**: 바인딩된 페이지 전체가 기본이며, \`nodeId\`로 특정 노드 하위로 좁힐 수 있습니다.
+결과가 \`limit\`(기본 200)을 넘으면 \`truncated: true\`와 함께 앞부분만 반환합니다.
+
+**반환**: \`{ matchCount, returned, truncated, enriched, nodes: [{ nodeId, name, type, x, y, width, height }] }\`
+찾은 \`nodeId\` 들을 sigma_batch_modify / sigma_batch_delete 에 그대로 넘겨 일괄 처리할 수 있습니다.`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -411,15 +445,58 @@ path: ["icon/arrow/left"] (원소 1개짜리 배열)
         },
         path: {
           type: ['string', 'array'],
-          description: '찾을 노드의 경로 ("A/B/C" 또는 ["A", "B", "C"])',
+          description: '찾을 노드의 경로 ("A/B/C" 또는 ["A", "B", "C"]). where 와 상호배타',
           items: { type: 'string' },
         },
         type: {
           type: 'string',
-          description: '특정 타입만 필터링 (예: "FRAME", "SECTION", "GROUP")',
+          description: '(path 모드) 특정 타입만 필터링 (예: "FRAME", "SECTION", "GROUP")',
+        },
+        where: {
+          type: 'object',
+          description: '속성 조건 검색. path 와 상호배타',
+          properties: {
+            select: {
+              type: 'object',
+              description: '대상 좁히기 (생략 시 전체 노드)',
+              properties: {
+                type: { type: 'string', description: '노드 타입 (예: "FRAME")' },
+                namePattern: { type: 'string', description: '이름 정규식 (예: "^Card")' },
+              },
+            },
+            checks: {
+              type: 'array',
+              description: '조건 배열 — 모두 만족해야 함(AND). OR 은 호출을 나눈다',
+              items: {
+                type: 'object',
+                properties: {
+                  op: {
+                    type: 'string',
+                    enum: ['equals', 'range', 'regex', 'oneOf', 'exists'],
+                    description: '연산자 (sigma_lint 커스텀 규칙과 동일)',
+                  },
+                  field: { type: 'string', description: '노드 필드 경로 (예: "width", "fills[0].opacity")' },
+                  value: { description: 'equals 비교값' },
+                  min: { type: 'number', description: 'range 최소' },
+                  max: { type: 'number', description: 'range 최대' },
+                  pattern: { type: 'string', description: 'regex 패턴' },
+                  values: { type: 'array', description: 'oneOf 허용값 목록' },
+                },
+                required: ['op', 'field'],
+              },
+            },
+          },
+        },
+        nodeId: {
+          type: 'string',
+          description: '(where 모드) 검색 시작 노드 — 이 노드 하위만 검색. 미지정 시 바인딩 페이지 전체',
+        },
+        limit: {
+          type: 'number',
+          description: '(where 모드) 반환 상한 (기본 200). 초과 시 truncated: true',
         },
       },
-      required: ['token', 'path'],
+      required: ['token'],
     },
   },
   {

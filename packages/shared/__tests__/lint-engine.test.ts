@@ -9,7 +9,7 @@ import {
   componentDescriptionEmptyRule, defaultNameRule, emptyContainerRule,
   fillSizingOrphanRule, hiddenLeafRule, rawNodeRule, strayPixelRule,
 } from '../src/lint/simple-rules';
-import { compileMatchRule, runMatchRule } from '../src/lint/json-rule';
+import { compileMatchRule, runMatchRule, matchesQuery, queryNodes, type NodeQuery } from '../src/lint/json-rule';
 import { fullyOccludedSiblingRule } from '../src/lint/occlusion';
 import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
@@ -690,5 +690,79 @@ describe('occlusion.ts — fully_occluded_sibling', () => {
     const covered = lnode({ id: 'under', x: 10, y: 10, width: 50, height: 50, visible: false });
     const cover = lnode({ id: 'over', type: 'FRAME', x: 0, y: 0, width: 200, height: 200, fills: solidFill() });
     expect(fullyOccludedSiblingRule([covered, cover], { parent: ['under', 'over'] })).toHaveLength(0);
+  });
+});
+
+describe('json-rule.ts — queryNodes (조건 검색, lint 와 같은 부품 재사용)', () => {
+  function qnode(overrides: Partial<LintNode>): LintNode {
+    return { id: 'n', name: 'Node', type: 'FRAME', x: 0, y: 0, width: 100, height: 100, childCount: 0, ...overrides };
+  }
+
+  const nodes: LintNode[] = [
+    qnode({ id: 'a', name: 'Card A', width: 1200, height: 300 }),
+    qnode({ id: 'b', name: 'Card B', width: 800, height: 300 }),
+    qnode({ id: 'c', name: 'Banner', width: 1500, height: 250, type: 'RECTANGLE' }),
+    qnode({ id: 'd', name: 'Card C', width: 1100, height: 900, layoutMode: 'NONE' }),
+  ];
+
+  test('checks 하나 — width range 로 큰 노드만', () => {
+    const found = queryNodes(nodes, { checks: [{ op: 'range', field: 'width', min: 1000 }] });
+    expect(found.map((n) => n.id)).toEqual(['a', 'c', 'd']);
+  });
+
+  test('select.type 으로 대상 축소', () => {
+    const found = queryNodes(nodes, {
+      select: { type: 'FRAME' },
+      checks: [{ op: 'range', field: 'width', min: 1000 }],
+    });
+    expect(found.map((n) => n.id)).toEqual(['a', 'd']);
+  });
+
+  test('select.namePattern 은 정규식', () => {
+    const found = queryNodes(nodes, { select: { namePattern: '^Card' } });
+    expect(found.map((n) => n.id)).toEqual(['a', 'b', 'd']);
+  });
+
+  test('checks 여러 개는 AND 결합', () => {
+    const found = queryNodes(nodes, {
+      checks: [
+        { op: 'range', field: 'width', min: 1000 },
+        { op: 'range', field: 'height', min: 500 },
+      ],
+    });
+    expect(found.map((n) => n.id)).toEqual(['d']);
+  });
+
+  test('조건이 비면 전체 반환 (필터 없음)', () => {
+    expect(queryNodes(nodes, {})).toHaveLength(nodes.length);
+    expect(queryNodes(nodes, { checks: [] })).toHaveLength(nodes.length);
+  });
+
+  test('없는 필드는 매칭 실패로 처리 (range/equals)', () => {
+    expect(queryNodes(nodes, { checks: [{ op: 'range', field: 'opacity', min: 0.5 }] })).toHaveLength(0);
+    expect(queryNodes(nodes, { checks: [{ op: 'equals', field: 'layoutMode', value: 'NONE' }] }).map((n) => n.id))
+      .toEqual(['d']);
+  });
+
+  test('exists — 필드 존재 여부', () => {
+    const found = queryNodes(nodes, { checks: [{ op: 'exists', field: 'layoutMode' }] });
+    expect(found.map((n) => n.id)).toEqual(['d']);
+  });
+
+  test('oneOf — 열거값', () => {
+    const found = queryNodes(nodes, { checks: [{ op: 'oneOf', field: 'type', values: ['RECTANGLE'] }] });
+    expect(found.map((n) => n.id)).toEqual(['c']);
+  });
+
+  test('중첩 경로 접근 (fills[0].opacity)', () => {
+    const withFill = qnode({ id: 'f', fills: [{ type: 'SOLID', opacity: 0.3 }] });
+    const q: NodeQuery = { checks: [{ op: 'range', field: 'fills[0].opacity', max: 0.5 }] };
+    expect(matchesQuery(withFill, q)).toBe(true);
+    expect(matchesQuery(qnode({ id: 'g' }), q)).toBe(false);
+  });
+
+  test('입력 순서를 유지한다', () => {
+    const found = queryNodes(nodes, { checks: [{ op: 'range', field: 'height', min: 200 }] });
+    expect(found.map((n) => n.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 });
