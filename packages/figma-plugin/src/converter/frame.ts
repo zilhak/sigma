@@ -4,33 +4,16 @@ import { parseHTML } from './html-parser';
 import { applyBackground, applyBorder, applyCornerRadius, applyBoxShadow, applyPadding } from './styles';
 import { applyLayoutMode, applySizingMode, applyAlignment } from './layout';
 
-// 마지막 생성 프레임 정보 추적 (위치 + 크기)
-export let lastCreatedFrame: { x: number; y: number; width: number; height: number } | null = null;
-export const FRAME_GAP = 100; // 프레임 간 간격 (px)
-
-// Helper to update position (needed since exports can't be reassigned from outside)
-export function setLastCreatedPosition(pos: { x: number; y: number } | null) {
-  if (pos) {
-    lastCreatedFrame = { x: pos.x, y: pos.y, width: 0, height: 0 };
-  } else {
-    lastCreatedFrame = null;
-  }
-}
-
 /**
- * position 미지정 시 자동 배치 위치 계산
- * - 이전 프레임이 있으면: 오른쪽에 FRAME_GAP 간격으로 배치
- * - 이전 프레임이 없으면: 현재 페이지의 기존 프레임 bounding box 아래 또는 (0, 0)
+ * position 미지정 시 자동 배치 위치 계산 — 대상 페이지의 현재 내용만 보고 정한다.
+ *
+ * 과거에는 "마지막으로 생성한 프레임" 전역(lastCreatedFrame)을 기억해 그 오른쪽에
+ * 배치했다. 그 전역은 (1) 페이지를 구분하지 않아 A 페이지에 만든 좌표가 B 페이지의
+ * 배치 기준이 됐고, (2) 여러 에이전트가 동시에 생성하면 서로의 기준을 덮어써
+ * 프레임이 겹쳤다. 페이지 스캔 방식은 계산~appendChild 사이에 await 가 없어
+ * (단일 이벤트 루프에서 원자적) 동시 호출에도 안전하다.
  */
 function getAutoPosition(frame: SceneNode, targetPage: PageNode): { x: number; y: number } {
-  // 이전에 생성한 프레임이 있으면 그 오른쪽에 배치
-  if (lastCreatedFrame) {
-    return {
-      x: lastCreatedFrame.x + lastCreatedFrame.width + FRAME_GAP,
-      y: lastCreatedFrame.y,
-    };
-  }
-
   // 페이지에 기존 프레임이 있으면 bounding box 아래에 배치
   const existingFrames = targetPage.children;
   if (existingFrames.length > 0) {
@@ -80,7 +63,7 @@ export async function createFrameFromJSON(
   // 이름 설정
   frame.name = name || node.className || node.tagName;
 
-  // 위치 결정: 명시적 좌표 > 자동 배치 (이전 프레임 옆 또는 페이지 하단)
+  // 위치 결정: 명시적 좌표 > 자동 배치 (대상 페이지 하단)
   if (position) {
     frame.x = position.x;
     frame.y = position.y;
@@ -89,9 +72,6 @@ export async function createFrameFromJSON(
     frame.x = autoPos.x;
     frame.y = autoPos.y;
   }
-
-  // 마지막 프레임 정보 저장 (위치 + 크기)
-  lastCreatedFrame = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
 
   // 대상 페이지에 추가
   targetPage.appendChild(frame);
@@ -149,7 +129,7 @@ export async function createFrameFromHTML(
 
   frame.name = name || 'HTML Import';
 
-  // 위치 결정: 명시적 좌표 > 자동 배치
+  // 위치 결정: 명시적 좌표 > 자동 배치 (대상 페이지 하단)
   if (position) {
     frame.x = position.x;
     frame.y = position.y;
@@ -158,8 +138,6 @@ export async function createFrameFromHTML(
     frame.x = autoPos.x;
     frame.y = autoPos.y;
   }
-
-  lastCreatedFrame = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
 
   // 대상 페이지에 추가
   targetPage.appendChild(frame);

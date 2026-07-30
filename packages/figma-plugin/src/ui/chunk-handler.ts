@@ -1,5 +1,5 @@
 import {
-  getWs, getChunkBuffer, setChunkBuffer,
+  getWs, getChunkBuffer, setChunkBuffer, deleteChunkBuffer,
   log,
 } from './ui-state';
 import { sendToPlugin } from './bridge-server';
@@ -26,8 +26,9 @@ export function handleChunkStart(msg: ChunkMsg) {
     `청크 전송 시작: ${msg.totalChunks}개 청크 예정 (${msg.format !== undefined ? msg.format : 'json'})${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`,
     'info'
   );
-  setChunkBuffer({
-    commandId: msg.commandId !== undefined ? msg.commandId : '',
+  const startCommandId = msg.commandId !== undefined ? msg.commandId : '';
+  setChunkBuffer(startCommandId, {
+    commandId: startCommandId,
     totalChunks: msg.totalChunks !== undefined ? msg.totalChunks : 0,
     receivedChunks: new Map(),
     format: msg.format !== undefined ? msg.format : 'json',
@@ -42,8 +43,8 @@ export function handleChunkStart(msg: ChunkMsg) {
 
 // CHUNK 처리
 export function handleChunk(msg: ChunkMsg) {
-  const chunkBuffer = getChunkBuffer();
-  if (!chunkBuffer || chunkBuffer.commandId !== msg.commandId) {
+  const chunkBuffer = getChunkBuffer(msg.commandId !== undefined ? msg.commandId : '');
+  if (!chunkBuffer) {
     log(`청크 버퍼 불일치: ${msg.commandId}`, 'warn');
     return;
   }
@@ -58,10 +59,11 @@ export function handleChunk(msg: ChunkMsg) {
 
 // CHUNK_END 처리
 export function handleChunkEnd(msg: ChunkMsg) {
-  const chunkBuffer = getChunkBuffer();
+  const endCommandId = msg.commandId !== undefined ? msg.commandId : '';
+  const chunkBuffer = getChunkBuffer(endCommandId);
   const ws = getWs();
 
-  if (!chunkBuffer || chunkBuffer.commandId !== msg.commandId) {
+  if (!chunkBuffer) {
     log(`청크 종료 불일치: ${msg.commandId}`, 'warn');
     return;
   }
@@ -75,7 +77,7 @@ export function handleChunkEnd(msg: ChunkMsg) {
       success: false,
       error: `Missing chunks: received ${chunkBuffer.receivedChunks.size}/${chunkBuffer.totalChunks}`,
     }));
-    setChunkBuffer(null);
+    deleteChunkBuffer(endCommandId);
     return;
   }
 
@@ -162,5 +164,5 @@ export function handleChunkEnd(msg: ChunkMsg) {
     }));
   }
 
-  setChunkBuffer(null);
+  deleteChunkBuffer(endCommandId);
 }

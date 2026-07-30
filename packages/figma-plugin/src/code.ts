@@ -1,5 +1,5 @@
 import type { ExtractedNode, TreeFilter, ComponentParam } from '@sigma/shared';
-import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame, setLastCreatedPosition } from './converter';
+import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame } from './converter';
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
 import { getTargetPage, getPageById, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage, reorderPage } from './node-ops';
@@ -516,11 +516,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       figma.ui.resize(width, height);
       break;
     }
-
-    case 'reset-position':
-      setLastCreatedPosition(null);
-      figma.ui.postMessage({ type: 'info', message: '위치가 리셋되었습니다.' });
-      break;
 
     case 'extract-to-json': {
       const selection = figma.currentPage.selection;

@@ -66,6 +66,29 @@ MCP 도구는 에이전트가 호출하는 것이고, 그 시각 Figma 화면을
 
 새 도구를 추가할 때 이 규칙을 어기는지 자문한다: "이 도구가 사람이 보던 화면을 움직이는가?"
 
+### 멀티에이전트 동시 작업 (지원) — 깨뜨리지 말 것
+
+여러 에이전트가 같은 Figma 파일에서 **동시에** 작업할 수 있다. 이는 아래 성질들이 유지되는
+한에서 성립하므로, 새 코드가 이 중 하나라도 깨면 동시 작업 보장이 무너진다.
+
+| 성질 | 근거 위치 |
+|------|-----------|
+| 토큰·바인딩이 토큰별 격리 | `auth/token.ts` (`Map<string, SigmaTokenData>`) |
+| 명령이 고유 `commandId`로 다중화 (응답 교차 없음) | `websocket/server.ts` `pendingCommands` + `code.ts`의 commandId 클로저 캡처 |
+| 대상 페이지는 바인딩 `pageId`로 결정 (활성 page 무관) | `getTargetPage` · `placeNode` |
+| 포커스(페이지/뷰/선택)를 부작용으로 바꾸지 않음 | 위 "사용자 포커스 불변" 절 |
+| 청크 버퍼가 `commandId`별로 분리 | `ui-state.ts` `chunkBuffers` Map |
+| 자동 배치가 전역 상태를 쓰지 않음 (페이지 스캔 기반) | `converter/frame.ts` `getAutoPosition` |
+
+**금지 패턴**: 명령 간에 공유되는 모듈 전역 가변 상태를 새로 만들지 않는다. 특히
+"마지막으로 ~한 것"을 기억하는 전역은 동시 작업에서 서로를 덮어쓴다
+(`lastCreatedFrame`이 정확히 그 이유로 제거됐다). 상태가 필요하면 `commandId`나
+`pageId`로 키를 나눈다.
+
+**남는 한계**(문서로 안내하고, 코드로 막지 않는다): 같은 노드를 동시에 수정하면 마지막
+쓰기가 이긴다(Figma 특성) · `sigma_trigger_undo`/`sigma_commit_undo`는 문서 전역이라
+동시 작업 중 사용 금지 · `position` 미지정 자동 배치는 호출 시점 페이지 내용 기준.
+
 ### Figma Plugin 코드 제약
 
 Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:

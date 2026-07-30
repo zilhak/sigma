@@ -16,6 +16,8 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 128개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
+**멀티에이전트 동시 작업을 지원합니다.** 여러 에이전트가 각자 토큰을 발급·바인딩해 같은 Figma 파일에서 동시에 작업할 수 있습니다 — 순번을 정해 한 번에 하나씩 돌릴 필요가 없습니다. 모든 도구가 바인딩된 `pageId`와 `nodeId`로만 동작하고(현재 열린 페이지·현재 선택에 의존하지 않음), 명령은 고유 `commandId`로 다중화되며, 어떤 도구도 부작용으로 사용자의 페이지·뷰·선택 포커스를 바꾸지 않습니다. 단, 같은 노드를 동시에 수정하면 마지막 쓰기가 이기고(Figma 특성) `sigma_trigger_undo`는 문서 전역이므로 동시 작업 중에는 쓰지 마세요.
+
 ## 모듈 구성
 
 | 모듈 | 역할 |

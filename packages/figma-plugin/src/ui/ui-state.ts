@@ -114,7 +114,10 @@ let pollingInterval: number | null = null;
 let isConnected = false;
 let isMinimized = false;
 let assignedPluginId: string | null = null;
-let chunkBuffer: ChunkBuffer | null = null;
+// 청크 버퍼는 commandId 별로 보관한다. 단일 슬롯이던 시절에는 여러 에이전트가
+// 동시에 대용량(1MB 초과) 데이터를 보내면 나중 CHUNK_START 가 앞선 버퍼를 덮어써
+// 먼저 시작한 전송이 조용히 유실됐다.
+const chunkBuffers: Map<string, ChunkBuffer> = new Map();
 let fileInfo: FileInfo | null = null;
 let currentSelectionNodes: SelectionNode[] = [];
 
@@ -134,8 +137,12 @@ export function setIsMinimized(value: boolean) { isMinimized = value; }
 export function getAssignedPluginId(): string | null { return assignedPluginId; }
 export function setAssignedPluginId(value: string | null) { assignedPluginId = value; }
 
-export function getChunkBuffer(): ChunkBuffer | null { return chunkBuffer; }
-export function setChunkBuffer(value: ChunkBuffer | null) { chunkBuffer = value; }
+export function getChunkBuffer(commandId: string): ChunkBuffer | null {
+  const buf = chunkBuffers.get(commandId);
+  return buf !== undefined ? buf : null;
+}
+export function setChunkBuffer(commandId: string, value: ChunkBuffer) { chunkBuffers.set(commandId, value); }
+export function deleteChunkBuffer(commandId: string) { chunkBuffers.delete(commandId); }
 
 export function getFileInfo(): FileInfo | null { return fileInfo; }
 export function setFileInfo(value: FileInfo | null) { fileInfo = value; }

@@ -2818,7 +2818,10 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   },
   {
     name: 'sigma_commit_undo',
-    description: 'Undo 체크포인트 생성 (현재 상태를 undo 히스토리에 기록)',
+    description: `Undo 체크포인트 생성 (현재 상태를 undo 히스토리에 기록).
+
+⚠️ 체크포인트도 문서 전역입니다 — 동시 작업 중이라면 다른 주체의 변경까지 같은 경계에
+묶입니다(sigma_trigger_undo 설명 참조).`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -2829,7 +2832,12 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   },
   {
     name: 'sigma_trigger_undo',
-    description: 'Undo 실행 (마지막 작업 되돌리기)',
+    description: `Undo 실행 (마지막 작업 되돌리기).
+
+⚠️ **문서 전역 동작**: undo 히스토리는 Figma 문서 하나에 대해 공유됩니다. 여러 에이전트가
+동시에 작업 중이거나 사람이 같은 파일을 편집하고 있으면, **자기 작업이 아닌 마지막 변경이
+되돌려질 수 있습니다.** 되돌릴 대상이 확실할 때만 쓰고, 그 외에는 해당 노드를 직접
+수정/삭제하세요(sigma_modify_node, sigma_batch_delete).`,
     inputSchema: {
       type: 'object' as const,
       properties: {
