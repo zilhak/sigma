@@ -200,6 +200,20 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
       });
       break;
 
+    case PLUGIN_MSG.GOTO_NODE_RESULT: {
+      // UI 전용 결과 — 서버로 forward 하지 않는다.
+      if (msg.success) {
+        const r = msg.result as { nodeName: string; nodeType: string; pageSwitched: boolean; pageName: string };
+        const suffix = r.pageSwitched ? ` (페이지 전환: ${r.pageName})` : '';
+        showMessage(`이동: ${r.nodeName} [${r.nodeType}]${suffix}`, 'success');
+        log(`노드로 뷰포트 이동: ${r.nodeName} [${r.nodeType}]${suffix}`, 'success');
+      } else {
+        showMessage(msg.error as string, 'error');
+        log(`노드 이동 실패: ${msg.error}`, 'error');
+      }
+      break;
+    }
+
     case PLUGIN_MSG.INFO:
       log(msg.message as string, 'info');
       break;

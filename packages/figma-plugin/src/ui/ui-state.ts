@@ -45,6 +45,8 @@ export const dom = {
   viewportGotoX: document.getElementById('viewportGotoX') as HTMLInputElement,
   viewportGotoY: document.getElementById('viewportGotoY') as HTMLInputElement,
   viewportGotoBtn: document.getElementById('viewportGotoBtn') as HTMLButtonElement,
+  gotoNodeIdInput: document.getElementById('gotoNodeIdInput') as HTMLInputElement,
+  gotoNodeBtn: document.getElementById('gotoNodeBtn') as HTMLButtonElement,
   selectionTextArea: document.getElementById('selectionTextArea') as HTMLTextAreaElement,
   copyNodeInfoBtn: document.getElementById('copyNodeInfoBtn') as HTMLButtonElement,
   // 서버 탭

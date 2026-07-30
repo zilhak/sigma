@@ -56,5 +56,6 @@ export const PLUGIN_MSG = {
   GET_NODE_DATA_RESULT: 'get-node-data-result',
   GET_NODES_DATA_RESULT: 'get-nodes-data-result',
   PAGE_LINT_RESULT: 'page-lint-result',
+  GOTO_NODE_RESULT: 'goto-node-result',
   SELECTION_CHANGED: 'selection-changed',
 } as const;

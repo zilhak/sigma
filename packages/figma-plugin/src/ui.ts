@@ -112,6 +112,24 @@ dom.viewportGotoBtn.addEventListener('click', gotoViewportCenter);
   });
 });
 
+// === 일반 탭: 노드 ID로 뷰포트 이동 ===
+// 좌표 이동과 달리 존재하지 않는 id 를 넣는 실수가 흔해, UI 전용 'goto-node'로
+// 검증 결과를 돌려받아 성공/실패를 메시지로 표시한다 (다른 페이지 노드면 페이지도 전환).
+function gotoNode() {
+  const nodeId = dom.gotoNodeIdInput.value.trim();
+  if (!nodeId) {
+    showMessage('노드 ID를 입력하세요', 'error');
+    return;
+  }
+  sendToPlugin('goto-node', undefined, undefined, undefined, undefined, nodeId);
+}
+
+dom.gotoNodeBtn.addEventListener('click', gotoNode);
+
+dom.gotoNodeIdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') gotoNode();
+});
+
 // === 페이지 탭: lint 설정 보기/편집 (현재 페이지, UI 전용) ===
 // lint 실행은 서버가 담당하고, 여기서는 페이지 저장 config 메타데이터의 조회/편집만 한다.
 // 열려는 모달을 기억해 get-page-lint 응답으로 채운다.

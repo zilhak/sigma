@@ -406,6 +406,68 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
+    case 'goto-node': {
+      // 플러그인 UI 전용 — nodeId 로 뷰포트를 옮긴다(서버 forward 안 함).
+      // 서버 경로의 set-viewport(nodeIds)와 달리, 못 찾은 id 를 조용히 넘기지 않고
+      // UI 에 실패를 알린다(사용자가 직접 타이핑하므로 오타가 흔하다).
+      const gotoId = ((msg.nodeId as string | undefined) || '').trim();
+      if (!gotoId) {
+        figma.ui.postMessage({ type: 'goto-node-result', success: false, error: '노드 ID를 입력하세요' });
+        break;
+      }
+      const gotoNode = figma.getNodeById(gotoId);
+      if (!gotoNode) {
+        figma.ui.postMessage({ type: 'goto-node-result', success: false, error: `노드를 찾을 수 없습니다: ${gotoId}` });
+        break;
+      }
+      if (gotoNode.type === 'DOCUMENT') {
+        figma.ui.postMessage({ type: 'goto-node-result', success: false, error: '문서 루트로는 이동할 수 없습니다' });
+        break;
+      }
+      try {
+        // PAGE 는 페이지 전환만 (뷰포트 대상 노드가 아님)
+        if (gotoNode.type === 'PAGE') {
+          figma.currentPage = gotoNode as PageNode;
+          figma.ui.postMessage({
+            type: 'goto-node-result', success: true,
+            result: { nodeId: gotoNode.id, nodeName: gotoNode.name, nodeType: 'PAGE', pageSwitched: true, pageName: gotoNode.name },
+          });
+          break;
+        }
+
+        // 다른 페이지의 노드면 그 페이지로 먼저 전환해야 scrollAndZoomIntoView 가 동작한다.
+        let ancestor: BaseNode | null = gotoNode.parent;
+        while (ancestor && ancestor.type !== 'PAGE') {
+          ancestor = ancestor.parent;
+        }
+        if (!ancestor) {
+          // 트리에서 분리된 노드(삭제됨 등) — 이동 대상이 없다.
+          figma.ui.postMessage({ type: 'goto-node-result', success: false, error: `노드가 페이지에 속해 있지 않습니다: ${gotoId}` });
+          break;
+        }
+        const ownerPage = ancestor as PageNode;
+        const pageSwitched = ownerPage.id !== figma.currentPage.id;
+        if (pageSwitched) {
+          figma.currentPage = ownerPage;
+        }
+
+        figma.viewport.scrollAndZoomIntoView([gotoNode as SceneNode]);
+        figma.ui.postMessage({
+          type: 'goto-node-result', success: true,
+          result: {
+            nodeId: gotoNode.id, nodeName: gotoNode.name, nodeType: gotoNode.type,
+            pageSwitched, pageName: ownerPage.name,
+          },
+        });
+      } catch (error) {
+        figma.ui.postMessage({
+          type: 'goto-node-result', success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+      break;
+    }
+
     case 'get-pages': {
       const pages = getAllPages();
       figma.ui.postMessage({
