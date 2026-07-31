@@ -148,6 +148,10 @@ Agent가 보내는 값을 정규화하는 유틸리티 함수들:
 - 각 세그먼트에 대해 이름 매칭으로 탐색
 - `type` 필터로 특정 노드 타입만 반환
 
+> `sigma_find_node` 에는 속성 조건 검색(`where`) 축도 있지만, 그쪽은 **서버에서 평가**하므로
+> 이 함수를 타지 않습니다(서버가 `getTree` 결과에 lint 엔진의 `queryNodes` 를 적용).
+> 플러그인 변경 없이 동작하며, 스키마는 [mcp-tools.md](../mcp-tools.md) 참조.
+
 ### getTreeWithFilter(options)
 
 **MCP 도구:** `sigma_get_tree`

@@ -171,7 +171,7 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 (128개):**
+**MCP 도구 — 주요 도구 발췌 (전체 128개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
@@ -230,7 +230,7 @@ AI Agent:
 | 관리 | `sigma_server_status` / `sigma_storage_stats` | 서버 상태 / 스토리지 현황 |
 | | `sigma_cleanup` / `sigma_list_screenshots` / `sigma_delete_screenshot` | 스토리지 정리 / 스크린샷 관리 |
 
-전체 도구 목록 및 파라미터 상세는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
+위 표는 발췌입니다. 128개 전체 목록과 파라미터 상세는 [MCP 도구 레퍼런스](docs/mcp-tools.md)를 참조하세요.
 
 ### Docker (선택 - 서버만)
 
