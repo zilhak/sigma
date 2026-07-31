@@ -741,6 +741,7 @@ export class FigmaWebSocketServer {
       filter?: { types?: string[]; namePattern?: string };
       limit?: number;
       pageId?: string;
+      timeoutMs?: number;
     },
     pluginId?: string
   ): Promise<{
@@ -761,7 +762,7 @@ export class FigmaWebSocketServer {
       pageId: options.pageId,
     }, {
       pluginId,
-      timeoutMs: 60000,  // 60초 (트리가 클 수 있음)
+      timeoutMs: options.timeoutMs ?? 60000,  // 60초 기본 (트리가 클 수 있음). 호출자가 override 가능.
       logSuffix: ` (depth: ${options.depth || 1})`,
     });
   }

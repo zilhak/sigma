@@ -32,10 +32,23 @@ import { filterSuppressed, collectSubjectNodeIds } from '../../lint/suppress.js'
  */
 const LINT_TREE_NODE_LIMIT = 200000;
 
+/**
+ * lint 트리 조회 타임아웃(기본, ms). getTree 기본 60초는 인터랙티브용인데, treeNodeLimit 을 크게 올려
+ * 괴물 페이지를 통째로 뜨면 플러그인 직렬화가 60초를 넘겨 명령이 reject 될 수 있다(상한만 올리고
+ * 타임아웃이 고정이면 반쪽). `treeTimeoutMs` 인자로 함께 올려 완주시킨다.
+ */
+const LINT_TREE_TIMEOUT_MS = 60000;
+
 /** args.treeNodeLimit(양의 정수)로 override, 아니면 기본값. 0/음수/비정수는 무시하고 기본값. */
 function resolveTreeLimit(args: Record<string, unknown>): number {
   const v = args.treeNodeLimit;
   return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : LINT_TREE_NODE_LIMIT;
+}
+
+/** args.treeTimeoutMs(양의 정수 ms)로 override, 아니면 기본값. */
+function resolveTreeTimeout(args: Record<string, unknown>): number {
+  const v = args.treeTimeoutMs;
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : LINT_TREE_TIMEOUT_MS;
 }
 
 function fixesToOps(fixes: LayoutFix[]): Array<{ nodeId: string; method: string; args: Record<string, unknown> }> {
@@ -210,8 +223,9 @@ async function runPageLint(
   }
   const config = resolved.config;
   const treeLimit = resolveTreeLimit(args);
+  const treeTimeout = resolveTreeTimeout(args);
 
-  const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit }, pluginId);
+  const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
   const roots = tree.children as TreeNode[];
   const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId);
   const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
@@ -251,7 +265,7 @@ async function runPageLint(
     ? await wsServer.batchModifyNodes(ops, pluginId)
     : { skipped: true, reason: '자동수정 대상 없음' };
 
-  const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit }, pluginId);
+  const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
   const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId);
   const afterViolations = (await suppressViolations(afterRaw, wsServer, pluginId)).violations;
 
@@ -274,6 +288,7 @@ async function runFileLint(
 ): Promise<ToolResult> {
   const { wsServer } = context;
   const treeLimit = resolveTreeLimit(args);
+  const treeTimeout = resolveTreeTimeout(args);
   const pages = wsServer.getPluginPages(pluginId || '');
   if (!pages) {
     return jsonResponse({ error: '플러그인 페이지 목록을 가져올 수 없습니다. sigma_bind 로 바인딩됐는지 확인하세요.' });
@@ -289,7 +304,7 @@ async function runFileLint(
       continue;
     }
     try {
-      const tree = await wsServer.getTree({ depth: 'full', pageId: p.pageId, limit: treeLimit }, pluginId);
+      const tree = await wsServer.getTree({ depth: 'full', pageId: p.pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
       const rawViolations = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId);
       const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
       results.push({
