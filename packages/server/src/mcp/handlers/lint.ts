@@ -21,6 +21,23 @@ import { filterSuppressed, collectSubjectNodeIds } from '../../lint/suppress.js'
  * 파일 lint 결과는 md 리포트 파일로 떨구고 응답엔 요약+경로만 싣는다.
  */
 
+/**
+ * lint 트리 순회 노드 상한(기본값). get_tree 기본 limit(1000)은 인터랙티브 탐색용이라 큰 페이지에서 잘리는데,
+ * lint 가 그 잘린 트리를 쓰면 뒤쪽 노드가 아예 검사되지 않고 "clean" 으로 오보한다(silent false-clean).
+ * lint 는 완전성이 생명이라 훨씬 높은 기본 상한으로 뜬다(현실 Figma 페이지는 이 값에 안 걸림).
+ * 상한 자체가 필요한 이유: 병적으로 큰 페이지에서 플러그인 직렬화·JSON parse·enrich 2차 왕복이
+ * sendCommand 60초 월에 부딪혀 죽기 전에, "truncated: 부분검사"로 우아하게 끝내기 위함(안전밸브).
+ * `treeNodeLimit` 인자로 호출별 override 가능(괴물 페이지에서 비용 감수하고 올리거나, 낮춰서 빠르게).
+ * 이 상한에 실제로 걸리면 응답에 scanTruncated/scannedNodes/scanWarning 로 명시 노출하고 clean=false.
+ */
+const LINT_TREE_NODE_LIMIT = 200000;
+
+/** args.treeNodeLimit(양의 정수)로 override, 아니면 기본값. 0/음수/비정수는 무시하고 기본값. */
+function resolveTreeLimit(args: Record<string, unknown>): number {
+  const v = args.treeNodeLimit;
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : LINT_TREE_NODE_LIMIT;
+}
+
 function fixesToOps(fixes: LayoutFix[]): Array<{ nodeId: string; method: string; args: Record<string, unknown> }> {
   return fixes.flatMap((f) => [
     { nodeId: f.sectionId, method: 'resize', args: { width: f.width, height: f.height } },
@@ -192,8 +209,9 @@ async function runPageLint(
     });
   }
   const config = resolved.config;
+  const treeLimit = resolveTreeLimit(args);
 
-  const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId }, pluginId);
+  const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit }, pluginId);
   const roots = tree.children as TreeNode[];
   const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId);
   const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
@@ -208,7 +226,12 @@ async function runPageLint(
     configMode,
     configSource: resolved.source,
     ...(resolved.error ? { configError: resolved.error } : {}),
-    clean: violations.length === 0,
+    // 트리가 상한에서 잘렸으면 clean 은 신뢰불가(뒤쪽 미검사) — 절대 조용히 clean 으로 보고하지 않는다.
+    ...(tree.truncated
+      ? { scanTruncated: true, scannedNodes: tree.totalCount, treeNodeLimit: treeLimit,
+          scanWarning: `트리가 상한 ${treeLimit} 노드에서 잘려 뒤쪽이 미검사입니다("clean" 은 스캔된 범위 한정). treeNodeLimit 인자로 상한을 올리거나, nodeId 스코프로 섹션별로 나눠 돌리세요.` }
+      : {}),
+    clean: violations.length === 0 && !tree.truncated,
     violationCount: violations.length,
     ...(suppressedCount ? { suppressed: suppressedCount } : {}),
     violations,
@@ -228,7 +251,7 @@ async function runPageLint(
     ? await wsServer.batchModifyNodes(ops, pluginId)
     : { skipped: true, reason: '자동수정 대상 없음' };
 
-  const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId }, pluginId);
+  const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit }, pluginId);
   const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId);
   const afterViolations = (await suppressViolations(afterRaw, wsServer, pluginId)).violations;
 
@@ -250,6 +273,7 @@ async function runFileLint(
   baseLabel: string,
 ): Promise<ToolResult> {
   const { wsServer } = context;
+  const treeLimit = resolveTreeLimit(args);
   const pages = wsServer.getPluginPages(pluginId || '');
   if (!pages) {
     return jsonResponse({ error: '플러그인 페이지 목록을 가져올 수 없습니다. sigma_bind 로 바인딩됐는지 확인하세요.' });
@@ -265,10 +289,14 @@ async function runFileLint(
       continue;
     }
     try {
-      const tree = await wsServer.getTree({ depth: 'full', pageId: p.pageId }, pluginId);
+      const tree = await wsServer.getTree({ depth: 'full', pageId: p.pageId, limit: treeLimit }, pluginId);
       const rawViolations = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId);
       const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
-      results.push({ pageId: p.pageId, pageName: p.pageName, configSource: resolved.source, configError: resolved.error, violations, suppressedCount });
+      results.push({
+        pageId: p.pageId, pageName: p.pageName, configSource: resolved.source, configError: resolved.error,
+        violations, suppressedCount,
+        ...(tree.truncated ? { truncated: true, scannedNodes: tree.totalCount } : {}),
+      });
     } catch (error) {
       results.push({
         pageId: p.pageId, pageName: p.pageName, configSource: resolved.source,
@@ -285,6 +313,7 @@ async function runFileLint(
 
   const total = results.reduce((s, r) => s + r.violations.length, 0);
   const totalSuppressed = results.reduce((s, r) => s + (r.suppressedCount || 0), 0);
+  const truncatedPages = results.filter(r => r.truncated);
   const checked = results.filter(r => r.configSource !== 'skipped');
   return jsonResponse({
     scope: 'file',
@@ -295,12 +324,19 @@ async function runFileLint(
     pagesSkipped: results.length - checked.length,
     totalViolations: total,
     ...(totalSuppressed ? { totalSuppressed } : {}),
-    clean: total === 0,
+    // 잘린 페이지가 있으면 그 페이지는 부분 검사라 clean 이 신뢰불가.
+    clean: total === 0 && truncatedPages.length === 0,
+    ...(truncatedPages.length
+      ? { scanTruncatedPages: truncatedPages.map(r => ({ page: r.pageName, scannedNodes: r.scannedNodes })),
+          treeNodeLimit: treeLimit,
+          scanWarning: `${truncatedPages.length}개 페이지가 노드 상한(${treeLimit})에서 잘려 부분 검사됐습니다. treeNodeLimit 인자로 상한을 올리거나, 해당 페이지를 scope=page + nodeId 스코프로 나눠 돌리세요.` }
+      : {}),
     reportPath,
     summary: results.map(r => ({
       page: r.pageName,
       configSource: r.configSource,
       violations: r.configSource === 'skipped' ? null : r.violations.length,
+      ...(r.truncated ? { scanTruncated: true, scannedNodes: r.scannedNodes } : {}),
       ...(r.suppressedCount ? { suppressed: r.suppressedCount } : {}),
       ...(r.configError ? { configError: r.configError } : {}),
     })),

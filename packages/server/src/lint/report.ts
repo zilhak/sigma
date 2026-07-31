@@ -17,6 +17,10 @@ export interface PageLintResult {
   violations: Violation[];
   /** 노드 lint-ignore 로 억제된 위반 수 (있을 때만) */
   suppressedCount?: number;
+  /** 트리가 노드 상한에서 잘려 부분만 검사됨(clean 신뢰불가) */
+  truncated?: boolean;
+  /** 잘린 경우 실제 스캔된 노드 수 */
+  scannedNodes?: number;
 }
 
 export interface ReportMeta {
@@ -78,8 +82,9 @@ export function renderReportMarkdown(pages: PageLintResult[], meta: ReportMeta):
     const notes: string[] = [];
     if (p.configError) notes.push(`⚠️ ${p.configError}`);
     else if (p.configSource === 'skipped') notes.push('config 없음');
+    if (p.truncated) notes.push(`⚠️ 트리 잘림(스캔 ${p.scannedNodes} 노드) — 부분 검사, nodeId 스코프로 분할 권장`);
     if (p.suppressedCount) notes.push(`억제 ${p.suppressedCount}`);
-    const cnt = p.configSource === 'skipped' ? '—' : String(p.violations.length);
+    const cnt = p.configSource === 'skipped' ? '—' : String(p.violations.length) + (p.truncated ? '⚠️' : '');
     lines.push(`| ${p.pageName} | ${SOURCE_LABEL[p.configSource]} | ${cnt} | ${notes.join(' · ')} |`);
   }
   lines.push('');

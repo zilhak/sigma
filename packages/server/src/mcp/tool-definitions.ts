@@ -3047,7 +3047,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 - \`per-page\`: 각 페이지에 저장된 lint config(sigma_set_page_data, key:"lint")로 각각. 저장 없으면 base 폴백, base도 없으면 그 페이지 skip(명시).
 - \`merge\`: base + 페이지 저장 config 병합(페이지가 builtins 를 rule 단위로 override). 문서=base + 페이지=override 패턴.
 
-페이지 저장 config 는 sigma_set_page_data({ key:"lint", value }) 로, 문서 base 는 pageId:"document" 로 저장합니다.`,
+페이지 저장 config 는 sigma_set_page_data({ key:"lint", value }) 로, 문서 base 는 pageId:"document" 로 저장합니다.
+
+**완전성**: lint 는 트리를 \`treeNodeLimit\`(기본 200000) 노드까지 전수 순회합니다(get_tree 인터랙티브 기본 1000과 다름 — lint 는 부분 스캔을 clean 으로 오보하면 안 되므로). 상한에 걸리면 응답에 \`scanTruncated: true\` + \`scannedNodes\` + \`scanWarning\` 을 싣고 \`clean\` 을 false 로 강제합니다(그 페이지는 \`treeNodeLimit\` 을 올리거나 \`nodeId\` 스코프로 섹션별로 나눠 재검사).`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -3059,6 +3061,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         nodeId: { type: 'string', description: '(선택, scope=page) 검사 시작 노드. 미지정 시 페이지 전체' },
         path: { type: 'string', description: '(선택, scope=page) 검사 시작 경로 ("A/B/C")' },
         apply: { type: 'boolean', description: '(선택, scope=page) true 면 빌트인 안전수정 실제 적용. 기본 false(dry-run). file 범위에선 무시(read-only)' },
+        treeNodeLimit: { type: 'number', description: '(선택) 트리 순회 노드 상한. 기본 200000(현실 페이지는 안 걸림). 이 상한에 걸리면 뒤쪽이 미검사되고 응답에 scanTruncated/scannedNodes/scanWarning + clean=false 로 명시됨. 아주 큰 페이지를 통째로 검사하려면 올리고(직렬화·60초 타임아웃 비용 감수), 빠르게 훑으려면 낮추세요.' },
       },
       required: ['token'],
     },
