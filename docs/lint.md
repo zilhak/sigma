@@ -1,7 +1,7 @@
 # Lint (`sigma_lint`) — 빌트인 카탈로그 + 커스텀 규칙
 
-Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 15개(좌표 기반 8종 + 구조/이름/가시성 6종 +
-occlusion 1종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
+Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 20개(좌표 기반 8종 + 구조/이름/가시성 6종 +
+occlusion 1종 + opt-in 5종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
 
 ```
 검사: sigma_lint(token, configPath, nodeId?, path?)
@@ -99,7 +99,7 @@ sigma_set_node_data({ token, nodeId:"1:24", key:"lint-ignore", value:'{"rules":"
 sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 ```
 
-## 빌트인 규칙 18종
+## 빌트인 규칙 20종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -120,9 +120,42 @@ sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 | `fully_occluded_sibling` | 같은 부모 안에서 나중에 그려지는(z-order 위) 형제가 완전 불투명한 SOLID fill로 바운딩박스 전체를 덮어, 어떤 상태에서도 절대 안 보이는 노드 — `hidden_leaf`의 암묵적 버전. **fills/opacity 조회가 필요해 켜져 있으면 config.custom 유무와 무관하게 `get_nodes_info` 왕복이 한 번 추가된다.** 덮는 노드는 RECTANGLE/FRAME/COMPONENT/INSTANCE만 인정(원·별 등 비사각형은 바운딩박스 근사가 부정확해 제외), 그라디언트/이미지 fill은 완전 불투명을 증명 못 해 제외, 형제 여럿이 조각조각 합쳐 덮는 경우는 못 잡음(모두 의도적 스코프 축소 — 오탐 방지 우선) | — | — |
 | `raw_node` **(opt-in, 기본 OFF)** | 화면 조립 레이어에서 등록 컴포넌트의 INSTANCE 가 아니라 raw 도형/프레임으로 그린 노드를 전수 검출("쓰는 건 전부 사전 정의" 정책). INSTANCE 내부 노드는 항상 제외(정의의 사본). strict 정책이라 켜는 파일만 opt-in | `types`·`checkInsideComponent`·`exemptNamePattern` | `types`=FRAME/RECTANGLE/ELLIPSE/VECTOR/LINE/POLYGON/STAR, `checkInsideComponent`=false |
 | `annotation_layer` **(opt-in, 기본 OFF)** | 모든 SECTION(중첩 포함)이 **기획 레이어(annotation-layer)**를 직속 자식으로 최소 1개 갖도록 강제. 켜는 순간 기획 레이어는 겹침/여백/오버플로우/orphan 규칙에서 **자동 면제**된다(수동 lint-ignore 불필요). ⚠️ **판정은 이름이 아니라 pluginData** — 노드 sharedPluginData("sigma","role")=="annotation-layer". 레이어 생성·태깅은 `sigma_create_annotation_layer`. 아래 §기획 레이어 참조 | — | — |
+| `content_spread` **(opt-in, 기본 OFF, 페이지 루트 전용)** | 최상위 노드를 `maxGap` 이내로 이어지는 덩어리로 묶고, **가장 큰 덩어리(본진) 밖에 홀로 떨어진 노드**를 검출. 이런 이상치가 하나만 있어도 zoom-to-fit(Shift+1)이 그것까지 품느라 실제 콘텐츠가 점으로 찍힌다 — "페이지를 열었는데 내용을 못 찾겠다"의 주범. 숨김(`visible:false`) 노드는 제외(렌더 안 되므로 fit 무관). 본진 = 노드 수 최대 → 동수면 면적 합 최대. 아래 §찾기 쉬움 참조 | `maxGap` | 3000px |
+| `origin_anchor` **(opt-in, 기본 OFF, 페이지 루트 전용)** | 페이지에 최상위 SECTION이 하나라도 있으면 그 중 하나는 좌상단이 원점(0,0)에서 `tolerance` 이내여야 함(음수는 절대값). 섹션이 없는 페이지는 검사 대상 아님(`outside_section` 담당). 위반은 페이지당 최대 1건이고 주체 노드로 **원점에서 가장 가까운 섹션**을 실어준다 | `tolerance` | 100px |
 | `instance_default_name` **(opt-in, 기본 OFF)** | `default_name`의 인스턴스 판 — INSTANCE 이름이 **마스터 컴포넌트 이름 그대로**면(=고유 이름 미부여) 위반. 마스터명은 TreeNode에 없어 서버가 `get_nodes_info`의 `componentName`을 resolve해 판정(규칙 ON일 때만 1왕복). **중첩 인스턴스(다른 INSTANCE 내부)는 제외**(정의의 사본). 실화면엔 마스터명 유지 인스턴스가 흔해 기본 ON이면 폭주 → strict 네이밍을 원하는 파일만 opt-in | — | — |
 
-파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`·`annotation_layer`·`instance_default_name`은 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`·`annotation_layer`·`instance_default_name`·`content_spread`·`origin_anchor`는 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+
+## 찾기 쉬움 (findability) — `content_spread` · `origin_anchor`
+
+"페이지를 열었는데 내용이 어디 있는지 모르겠다"를 강제로 막는 두 규칙. Figma에서 사람이 콘텐츠를
+찾는 수단은 셋뿐이다 — **zoom-to-fit(Shift+1)** · **캔버스에 항상 보이는 섹션 라벨** · **레이어 패널 이름**.
+
+| 수단 | 무너지는 원인 | 담당 규칙 |
+|---|---|---|
+| zoom-to-fit | 멀리 떨어진 이상치 노드 하나가 fit 범위를 삼킴 | **`content_spread`** (신규) |
+| 섹션 라벨 | 콘텐츠가 섹션 밖에 있음 | `outside_section` (기본 ON) |
+| 레이어 패널 | `Frame 123` 같은 기본 이름 방치 | `default_name` (기본 ON) |
+
+- **효과가 가장 큰 건 `content_spread`다.** 나머지 둘은 이미 기본 ON이므로, 못 찾겠는 페이지가
+  있으면 먼저 `sigma_lint`를 돌려 원인이 이상치인지 구조인지부터 확인한다.
+- **`origin_anchor`는 사람보다 도구를 위한 규약이다.** Figma UI엔 "0,0으로 가기"가 없어서 원점에
+  콘텐츠가 있어도 사람이 점프할 수단이 없다. 대신 좌표가 예측 가능해져 에이전트의 배치·뷰포트
+  계산(`sigma_set_viewport`)이 안정된다. 존재 검사라 원점 섹션 하나만 있으면 나머지가 흩어져도
+  통과하므로, 흩어짐은 `content_spread`가 담당한다 — **둘은 같이 켜야 의미가 있다.**
+- **⚠️ 두 규칙은 페이지 루트에서만 실행된다.** `sigma_lint(nodeId/path)`로 서브트리를 검사하면
+  좌표가 부모 로컬 기준이라 원점·거리 판정이 무의미해지므로, 그 호출에선 아예 실행되지 않는다
+  (`scope:"file"`은 항상 페이지 루트라 정상 동작).
+- **자동수정 없음.** 고치려면 최상위 노드를 통째로 옮겨야 하는데, 안전 fix(섹션 확장)의 범주가
+  아니고 어디로 옮길지는 사람 판단이다(check-first).
+
+```jsonc
+// 기획/디자인 페이지에 찾기 쉬움 규칙 세트 적용
+sigma_lint({ token, config: { builtins: {
+  content_spread: { enabled: true, maxGap: 3000 },
+  origin_anchor:  { enabled: true, tolerance: 100 }
+} } })
+```
 
 ## 기획 레이어 (annotation-layer)
 

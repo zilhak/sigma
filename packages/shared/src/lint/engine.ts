@@ -1,6 +1,6 @@
 /**
- * sigma_lint 빌트인 엔진 — 기하 8종(geometric.ts, 무변경 이관) + 구조/이름/가시성 6종(simple-rules.ts)을
- * config.builtins 로 켜고 끄고 파라미터화한다. 각 규칙은 미기재 시 기본 ON(opt-out 모델) —
+ * sigma_lint 빌트인 엔진 — 기하 8종(geometric.ts, 무변경 이관) + 구조/이름/가시성 6종(simple-rules.ts) +
+ * 페이지 루트 전용 2종(page-rules.ts)을 config.builtins 로 켜고 끄고 파라미터화한다. 각 규칙은 미기재 시 기본 ON(opt-out 모델) —
  * 8개 기하 규칙은 sigma_layout_lint 시절부터 항상 켜져 있었으므로 그 동작을 그대로 보존한다.
  */
 import type { TreeNode } from '../types';
@@ -10,6 +10,7 @@ import {
   fillSizingOrphanRule, hiddenLeafRule, rawNodeRule, strayPixelRule,
   type RawNodeConfig,
 } from './simple-rules';
+import { contentSpreadRule, DEFAULT_MAX_GAP, DEFAULT_ORIGIN_TOLERANCE, originAnchorRule } from './page-rules';
 import type { BuiltinRuleId, BuiltinsConfig, Violation } from './types';
 
 export { mergeFixesBySection };
@@ -36,6 +37,10 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   // getNodesInfo(componentName)로 resolve 해 instanceComponentNames 로 주입한다. 실화면엔 마스터명
   // 유지 인스턴스가 흔해 기본 ON 이면 폭주 → strict 네이밍을 원하는 파일만 켠다.
   'instance_default_name',
+  // origin_anchor / content_spread 도 **opt-in(기본 OFF)** 이고, 추가로 **페이지 루트에서만** 실행된다
+  // (ctx.isPageRoot). nodeId/path 로 서브트리를 검사할 땐 roots 가 부모 로컬좌표라 원점·거리 판정이
+  // 무의미해 오탐만 낸다. Figma 에서 원점은 시각적 의미가 없어 일반 파일엔 오탐이라 기본 OFF.
+  'origin_anchor', 'content_spread',
   // fully_occluded_sibling 은 여기 목록엔 있지만 runBuiltinRules 안에서 실행되지 않는다 —
   // fills/opacity(get_nodes_info 상세)가 필요해 서버가 LintNode 로 enrich 한 뒤
   // occlusion.ts 의 fullyOccludedSiblingRule 을 별도로 호출한다(isEnabled 로 opt-out 확인은 동일).
@@ -54,6 +59,9 @@ export interface BuiltinRuleContext {
   /** INSTANCE id → 마스터 컴포넌트 이름. instance_default_name 규칙에서 인스턴스 이름과 비교. TreeNode 에
    *  componentName 이 없어 서버가 getNodesInfo 로 resolve 해 주입한다(규칙이 켜졌을 때만). */
   instanceComponentNames?: ReadonlyMap<string, string>;
+  /** roots 가 페이지 최상위인가(= nodeId/path 스코프가 아님). origin_anchor/content_spread 는 좌표가
+   *  페이지 절대좌표일 때만 의미가 있어 이 플래그가 true 일 때만 실행된다. 미지정 = false(안전측). */
+  isPageRoot?: boolean;
 }
 
 /** 페이지 트리(roots)에 config.builtins 로 켜진 규칙만 실행해 Violation[] 를 반환. */
@@ -93,6 +101,18 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
   // instance_default_name 도 opt-in: 인스턴스 이름이 마스터 컴포넌트 이름 그대로면 위반.
   if (builtins.instance_default_name?.enabled === true) {
     out.push(...instanceDefaultNameRule(roots, ctx.instanceComponentNames || new Map()));
+  }
+
+  // 페이지 루트 전용 2종(opt-in) — 서브트리 스코프에선 좌표 기준이 달라져 아예 실행하지 않는다.
+  if (ctx.isPageRoot) {
+    if (builtins.origin_anchor?.enabled === true) {
+      const tol = builtins.origin_anchor.tolerance;
+      out.push(...originAnchorRule(roots, typeof tol === 'number' ? tol : DEFAULT_ORIGIN_TOLERANCE));
+    }
+    if (builtins.content_spread?.enabled === true) {
+      const gap = builtins.content_spread.maxGap;
+      out.push(...contentSpreadRule(roots, typeof gap === 'number' ? gap : DEFAULT_MAX_GAP));
+    }
   }
 
   return out;

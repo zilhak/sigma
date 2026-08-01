@@ -106,7 +106,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 
 ## Lint (빌트인 카탈로그 + 커스텀 규칙)
 
-config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + 컴포넌트 강제 1종)과
+config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + opt-in 5종)과
 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 검사·수정. Figma 파일마다 다른 config를 쓸 수 있도록
 서버는 config를 저장하지 않고 매 호출 시 지정된 것을 그대로 읽는다.
 
@@ -118,7 +118,9 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 - **`scope`**: `page`(기본, 바인딩 1페이지, `apply` 지원) | `file`(전 페이지 순회, read-only, markdown 리포트 파일 + `reportPath` 반환).
 - **`configMode`**: `uniform`(기본, base 하나로 일괄) | `per-page`(페이지 저장 config) | `merge`(base + 페이지 override).
 
-**빌트인 16종(파라미터·기본값 — `raw_node`만 opt-in), JSON/predicate 커스텀 규칙 스키마,
+- **찾기 쉬움 2종(opt-in, 페이지 루트 전용)**: `content_spread`(본진에서 떨어진 이상치 노드 — zoom-to-fit을 망쳐 "내용을 못 찾는" 상태를 만듦, `maxGap` 기본 3000px) · `origin_anchor`(최상위 섹션 중 하나는 원점 `tolerance`(기본 100px) 이내에서 시작). `nodeId`/`path` 서브트리 검사에선 실행되지 않는다.
+
+**빌트인 20종(파라미터·기본값 — `raw_node`·`annotation_layer`·`instance_default_name`·`content_spread`·`origin_anchor`가 opt-in), JSON/predicate 커스텀 규칙 스키마,
 `scope`/`configMode` 상세, `configPath`의 Docker 배포 주의사항, 복붙용 예제 config,
 설계 근거는 [lint.md](lint.md) 참조.**
 

@@ -11,6 +11,7 @@ import {
 } from '../src/lint/simple-rules';
 import { compileMatchRule, runMatchRule, matchesQuery, queryNodes, type NodeQuery } from '../src/lint/json-rule';
 import { fullyOccludedSiblingRule } from '../src/lint/occlusion';
+import { contentSpreadRule, originAnchorRule } from '../src/lint/page-rules';
 import type { LintNode, MatchRule } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
 
@@ -852,5 +853,111 @@ describe('instance_default_name (opt-in) — 인스턴스가 마스터 이름 �
       .filter((v) => v.rule === 'instance_default_name').flatMap((v) => v.nodes);
     expect(flagged).toContain('outer');   // 최상위 인스턴스는 검사
     expect(flagged).not.toContain('inner'); // 내부 인스턴스는 제외
+  });
+});
+
+describe('origin_anchor (opt-in, 페이지 루트 전용) — 원점에서 시작하는 섹션', () => {
+  const anchored = () => [
+    node('s1', 'A', 'SECTION', [0, 0, 800, 600]),
+    node('s2', 'B', 'SECTION', [900, 0, 800, 600]),
+  ];
+  const drifted = () => [
+    node('s1', 'A', 'SECTION', [5000, 3000, 800, 600]),
+    node('s2', 'B', 'SECTION', [6000, 3000, 800, 600]),
+  ];
+
+  test('원점 근처 섹션 있음 — 통과', () => {
+    expect(originAnchorRule(anchored())).toEqual([]);
+  });
+
+  test('전부 원점에서 멀면 위반 1건 + 주체는 가장 가까운 섹션', () => {
+    const vs = originAnchorRule(drifted());
+    expect(vs).toHaveLength(1);
+    expect(vs[0].rule).toBe('origin_anchor');
+    expect(vs[0].nodes).toEqual(['s1']); // (5000,3000) 이 (6000,3000) 보다 가까움
+  });
+
+  test('tolerance 로 허용 범위 조절', () => {
+    const near = [node('s', 'A', 'SECTION', [150, 80, 800, 600])];
+    expect(originAnchorRule(near, 100)).toHaveLength(1); // x=150 > 100
+    expect(originAnchorRule(near, 200)).toEqual([]);
+  });
+
+  test('음수 좌표도 절대값으로 판정', () => {
+    expect(originAnchorRule([node('s', 'A', 'SECTION', [-50, -30, 800, 600])])).toEqual([]);
+  });
+
+  test('섹션이 하나도 없는 페이지는 검사 대상 아님(vacuous pass)', () => {
+    expect(originAnchorRule([node('f', 'loose', 'FRAME', [9000, 9000, 100, 100])])).toEqual([]);
+  });
+
+  test('opt-in — 기본 OFF, enabled:true + isPageRoot 일 때만 실행', () => {
+    const rules = (builtins: Parameters<typeof runBuiltinRules>[1], ctx?: Parameters<typeof runBuiltinRules>[2]) =>
+      runBuiltinRules(drifted(), builtins, ctx).map((v) => v.rule);
+    expect(rules({}, { isPageRoot: true })).not.toContain('origin_anchor');
+    expect(rules({ origin_anchor: { enabled: true } })).not.toContain('origin_anchor'); // isPageRoot 미지정 = 서브트리
+    expect(rules({ origin_anchor: { enabled: true } }, { isPageRoot: true })).toContain('origin_anchor');
+  });
+});
+
+describe('content_spread (opt-in, 페이지 루트 전용) — 본진에서 떨어진 이상치', () => {
+  // 본진 3개(서로 붙어 있음) + 5만px 밖 조각 1개 → zoom-to-fit 을 망치는 전형
+  const withOutlier = () => [
+    node('a', 'A', 'SECTION', [0, 0, 800, 600]),
+    node('b', 'B', 'SECTION', [900, 0, 800, 600]),
+    node('c', 'C', 'SECTION', [0, 700, 800, 600]),
+    node('stray', '조각', 'RECTANGLE', [50000, 0, 10, 10]),
+  ];
+
+  test('이상치를 잡고 본진은 통과', () => {
+    const vs = contentSpreadRule(withOutlier());
+    expect(vs.map((v) => v.nodes[0])).toEqual(['stray']);
+    expect(vs[0].rule).toBe('content_spread');
+    expect(vs[0].message).toContain('48300px'); // 본진 오른쪽 끝(1700) → 50000
+  });
+
+  test('maxGap 을 키우면 같은 덩어리로 인정', () => {
+    expect(contentSpreadRule(withOutlier(), 60000)).toEqual([]);
+  });
+
+  test('전이적으로 이어지면 한 덩어리 — 징검다리 배치는 통과', () => {
+    const chain = [
+      node('a', 'A', 'SECTION', [0, 0, 800, 600]),
+      node('b', 'B', 'SECTION', [3000, 0, 800, 600]),   // a 와 2200px
+      node('c', 'C', 'SECTION', [6000, 0, 800, 600]),   // b 와 2200px (a 와는 5200px)
+    ];
+    expect(contentSpreadRule(chain, 3000)).toEqual([]);
+  });
+
+  test('숨김 노드는 제외 — fit 에 영향이 없음', () => {
+    const roots = [
+      node('a', 'A', 'SECTION', [0, 0, 800, 600]),
+      node('b', 'B', 'SECTION', [900, 0, 800, 600]),
+      node('h', '숨김', 'FRAME', [90000, 0, 100, 100], [], { visible: false }),
+    ];
+    expect(contentSpreadRule(roots)).toEqual([]);
+  });
+
+  test('최상위 노드가 1개 이하면 검사 대상 아님', () => {
+    expect(contentSpreadRule([node('a', 'A', 'SECTION', [50000, 50000, 800, 600])])).toEqual([]);
+  });
+
+  test('덩어리 둘이 동수면 면적이 큰 쪽이 본진', () => {
+    const two = [
+      node('big1', 'big1', 'SECTION', [0, 0, 2000, 2000]),
+      node('big2', 'big2', 'SECTION', [2100, 0, 2000, 2000]),
+      node('small1', 'small1', 'SECTION', [80000, 0, 100, 100]),
+      node('small2', 'small2', 'SECTION', [80200, 0, 100, 100]),
+    ];
+    expect(contentSpreadRule(two).map((v) => v.nodes[0]).sort()).toEqual(['small1', 'small2']);
+  });
+
+  test('opt-in — 기본 OFF, enabled:true + isPageRoot 일 때만 실행', () => {
+    const rules = (builtins: Parameters<typeof runBuiltinRules>[1], ctx?: Parameters<typeof runBuiltinRules>[2]) =>
+      runBuiltinRules(withOutlier(), builtins, ctx).map((v) => v.rule);
+    expect(rules({}, { isPageRoot: true })).not.toContain('content_spread');
+    expect(rules({ content_spread: { enabled: true } })).not.toContain('content_spread');
+    expect(rules({ content_spread: { enabled: true } }, { isPageRoot: true })).toContain('content_spread');
+    expect(rules({ content_spread: { enabled: true, maxGap: 60000 } }, { isPageRoot: true })).not.toContain('content_spread');
   });
 });

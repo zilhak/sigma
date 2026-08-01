@@ -12,7 +12,7 @@ import { writeLintReport, type PageLintResult } from '../../lint/report.js';
 import { filterSuppressed, collectSubjectNodeIds } from '../../lint/suppress.js';
 
 /**
- * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + annotation_layer opt-in) + config.custom
+ * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + opt-in 5종) + config.custom
  * (JSON shorthand / JS predicate) 커스텀 규칙을 함께 실행한다.
  *
  * scope: 'page'(바인딩된 1페이지, 기본) | 'file'(전 페이지 순회)
@@ -177,18 +177,23 @@ async function collectInstanceComponentNames(
   return map;
 }
 
-/** 한 트리(roots)에 config 를 적용해 위반 목록을 낸다(빌트인+occlusion+커스텀). */
+/**
+ * 한 트리(roots)에 config 를 적용해 위반 목록을 낸다(빌트인+occlusion+커스텀).
+ * `isPageRoot` — roots 가 페이지 최상위인지(= nodeId/path 스코프가 아닌지). 페이지 절대좌표를
+ * 전제하는 규칙(origin_anchor/content_spread)이 서브트리 검사에서 오탐하지 않도록 엔진에 넘긴다.
+ */
 async function runLintOnRoots(
   config: LintConfig,
   roots: TreeNode[],
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
+  isPageRoot: boolean,
 ): Promise<Violation[]> {
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId);
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
   return [
-    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames }),
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),
@@ -308,9 +313,12 @@ async function runPageLint(
   const treeLimit = resolveTreeLimit(args);
   const treeTimeout = resolveTreeTimeout(args);
 
+  // nodeId/path 로 좁히면 roots 가 부모 로컬좌표 서브트리 → 페이지 절대좌표 전제 규칙은 실행 안 함.
+  const isPageRoot = !nodeId && !path;
+
   const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
   const roots = tree.children as TreeNode[];
-  const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId);
+  const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot);
   const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
 
   const fixable = collectFixableViolations(violations);
@@ -349,7 +357,7 @@ async function runPageLint(
     : { skipped: true, reason: '자동수정 대상 없음' };
 
   const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
-  const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId);
+  const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot);
   const afterViolations = (await suppressViolations(afterRaw, wsServer, pluginId)).violations;
 
   return jsonResponse({
@@ -388,7 +396,8 @@ async function runFileLint(
     }
     try {
       const tree = await wsServer.getTree({ depth: 'full', pageId: p.pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
-      const rawViolations = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId);
+      // scope=file 은 언제나 페이지 루트 전체를 뜬다 → 페이지 절대좌표 전제 규칙 실행 가능.
+      const rawViolations = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId, true);
       const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
       results.push({
         pageId: p.pageId, pageName: p.pageName, configSource: resolved.source, configError: resolved.error,

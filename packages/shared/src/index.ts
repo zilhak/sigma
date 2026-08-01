@@ -47,7 +47,7 @@ export {
   EXTRACTED_PATH,
 } from './constants';
 
-// Lint (sigma_lint) — 기하 8종 + 빌트인 4종 엔진, JSON/predicate 커스텀 규칙
+// Lint (sigma_lint) — 빌트인 20종 엔진(기하/구조/occlusion/페이지 루트), JSON/predicate 커스텀 규칙
 export type {
   LayoutRule,
   LayoutFix,
@@ -86,4 +86,8 @@ export {
   fillSizingOrphanRule, componentDescriptionEmptyRule,
 } from './lint/simple-rules';
 export { fullyOccludedSiblingRule } from './lint/occlusion';
+export {
+  originAnchorRule, contentSpreadRule,
+  DEFAULT_ORIGIN_TOLERANCE, DEFAULT_MAX_GAP,
+} from './lint/page-rules';
 export { flattenTree, buildRelationMaps, type FlatEntry, type RelationMaps } from './lint/tree-utils';
