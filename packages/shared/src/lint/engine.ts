@@ -27,6 +27,10 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   // raw_node 는 카탈로그엔 있지만 **opt-in(기본 OFF)** — 다른 빌트인의 opt-out 모델과 달리
   // builtins.raw_node.enabled === true 로 명시해야만 실행된다(runBuiltinRules 참고). strict 정책이라 기본 강제 안 함.
   'raw_node',
+  // annotation_layer 도 **opt-in(기본 OFF)** — builtins.annotation_layer.enabled === true 일 때만 실행.
+  // "기획 레이어를 쓰려면(=이 규칙을 켜면) 모든 섹션이 기획 레이어를 갖는다"는 계약. 켜는 순간
+  // 레이어 자동 면제(annotationLayerIds)도 함께 적용된다. 판정은 pluginData(role), 호출측 주입.
+  'annotation_layer',
   // fully_occluded_sibling 은 여기 목록엔 있지만 runBuiltinRules 안에서 실행되지 않는다 —
   // fills/opacity(get_nodes_info 상세)가 필요해 서버가 LintNode 로 enrich 한 뒤
   // occlusion.ts 의 fullyOccludedSiblingRule 을 별도로 호출한다(isEnabled 로 opt-out 확인은 동일).
@@ -38,9 +42,16 @@ export function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean 
   return !cfg || cfg.enabled !== false;
 }
 
+/** runBuiltinRules 부가 입력 — 서버 핸들러가 pluginData 등에서 계산해 주입. */
+export interface BuiltinRuleContext {
+  /** 기획 레이어로 판정된 노드 id (pluginData role). 겹침/여백/오버플로우 면제 + annotation_layer 규칙 판정에 사용. */
+  annotationLayerIds?: Iterable<string>;
+}
+
 /** 페이지 트리(roots)에 config.builtins 로 켜진 규칙만 실행해 Violation[] 를 반환. */
-export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}): Violation[] {
+export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}, ctx: BuiltinRuleContext = {}): Violation[] {
   const out: Violation[] = [];
+  const layerIds = new Set(ctx.annotationLayerIds || []);
 
   const anyGeometricEnabled = GEOMETRIC_RULES.some((id) => isEnabled(builtins, id));
   if (anyGeometricEnabled) {
@@ -49,6 +60,7 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
     const result = lintLayout(roots, {
       padding: typeof paddingCfg === 'number' ? paddingCfg : DEFAULT_PADDING,
       sectionGap: typeof gapCfg === 'number' ? gapCfg : DEFAULT_SECTION_GAP,
+      annotationLayerIds: layerIds,
     });
     for (const v of result.violations) {
       if (isEnabled(builtins, v.rule)) {
@@ -67,6 +79,35 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
   // raw_node 만 opt-in: 미기재/enabled≠true 면 실행 안 함(다른 빌트인의 opt-out 기본 ON 과 반대).
   if (builtins.raw_node?.enabled === true) out.push(...rawNodeRule(roots, builtins.raw_node as RawNodeConfig));
 
+  // annotation_layer 도 opt-in: 켜진 페이지에서 모든 SECTION 은 기획 레이어를 직속 자식으로 가져야 한다.
+  if (builtins.annotation_layer?.enabled === true) out.push(...annotationLayerRule(roots, layerIds));
+
+  return out;
+}
+
+/**
+ * annotation_layer (opt-in) — 모든 SECTION(중첩 포함)은 기획 레이어(annotation-layer)를
+ * 직속 자식으로 최소 1개 가져야 한다. 레이어 판정은 pluginData(role) 기반 layerIds 로 주입된다.
+ * "기획 레이어를 쓰는 파일이면 섹션마다 예외없이 둔다"는 규약을 강제한다.
+ */
+export function annotationLayerRule(roots: TreeNode[], layerIds: Set<string>): Violation[] {
+  const out: Violation[] = [];
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type === 'SECTION') {
+        const has = (n.children ?? []).some((c) => layerIds.has(c.id));
+        if (!has) {
+          out.push({
+            rule: 'annotation_layer', source: 'builtin',
+            message: `섹션 "${n.name}" (${n.id}) 에 기획 레이어(annotation-layer)가 없습니다 — sigma_create_annotation_layer 로 추가하세요`,
+            nodes: [n.id],
+          });
+        }
+      }
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(roots);
   return out;
 }
 

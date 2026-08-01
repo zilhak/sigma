@@ -12,7 +12,7 @@ import { writeLintReport, type PageLintResult } from '../../lint/report.js';
 import { filterSuppressed, collectSubjectNodeIds } from '../../lint/suppress.js';
 
 /**
- * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종) + config.custom
+ * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + annotation_layer opt-in) + config.custom
  * (JSON shorthand / JS predicate) 커스텀 규칙을 함께 실행한다.
  *
  * scope: 'page'(바인딩된 1페이지, 기본) | 'file'(전 페이지 순회)
@@ -96,6 +96,49 @@ function runCustomRulesFromEnriched(config: LintConfig, enriched: BuildLintNodes
   })();
 }
 
+/**
+ * annotation_layer 규칙이 켜졌을 때, 기획 레이어로 태깅된 노드 id 집합을 수집한다.
+ * 판정 = 노드 sharedPluginData("sigma","role") === "annotation-layer" (이름 아님).
+ * 후보 = 모든 SECTION 의 직속 FRAME(레이어는 섹션 직속 프레임). 배치 1왕복으로 조회.
+ * 규칙이 꺼져 있으면 조회 없이 빈 집합(비용 0).
+ */
+async function collectAnnotationLayerIds(
+  builtins: LintConfig['builtins'],
+  roots: TreeNode[],
+  wsServer: ToolContext['wsServer'],
+  pluginId: string | undefined,
+): Promise<Set<string>> {
+  const empty = new Set<string>();
+  if (builtins?.annotation_layer?.enabled !== true) return empty;
+
+  const candidates: string[] = [];
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type === 'SECTION') {
+        for (const c of n.children ?? []) if (c.type === 'FRAME') candidates.push(c.id);
+      }
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(roots);
+  if (candidates.length === 0) return empty;
+
+  let data: Record<string, string> = {};
+  try {
+    const res = await wsServer.getNodesData(candidates, 'role', pluginId);
+    data = res.data || {};
+  } catch {
+    return empty; // 조회 실패 시 면제·판정 없이 진행(안전 기본값)
+  }
+  const layerIds = new Set<string>();
+  for (const [id, raw] of Object.entries(data)) {
+    try {
+      if (JSON.parse(raw) === 'annotation-layer') layerIds.add(id);
+    } catch { /* JSON 아닌 값 무시 */ }
+  }
+  return layerIds;
+}
+
 /** 한 트리(roots)에 config 를 적용해 위반 목록을 낸다(빌트인+occlusion+커스텀). */
 async function runLintOnRoots(
   config: LintConfig,
@@ -104,8 +147,9 @@ async function runLintOnRoots(
   pluginId: string | undefined,
 ): Promise<Violation[]> {
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId);
+  const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId);
   return [
-    ...runBuiltinRules(roots, config.builtins || {}),
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),

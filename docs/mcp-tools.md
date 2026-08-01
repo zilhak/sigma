@@ -40,6 +40,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_create_text` | 텍스트 (폰트 자동 로드) | `token`, `x`, `y`, `text` | `name`, `fontSize`, `fontFamily`, `fontWeight`, `fontColor`, `textAlignHorizontal`, `parentId` |
 | `sigma_create_empty_frame` | 빈 프레임 (Auto Layout) | `token`, `x`, `y`, `width`, `height` | `name`, `layoutMode`, `padding*`, `itemSpacing`, `fillColor`, `cornerRadius`, `layoutWrap`, `counterAxisSpacing`, `layoutSizing*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `parentId` |
 | `sigma_create_section` | Section | `token`, `name` | `position`, `size`, `children`, `fills` |
+| `sigma_create_annotation_layer` | 섹션에 기획 레이어(주석 담는 투명 오버레이 프레임) 생성 + pluginData `role=annotation-layer` 태깅. lint `annotation_layer` 규칙과 연동(자동 면제·존재 강제). 스펙 아님(네이티브 프레임) | `token`, `sectionId` | `name` |
 | `sigma_create_component_instance` | 컴포넌트 인스턴스 (로컬/라이브러리) | `token`, `componentKey`, `x`, `y` | `parentId` |
 | `sigma_create_ellipse` | 타원/원 | `token`, `x`, `y`, `width`, `height` | `name`, `fillColor`, `strokeColor`, `strokeWeight`, `arcData`, `parentId` |
 | `sigma_create_polygon` | 다각형 | `token`, `x`, `y`, `width`, `height` | `name`, `pointCount`, `fillColor`, `strokeColor`, `strokeWeight`, `parentId` |

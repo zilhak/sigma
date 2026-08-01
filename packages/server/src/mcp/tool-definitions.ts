@@ -1201,6 +1201,25 @@ category로 extracted/screenshots/reports/all 중 대상을 선택할 수 있습
     },
   },
   {
+    name: 'sigma_create_annotation_layer',
+    description: `섹션에 "기획 레이어(annotation-layer)"를 생성합니다 — 기획 주석(anno/wire 인스턴스)을 담는 투명 오버레이 프레임.
+
+**왜 전용 tool인가**: 채워 넣는 컨테이너라 스펙 컴포넌트로 만들 수 없다(스펙은 자식 인스턴스를 못 품음, 인스턴스 자식은 잠김). 그래서 네이티브 FRAME 으로 만든다.
+**동작**: 섹션 전체를 덮는 투명 프레임을 섹션 직속 자식으로 생성 + clipsContent off + sharedPluginData("sigma","role"="annotation-layer") 태깅.
+**이름이 아니라 pluginData 로 판정** → 이름 규약이 생기지 않고, 이름을 자유롭게 바꿔도 됨.
+**lint 연동**: 페이지 config 로 \`annotation_layer\` 규칙(opt-in)을 켜면 ① 이 레이어는 겹침/여백/오버플로우에서 자동 면제(수동 lint-ignore 불필요) ② 모든 섹션이 레이어를 갖도록 강제된다.
+**사용 순서**: 이 tool 로 레이어 생성 → 그 안에 anno/marker·wire/kv·anno/legend 등 인스턴스를 자식으로 삽입.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        sectionId: { type: 'string', description: '기획 레이어를 넣을 SECTION 노드 ID' },
+        name: { type: 'string', description: '레이어 이름 (기본 "📝 기획 주석"). pluginData 로 판정하므로 이름은 자유' },
+      },
+      required: ['token', 'sectionId'],
+    },
+  },
+  {
     name: 'sigma_create_empty_frame',
     description: `Figma에 빈 프레임(Frame)을 생성합니다.
 

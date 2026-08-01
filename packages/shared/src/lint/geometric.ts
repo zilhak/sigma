@@ -23,7 +23,9 @@ export const DEFAULT_PADDING = 20;
 export const DEFAULT_SECTION_GAP = 80;
 
 /** 기획용(anno/wire) 프리셋 인스턴스 이름 — 프레임 밖에 떠 있어도 R4 예외.
- *  (한계: 노드 이름엔 spec namespace 가 안 실림 → 이름 휴리스틱. 정확 판정은 호출측에서 보강) */
+ *  (한계: 노드 이름엔 spec namespace 가 안 실림 → 이름 휴리스틱, 레거시 경로).
+ *  ⚠️ 정식 경로는 **pluginData(role) 기반 판정** — opts.annotationLayerIds 로 호출측이 주입한다
+ *     (기획 레이어 컨테이너용). 이름 규약을 새로 만들지 않기 위한 것. */
 const ANNO_WIRE_NAMES = new Set([
   'region', 'marker', 'legend', 'label',
   'box', 'section_title', 'item', 'kv', 'note',
@@ -71,6 +73,13 @@ export interface LintOptions {
   sectionGap?: number;
   /** R4 예외로 볼 인스턴스 이름 집합 확장 (기획용 커스텀 등) */
   annoWireNames?: Iterable<string>;
+  /**
+   * 기획 레이어(annotation-layer)로 판정된 노드 id 집합. 이 노드와 그 하위 서브트리는
+   * 겹침(card_overlap)·여백(frame_padding)·오버플로우(child_overflow)·orphan 규칙에서 면제된다.
+   * ⚠️ 이름이 아니라 노드의 sharedPluginData(role) 로 판정한 결과를 **호출측(서버 핸들러)이 주입**한다
+   *    (TreeNode 엔 pluginData 가 실리지 않으므로 엔진이 스스로 못 봄 — suppress 와 같은 구조).
+   */
+  annotationLayerIds?: Iterable<string>;
 }
 
 export interface LintResult {
@@ -139,6 +148,11 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
   const sectionGap = opts.sectionGap !== undefined ? opts.sectionGap : DEFAULT_SECTION_GAP;
   const annoWire = new Set(ANNO_WIRE_NAMES);
   if (opts.annoWireNames) for (const n of opts.annoWireNames) annoWire.add(n);
+  // 기획 레이어(pluginData 로 판정, 호출측 주입) — 이 노드+하위는 공간 규칙 면제.
+  const layerIds = new Set(opts.annotationLayerIds || []);
+  const isLayer = (n: TreeNode) => layerIds.has(n.id);
+  // 면제 대상 = 기획 프리셋 인스턴스(이름 휴리스틱, 레거시) 또는 기획 레이어(pluginData, 정식).
+  const isExempt = (n: TreeNode) => annoWire.has(n.name) || isLayer(n);
   const V: LayoutViolation[] = [];
   const add = (rule: LayoutRule, message: string, nodes: string[], fix?: LayoutFix) =>
     V.push(fix ? { rule, message, nodes, fix } : { rule, message, nodes });
@@ -167,7 +181,7 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
       // 섹션 자식은 섹션 로컬좌표 → 포함검사는 섹션의 로컬박스(0,0,W,H) 기준. (부모공간 bbox 아님)
       const localBox = { x: 0, y: 0, width: container.boundingBox.width, height: container.boundingBox.height };
       // R2: 섹션 직속 카드(FRAME/COMPONENT)끼리 겹침 (형제 = 같은 로컬 공간, bbox 직접 비교)
-      const cards = children.filter((c) => CARD_TYPES.has(c.type));
+      const cards = children.filter((c) => CARD_TYPES.has(c.type) && !isLayer(c));
       for (let i = 0; i < cards.length; i++) {
         for (let j = i + 1; j < cards.length; j++) {
           if (overlaps(bb(cards[i]), bb(cards[j]))) {
@@ -177,7 +191,7 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
         }
       }
       for (const c of children) {
-        if (annoWire.has(c.name)) continue; // 기획 프리셋 예외
+        if (isExempt(c)) continue; // 기획 프리셋/레이어 예외
         // 섹션 직속은 FRAME/SECTION 만 허용. 배치형 컴포넌트/그룹은 프레임 안에 있어야 함.
         // (INSTANCE 는 R4 instance_orphan 이 담당하므로 여기선 제외해 중복 방지)
         if (c.type === 'COMPONENT' || c.type === 'COMPONENT_SET' || c.type === 'GROUP') {
@@ -202,7 +216,7 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
       // ⚠️ TEXT/RECT/VECTOR 리프는 폰트 baseline 등으로 1px 삐져나오는 게 정상 → 배치형(PLACED)만 검사.
       const local = { x: 0, y: 0, width: container.boundingBox.width, height: container.boundingBox.height };
       for (const c of children) {
-        if (annoWire.has(c.name)) continue; // 기획 프리셋 예외
+        if (isExempt(c)) continue; // 기획 프리셋/레이어 예외
         if (!PLACED_TYPES.has(c.type)) continue; // 배치형 자식만 (리프 제외)
         if (!insetOk(local, bb(c), 0)) {
           add('child_overflow', `"${c.name}" (${c.id}) 가 "${container.name}" 프레임 내부 좌표를 벗어남`, [c.id]);
@@ -222,7 +236,7 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
 
     // 재귀: SECTION → section, 배치형(프레임/컴포넌트/인스턴스/그룹) → frame. 기획 프리셋 하위는 제외.
     for (const c of children) {
-      if (annoWire.has(c.name)) continue;
+      if (isExempt(c)) continue;
       if (c.type === 'SECTION') checkContainer(kids(c), c, 'section');
       else if (PLACED_TYPES.has(c.type)) checkContainer(kids(c), c, 'frame');
     }
@@ -231,6 +245,7 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
   // R4: INSTANCE 는 래퍼(프레임/컴포넌트/그룹) 조상 필요 = 섹션/페이지 직속으로 뜨면 안 됨.
   //     (마스터 COMPONENT·다른 INSTANCE 내부의 중첩 인스턴스는 정상 — 컴포넌트 정의의 일부)
   function walkOrphan(n: TreeNode, hasWrapperAncestor: boolean) {
+    if (isLayer(n)) return; // 기획 레이어 하위(주석 인스턴스)는 orphan 검사 제외
     if (n.type === 'INSTANCE' && !hasWrapperAncestor && !annoWire.has(n.name)) {
       add('instance_orphan', `INSTANCE "${n.name}" (${n.id}) 가 프레임 밖에 떠 있음`, [n.id]);
     }

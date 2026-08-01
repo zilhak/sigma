@@ -766,3 +766,49 @@ describe('json-rule.ts — queryNodes (조건 검색, lint 와 같은 부품 재
     expect(found.map((n) => n.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 });
+
+describe('기획 레이어 (annotation-layer) — 면제 + annotation_layer 규칙', () => {
+  // 섹션 안에 디자인 프레임 2개(겹침 없음) + 그 위를 덮는 기획 레이어 프레임 L.
+  const withLayer = () => [
+    node('sec', 'page', 'SECTION', [0, 0, 3000, 1000], [
+      node('f1', '채워짐', 'FRAME', [20, 20, 1440, 900]),
+      node('f2', '빈 상태', 'FRAME', [1520, 20, 1440, 900]),
+      // 레이어: 섹션을 통째로 덮음 → f1/f2 와 겹침, 여백 0, 안에 마커
+      node('L', '📝 기획 주석', 'FRAME', [0, 0, 3000, 1000], [
+        node('m1', 'marker', 'INSTANCE', [140, 350, 24, 24]),
+      ]),
+    ]),
+  ];
+
+  test('레이어 미인식 시 — card_overlap + frame_padding 위반 (기준선)', () => {
+    const rs = rules(withLayer()); // annotationLayerIds 없음
+    expect(rs).toContain('card_overlap');
+    expect(rs).toContain('frame_padding');
+  });
+
+  test('레이어 인식(annotationLayerIds) 시 — 겹침/여백/오버플로우 자동 면제 → clean', () => {
+    const r = lintLayout(withLayer(), { annotationLayerIds: ['L'] });
+    expect(r.clean).toBe(true);
+    expect(r.violationCount).toBe(0);
+  });
+
+  test('annotation_layer 규칙 opt-in — 기본 OFF: 레이어 없어도 위반 없음', () => {
+    const noLayer = [node('s', 'p', 'SECTION', [0, 0, 800, 600], [node('f', 'scr', 'FRAME', [20, 20, 400, 400])])];
+    const rs = runBuiltinRules(noLayer, {}).map((v) => v.rule);
+    expect(rs).not.toContain('annotation_layer');
+  });
+
+  test('annotation_layer 규칙 ON — 레이어 없는 섹션은 위반', () => {
+    const noLayer = [node('s', 'p', 'SECTION', [0, 0, 800, 600], [node('f', 'scr', 'FRAME', [20, 20, 400, 400])])];
+    const rs = runBuiltinRules(noLayer, { annotation_layer: { enabled: true } }).map((v) => v.rule);
+    expect(rs).toContain('annotation_layer');
+  });
+
+  test('annotation_layer 규칙 ON + 레이어 주입 — 존재 강제 통과 & 면제 동시', () => {
+    const vs = runBuiltinRules(withLayer(), { annotation_layer: { enabled: true } }, { annotationLayerIds: ['L'] });
+    const rs = vs.map((v) => v.rule);
+    expect(rs).not.toContain('annotation_layer'); // 레이어 존재 → 존재 규칙 통과
+    expect(rs).not.toContain('card_overlap');     // 레이어 → 겹침 면제
+    expect(rs).not.toContain('frame_padding');
+  });
+});

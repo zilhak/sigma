@@ -714,6 +714,48 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
+  async sigma_create_annotation_layer(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId, pageId } = access;
+    const sectionId = args.sectionId as string;
+    const name = (args.name as string) || '📝 기획 주석';
+    if (!sectionId) return jsonResponse({ error: 'sectionId 가 필요합니다' });
+
+    try {
+      const info = await wsServer.getNodeInfo(sectionId, pluginId) as { type?: string; width?: number; height?: number };
+      if (info?.type !== 'SECTION') {
+        return jsonResponse({
+          error: `sectionId(${sectionId}) 가 SECTION 이 아닙니다 (type: ${info?.type ?? 'unknown'}). 기획 레이어는 섹션의 직속 자식이어야 합니다.`,
+        });
+      }
+      const width = typeof info.width === 'number' && info.width > 0 ? info.width : 800;
+      const height = typeof info.height === 'number' && info.height > 0 ? info.height : 600;
+
+      const frameRes = await wsServer.createEmptyFrame({
+        pageId, parentId: sectionId, x: 0, y: 0, width, height, name,
+        fillColor: { r: 1, g: 1, b: 1, a: 0 }, layoutMode: 'NONE',
+      } as any, pluginId) as { nodeId?: string };
+      const frameId = frameRes?.nodeId;
+      if (!frameId) return jsonResponse({ error: '기획 레이어 프레임 생성 실패', detail: frameRes });
+
+      // 클리핑 해제(주석이 프레임 경계를 넘어도 보이게) + pluginData(role) 태깅.
+      await wsServer.modifyNode(frameId, 'setClipsContent', { clips: false }, pluginId);
+      await wsServer.setNodeData(frameId, 'role', JSON.stringify('annotation-layer'), pluginId);
+
+      return jsonResponse({
+        success: true,
+        message: `기획 레이어 '${name}' 생성 — 섹션 ${sectionId} 덮음, pluginData role=annotation-layer 태깅`,
+        nodeId: frameId, sectionId, name, width, height,
+        hint: 'anno/wire 주석 인스턴스를 이 레이어의 자식으로 넣으세요. lint 에서 annotation_layer 규칙(페이지 config, opt-in)을 켜면 이 레이어는 겹침/여백/오버플로우에서 자동 면제되고, 섹션마다 레이어 존재가 강제됩니다. (이름이 아니라 pluginData 로 판정하므로 이름은 자유)',
+      });
+    } catch (error) {
+      return jsonResponse({ error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
   async sigma_move_node(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);

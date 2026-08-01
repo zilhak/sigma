@@ -99,7 +99,7 @@ sigma_set_node_data({ token, nodeId:"1:24", key:"lint-ignore", value:'{"rules":"
 sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 ```
 
-## 빌트인 규칙 16종
+## 빌트인 규칙 17종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -119,8 +119,23 @@ sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 | `component_description_empty` | COMPONENT/COMPONENT_SET의 `description`이 비어있거나 공백만 있음 | — | — |
 | `fully_occluded_sibling` | 같은 부모 안에서 나중에 그려지는(z-order 위) 형제가 완전 불투명한 SOLID fill로 바운딩박스 전체를 덮어, 어떤 상태에서도 절대 안 보이는 노드 — `hidden_leaf`의 암묵적 버전. **fills/opacity 조회가 필요해 켜져 있으면 config.custom 유무와 무관하게 `get_nodes_info` 왕복이 한 번 추가된다.** 덮는 노드는 RECTANGLE/FRAME/COMPONENT/INSTANCE만 인정(원·별 등 비사각형은 바운딩박스 근사가 부정확해 제외), 그라디언트/이미지 fill은 완전 불투명을 증명 못 해 제외, 형제 여럿이 조각조각 합쳐 덮는 경우는 못 잡음(모두 의도적 스코프 축소 — 오탐 방지 우선) | — | — |
 | `raw_node` **(opt-in, 기본 OFF)** | 화면 조립 레이어에서 등록 컴포넌트의 INSTANCE 가 아니라 raw 도형/프레임으로 그린 노드를 전수 검출("쓰는 건 전부 사전 정의" 정책). INSTANCE 내부 노드는 항상 제외(정의의 사본). strict 정책이라 켜는 파일만 opt-in | `types`·`checkInsideComponent`·`exemptNamePattern` | `types`=FRAME/RECTANGLE/ELLIPSE/VECTOR/LINE/POLYGON/STAR, `checkInsideComponent`=false |
+| `annotation_layer` **(opt-in, 기본 OFF)** | 모든 SECTION(중첩 포함)이 **기획 레이어(annotation-layer)**를 직속 자식으로 최소 1개 갖도록 강제. 켜는 순간 기획 레이어는 겹침/여백/오버플로우/orphan 규칙에서 **자동 면제**된다(수동 lint-ignore 불필요). ⚠️ **판정은 이름이 아니라 pluginData** — 노드 sharedPluginData("sigma","role")=="annotation-layer". 레이어 생성·태깅은 `sigma_create_annotation_layer`. 아래 §기획 레이어 참조 | — | — |
 
-파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`는 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`·`annotation_layer`는 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+
+## 기획 레이어 (annotation-layer)
+
+기획 목업에서 디자인 프레임 위에 **설명(주석)을 얹되, 디자인과 분리해 한 단위로 토글**하고 싶을 때 쓰는 컨테이너.
+
+- **정체 = 네이티브 FRAME.** 스펙 컴포넌트로는 만들 수 없다 — 스펙은 자식 인스턴스를 못 품고(component-spec.md), 컴포넌트 인스턴스의 자식은 잠겨 섹션마다 다른 주석을 담을 수 없다. 그래서 "채우는 컨테이너"는 일반 프레임이어야 한다.
+- **생성 = `sigma_create_annotation_layer(sectionId)`.** 섹션을 덮는 투명 프레임(clip off)을 섹션 직속 자식으로 만들고 pluginData `role="annotation-layer"`로 태깅한다. 이후 그 안에 `anno/*`·`wire/*` 인스턴스를 자식으로 넣어 채운다.
+- **인식 = pluginData(role), 이름 아님.** 이름 규약을 새로 만들지 않기 위함(이름은 자유·변경 가능). 린트 핸들러가 SECTION 직속 FRAME 들의 `role` 키를 배치 조회해(getNodesData) 레이어 id 집합을 만들고 엔진에 주입한다 — `lint-ignore` suppress 와 같은 구조(TreeNode 엔 pluginData 가 안 실리므로 엔진이 스스로 못 봄).
+- **면제 범위.** 레이어 노드와 그 하위 서브트리는 `card_overlap`·`frame_padding`·`child_overflow`·`instance_orphan` 에서 제외. 디자인 프레임 위에 겹치는 게 정상이므로.
+- **opt-in.** `annotation_layer` 규칙을 켠 페이지에서만 위 면제 + "섹션마다 레이어 필수" 강제가 동작한다. 보통 기획 페이지에만 per-page config 로 켠다:
+  ```
+  sigma_set_page_data({ key: "lint", value: '{"builtins":{"annotation_layer":{"enabled":true}}}' })
+  sigma_lint({ configMode: "per-page" })   // 또는 merge
+  ```
 
 ## 커스텀 규칙
 
