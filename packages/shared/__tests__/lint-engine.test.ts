@@ -812,3 +812,45 @@ describe('기획 레이어 (annotation-layer) — 면제 + annotation_layer 규�
     expect(rs).not.toContain('frame_padding');
   });
 });
+
+describe('instance_default_name (opt-in) — 인스턴스가 마스터 이름 그대로', () => {
+  // 프레임 안에 인스턴스 2개: 하나는 마스터명 그대로("marker"), 하나는 고유 이름 부여("3번 마커").
+  const roots = () => [
+    node('wrap', 'wrap', 'FRAME', [0, 0, 400, 400], [
+      node('i_default', 'marker', 'INSTANCE', [10, 10, 24, 24]),
+      node('i_named', '3번 마커', 'INSTANCE', [50, 10, 24, 24]),
+    ]),
+  ];
+  const names = new Map([['i_default', 'marker'], ['i_named', 'marker']]);
+
+  test('opt-in — 기본 OFF: 마스터명 그대로여도 위반 없음', () => {
+    const rs = runBuiltinRules(roots(), {}, { instanceComponentNames: names }).map((v) => v.rule);
+    expect(rs).not.toContain('instance_default_name');
+  });
+
+  test('규칙 ON — 마스터명 그대로인 인스턴스만 위반, 고유 이름은 통과', () => {
+    const vs = runBuiltinRules(roots(), { instance_default_name: { enabled: true } }, { instanceComponentNames: names });
+    const flagged = vs.filter((v) => v.rule === 'instance_default_name').flatMap((v) => v.nodes);
+    expect(flagged).toContain('i_default');
+    expect(flagged).not.toContain('i_named');
+  });
+
+  test('규칙 ON 이지만 맵에 없음(조회 실패) — 판정 없이 건너뜀', () => {
+    const rs = runBuiltinRules(roots(), { instance_default_name: { enabled: true } }, { instanceComponentNames: new Map() })
+      .map((v) => v.rule);
+    expect(rs).not.toContain('instance_default_name');
+  });
+
+  test('중첩 인스턴스 제외 — INSTANCE 내부의 인스턴스는 마스터명 그대로여도 검사 안 함', () => {
+    const nested = [
+      node('outer', 'card', 'INSTANCE', [0, 0, 200, 200], [
+        node('inner', 'icon', 'INSTANCE', [10, 10, 24, 24]),
+      ]),
+    ];
+    const map = new Map([['outer', 'card'], ['inner', 'icon']]);
+    const flagged = runBuiltinRules(nested, { instance_default_name: { enabled: true } }, { instanceComponentNames: map })
+      .filter((v) => v.rule === 'instance_default_name').flatMap((v) => v.nodes);
+    expect(flagged).toContain('outer');   // 최상위 인스턴스는 검사
+    expect(flagged).not.toContain('inner'); // 내부 인스턴스는 제외
+  });
+});

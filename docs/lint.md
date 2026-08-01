@@ -99,7 +99,7 @@ sigma_set_node_data({ token, nodeId:"1:24", key:"lint-ignore", value:'{"rules":"
 sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 ```
 
-## 빌트인 규칙 17종
+## 빌트인 규칙 18종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -120,8 +120,9 @@ sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 | `fully_occluded_sibling` | 같은 부모 안에서 나중에 그려지는(z-order 위) 형제가 완전 불투명한 SOLID fill로 바운딩박스 전체를 덮어, 어떤 상태에서도 절대 안 보이는 노드 — `hidden_leaf`의 암묵적 버전. **fills/opacity 조회가 필요해 켜져 있으면 config.custom 유무와 무관하게 `get_nodes_info` 왕복이 한 번 추가된다.** 덮는 노드는 RECTANGLE/FRAME/COMPONENT/INSTANCE만 인정(원·별 등 비사각형은 바운딩박스 근사가 부정확해 제외), 그라디언트/이미지 fill은 완전 불투명을 증명 못 해 제외, 형제 여럿이 조각조각 합쳐 덮는 경우는 못 잡음(모두 의도적 스코프 축소 — 오탐 방지 우선) | — | — |
 | `raw_node` **(opt-in, 기본 OFF)** | 화면 조립 레이어에서 등록 컴포넌트의 INSTANCE 가 아니라 raw 도형/프레임으로 그린 노드를 전수 검출("쓰는 건 전부 사전 정의" 정책). INSTANCE 내부 노드는 항상 제외(정의의 사본). strict 정책이라 켜는 파일만 opt-in | `types`·`checkInsideComponent`·`exemptNamePattern` | `types`=FRAME/RECTANGLE/ELLIPSE/VECTOR/LINE/POLYGON/STAR, `checkInsideComponent`=false |
 | `annotation_layer` **(opt-in, 기본 OFF)** | 모든 SECTION(중첩 포함)이 **기획 레이어(annotation-layer)**를 직속 자식으로 최소 1개 갖도록 강제. 켜는 순간 기획 레이어는 겹침/여백/오버플로우/orphan 규칙에서 **자동 면제**된다(수동 lint-ignore 불필요). ⚠️ **판정은 이름이 아니라 pluginData** — 노드 sharedPluginData("sigma","role")=="annotation-layer". 레이어 생성·태깅은 `sigma_create_annotation_layer`. 아래 §기획 레이어 참조 | — | — |
+| `instance_default_name` **(opt-in, 기본 OFF)** | `default_name`의 인스턴스 판 — INSTANCE 이름이 **마스터 컴포넌트 이름 그대로**면(=고유 이름 미부여) 위반. 마스터명은 TreeNode에 없어 서버가 `get_nodes_info`의 `componentName`을 resolve해 판정(규칙 ON일 때만 1왕복). **중첩 인스턴스(다른 INSTANCE 내부)는 제외**(정의의 사본). 실화면엔 마스터명 유지 인스턴스가 흔해 기본 ON이면 폭주 → strict 네이밍을 원하는 파일만 opt-in | — | — |
 
-파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`·`annotation_layer`는 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`·`annotation_layer`·`instance_default_name`은 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
 
 ## 기획 레이어 (annotation-layer)
 

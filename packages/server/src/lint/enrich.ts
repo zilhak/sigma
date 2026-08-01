@@ -11,6 +11,8 @@ import type { CtxRelations } from './run-custom-rule';
 export interface NodeInfoLike {
   nodeId: string;
   error?: string;
+  /** INSTANCE 의 마스터 컴포넌트 이름 (get_nodes_info 가 인스턴스에 대해 반환). instance_default_name 규칙용. */
+  componentName?: string;
   opacity?: number;
   fills?: unknown;
   strokes?: unknown;

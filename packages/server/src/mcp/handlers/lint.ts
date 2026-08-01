@@ -139,6 +139,44 @@ async function collectAnnotationLayerIds(
   return layerIds;
 }
 
+/**
+ * instance_default_name 규칙이 켜졌을 때, INSTANCE id → 마스터 컴포넌트 이름 맵을 만든다.
+ * 마스터 이름은 TreeNode 에 없어 get_nodes_info(componentName)로 resolve 한다.
+ * 후보 = 최상위(다른 INSTANCE 내부가 아닌) INSTANCE 노드. 배치 1왕복으로 조회.
+ * 규칙이 꺼져 있으면 조회 없이 빈 맵(비용 0). 조회 실패 시에도 빈 맵(판정 없이 진행).
+ */
+async function collectInstanceComponentNames(
+  builtins: LintConfig['builtins'],
+  roots: TreeNode[],
+  wsServer: ToolContext['wsServer'],
+  pluginId: string | undefined,
+): Promise<Map<string, string>> {
+  const empty = new Map<string, string>();
+  if (builtins?.instance_default_name?.enabled !== true) return empty;
+
+  const candidates: string[] = [];
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type === 'INSTANCE') { candidates.push(n.id); continue; } // 중첩 인스턴스는 제외(엔진 규칙과 동일)
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(roots);
+  if (candidates.length === 0) return empty;
+
+  let infos: NodeInfoLike[] = [];
+  try {
+    infos = extractNodesInfo(await wsServer.getNodesInfo(candidates, pluginId));
+  } catch {
+    return empty; // 조회 실패 시 판정 없이 진행(안전 기본값)
+  }
+  const map = new Map<string, string>();
+  for (const info of infos) {
+    if (!info.error && typeof info.componentName === 'string') map.set(info.nodeId, info.componentName);
+  }
+  return map;
+}
+
 /** 한 트리(roots)에 config 를 적용해 위반 목록을 낸다(빌트인+occlusion+커스텀). */
 async function runLintOnRoots(
   config: LintConfig,
@@ -148,8 +186,9 @@ async function runLintOnRoots(
 ): Promise<Violation[]> {
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId);
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId);
+  const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
   return [
-    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds }),
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),
