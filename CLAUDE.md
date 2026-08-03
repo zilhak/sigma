@@ -247,9 +247,8 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_frames` | 페이지의 모든 프레임 위치/크기 조회 | `token` | — |
 | `sigma_find_node` | 경로/이름으로 노드 검색, 또는 `where`로 속성 조건 검색 (예: width>1000 전부) | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
-| `sigma_get_tree` | 문서 계층 구조 탐색 | `token` | `nodeId`, `path`, `depth`, `filter`, `limit` |
+| `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `filter`, `limit`, `fields` |
 | `sigma_get_node_info` | 노드 상세 정보 조회 (fills, strokes, text, layout) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 정보 일괄 조회 | `token`, `nodeIds` | — |
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지 목록) | `token` | — |
@@ -264,6 +263,9 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_list_fonts` | 사용 가능한 폰트 목록 조회 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
 
+> **`sigma_get_tree` 의 `fields` (좌표 전용 축약)**: `all`(기본)은 노드마다 `fullPath` + `meta`(visible·locked·layoutMode·characters(≤100자)·layoutSizing·description)를 함께 싣는다. `fields:"geometry"` 는 이 둘을 빼고 `id·name·type·boundingBox·childCount·children` + **`absolute`**(페이지 절대좌표 좌상단)만 준다 — 위치 보정처럼 좌표만 필요한 작업에서 payload 를 줄이기 위함.
+> - **좌표계 분업**: `boundingBox` 는 **직속 부모 로컬좌표**(섹션도 자식 원점을 새로 잡는다) → 실제 수정(`modify_node` move/resize)은 이 값으로. `absolute` 는 페이지 절대좌표 → 다른 컨테이너에 든 노드끼리 겹침·거리 판단은 이 값으로. 로컬좌표끼리 비교하면 오판한다.
+>
 > **`sigma_find_node` 의 `where` (속성 조건 검색)**: `path`(경로로 하나 찾기)와 상호배타. `select`(type/namePattern)로 대상을 좁히고 `checks` 배열로 조건을 건다(**AND 결합**, OR은 호출을 나눈다). 연산자는 `sigma_lint` 커스텀 규칙과 **동일한 5개**(`equals`/`range`/`regex`/`oneOf`/`exists`)이며 엔진도 같은 코드(`shared/src/lint/json-rule.ts` `queryNodes`)를 재사용한다 — 연산자를 늘리지 않는다.
 > - **비용**: `id·name·type·x·y·width·height·childCount·visible·locked` 만 쓰면 트리 조회 1회. 그 밖의 필드(`fills`·`opacity`·`cornerRadius`·`characters`·`fontSize`·`layoutMode`·`layoutSizing*`·`strokes`·`strokeWeight`·`description`)는 상세 조회 왕복이 1회 추가된다(응답 `enriched`로 확인).
 > - 범위는 바인딩 페이지 전체(`nodeId`로 하위 한정), 결과는 `limit`(기본 200) 초과 시 `truncated: true`.

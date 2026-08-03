@@ -9,6 +9,7 @@ export type {
   ExtractPayload,
   WebSocketMessage,
   TreeFilter,
+  TreeFields,
   TreeNode,
   FindNodeResult,
   GetTreeResult,

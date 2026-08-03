@@ -3,8 +3,7 @@ export type { CreatePageResult, RenamePageResult, SwitchPageResult, DeletePageRe
 export { getNodeFullPath, findNodesByPath, serializeTreeNode, findNodeWithDetails, getTreeWithFilter } from './tree';
 export type { SerializeContext } from './tree';
 export { executeModifyNode } from './modify';
-export { getFrames, deleteFrame } from './frames';
-export type { FrameInfo } from './frames';
+export { deleteFrame } from './frames';
 export { createSection } from './section';
 export type { CreateSectionOptions, CreateSectionResult } from './section';
 export { groupNodes, ungroupNodes, flattenNodes, moveNode, cloneNode } from './move';

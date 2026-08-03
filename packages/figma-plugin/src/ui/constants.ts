@@ -2,7 +2,6 @@
 export const SERVER_MSG = {
   REGISTERED: 'REGISTERED',
   CREATE_FRAME: 'CREATE_FRAME',
-  GET_FRAMES: 'GET_FRAMES',
   GET_PAGES: 'GET_PAGES',
   DELETE_FRAME: 'DELETE_FRAME',
   UPDATE_FRAME: 'UPDATE_FRAME',
@@ -36,7 +35,6 @@ export const PLUGIN_MSG = {
   ERROR: 'error',
   INFO: 'info',
   FILE_INFO: 'file-info',
-  FRAMES_LIST: 'frames-list',
   PAGES_LIST: 'pages-list',
   DELETE_RESULT: 'delete-result',
   UPDATE_RESULT: 'update-result',

@@ -178,7 +178,6 @@ export class FigmaWebSocketServer {
         break;
 
       case 'RESULT':
-      case 'FRAMES_LIST':
       case 'DELETE_RESULT':
       case 'UPDATE_RESULT':
       case 'MODIFY_RESULT':
@@ -401,12 +400,6 @@ export class FigmaWebSocketServer {
     clearTimeout(pending.timeout);
     this.pendingCommands.delete(commandId);
 
-    // FRAMES_LIST는 message.frames를 사용
-    if (message.type === 'FRAMES_LIST') {
-      pending.resolve(message.frames);
-      return;
-    }
-
     // DELETE_RESULT는 성공 시 변환된 형태로 반환
     if (message.type === 'DELETE_RESULT') {
       if (message.success) {
@@ -571,16 +564,6 @@ export class FigmaWebSocketServer {
     });
   }
 
-  // Get all frames from Figma
-  // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
-  // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
-  async getFrames(pluginId?: string, pageId?: string): Promise<Array<{ id: string; name: string; x: number; y: number; width: number; height: number }>> {
-    return this.sendCommand('GET_FRAMES', { pageId }, {
-      pluginId,
-      logSuffix: pageId ? ` (page: ${pageId})` : '',
-    });
-  }
-
   // Delete a frame in Figma
   // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
   // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
@@ -742,6 +725,8 @@ export class FigmaWebSocketServer {
       limit?: number;
       pageId?: string;
       timeoutMs?: number;
+      /** 'geometry' 면 좌표 전용 축약 응답(fullPath·meta 생략, absolute 추가). 기본 'all' */
+      fields?: 'all' | 'geometry';
     },
     pluginId?: string
   ): Promise<{
@@ -760,6 +745,7 @@ export class FigmaWebSocketServer {
       filter: options.filter,
       limit: options.limit,
       pageId: options.pageId,
+      fields: options.fields,
     }, {
       pluginId,
       timeoutMs: options.timeoutMs ?? 60000,  // 60초 기본 (트리가 클 수 있음). 호출자가 override 가능.

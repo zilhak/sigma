@@ -119,11 +119,6 @@ export function handleServerMessage(msg: ServerMessage) {
       handleChunkEnd(msg);
       break;
 
-    case SERVER_MSG.GET_FRAMES:
-      log(`프레임 목록 요청${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
-      sendToPlugin('get-frames', undefined, undefined, undefined, undefined, undefined, msg.pageId, msg.commandId);
-      break;
-
     case SERVER_MSG.GET_PAGES:
       log('페이지 목록 요청', 'info');
       sendToPlugin('get-pages', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);

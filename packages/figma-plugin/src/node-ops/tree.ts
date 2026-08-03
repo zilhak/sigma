@@ -1,4 +1,4 @@
-import type { TreeNode, TreeFilter, FindNodeResult, GetTreeResult } from '@sigma/shared';
+import type { TreeNode, TreeFilter, TreeFields, FindNodeResult, GetTreeResult } from '@sigma/shared';
 import { getPageById } from './page';
 
 /**
@@ -68,6 +68,8 @@ export interface SerializeContext {
   limit?: number;
   nodeCount: { value: number };  // mutable counter
   parentPath: string;
+  /** 'geometry' 면 좌표에 필요한 것만 싣는다(fullPath·meta 생략, absolute 추가). 기본 'all' */
+  fields?: TreeFields;
 }
 
 /**
@@ -118,6 +120,22 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
   const hasChildren = 'children' in node;
   const childCount = hasChildren ? (node as FrameNode).children.length : 0;
 
+  // geometry 모드: 좌표 작업에 필요한 것만 싣는다(meta 구성을 건너뛰고 fullPath 는 출력에서 뺀다).
+  // absolute 는 절대좌표 — boundingBox(부모 로컬)만으로는 다른 섹션에 속한 노드끼리 비교가 안 된다.
+  if (ctx.fields === 'geometry') {
+    const abs = 'absoluteBoundingBox' in node ? node.absoluteBoundingBox : null;
+    const geoNode: TreeNode = {
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      boundingBox,
+      childCount,
+    };
+    if (abs) geoNode.absolute = { x: abs.x, y: abs.y };
+    attachChildren(node, geoNode, ctx, fullPath, hasChildren);
+    return geoNode;
+  }
+
   // meta 정보 구성
   const meta: TreeNode['meta'] = {
     visible: node.visible,
@@ -161,34 +179,44 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     meta,
   };
 
-  // 자식 노드 처리 (depth가 허용하면)
+  attachChildren(node, treeNode, ctx, fullPath, hasChildren);
+
+  return treeNode;
+}
+
+/** depth 가 허용하면 자식을 직렬화해 treeNode.children 에 붙인다(limit 공유). */
+function attachChildren(
+  node: SceneNode,
+  treeNode: TreeNode,
+  ctx: SerializeContext,
+  fullPath: string,
+  hasChildren: boolean,
+): void {
   const shouldTraverseChildren = ctx.maxDepth === -1 || ctx.currentDepth < ctx.maxDepth;
-  if (hasChildren && shouldTraverseChildren) {
-    const children: TreeNode[] = [];
-    const frameNode = node as FrameNode;
+  if (!hasChildren || !shouldTraverseChildren) return;
 
-    for (const child of frameNode.children) {
-      if (ctx.limit !== undefined && ctx.nodeCount.value >= ctx.limit) {
-        break;
-      }
+  const children: TreeNode[] = [];
+  const frameNode = node as FrameNode;
 
-      const serializedChild = serializeTreeNode(child, {
-        ...ctx,
-        currentDepth: ctx.currentDepth + 1,
-        parentPath: fullPath,
-      });
-
-      if (serializedChild) {
-        children.push(serializedChild);
-      }
+  for (const child of frameNode.children) {
+    if (ctx.limit !== undefined && ctx.nodeCount.value >= ctx.limit) {
+      break;
     }
 
-    if (children.length > 0) {
-      treeNode.children = children;
+    const serializedChild = serializeTreeNode(child, {
+      ...ctx,
+      currentDepth: ctx.currentDepth + 1,
+      parentPath: fullPath,
+    });
+
+    if (serializedChild) {
+      children.push(serializedChild);
     }
   }
 
-  return treeNode;
+  if (children.length > 0) {
+    treeNode.children = children;
+  }
 }
 
 /**
@@ -253,6 +281,7 @@ export function getTreeWithFilter(options: {
   filter?: TreeFilter;
   limit?: number;
   pageId?: string;
+  fields?: TreeFields;
 }): GetTreeResult {
   // maxDepth 결정 (-1 또는 "full"은 무한, 기본값 1)
   let maxDepth = 1;
@@ -312,6 +341,7 @@ export function getTreeWithFilter(options: {
       limit: effectiveLimit,
       nodeCount,
       parentPath: rootPath || '',
+      fields: options.fields,
     });
 
     if (serialized) {

@@ -200,41 +200,6 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
     }
   });
 
-  // Get list of frames in Figma
-  app.get('/api/figma/frames', async (c) => {
-    try {
-      // Get optional query parameters for targeting specific plugin/page
-      const pluginId = c.req.query('pluginId');
-      const pageId = c.req.query('pageId');
-
-      // Check Figma connection (specific plugin if pluginId provided)
-      if (pluginId) {
-        const targetPlugin = wsServer.getPluginById(pluginId);
-        if (!targetPlugin) {
-          return c.json({ error: `지정된 플러그인(${pluginId})이 연결되어 있지 않습니다` }, 503);
-        }
-      } else if (!wsServer.isFigmaConnected()) {
-        return c.json({ error: 'Figma Plugin이 연결되어 있지 않습니다' }, 503);
-      }
-
-      // Get frames from Figma with optional targeting
-      const frames = await wsServer.getFrames(pluginId, pageId);
-
-      return c.json({
-        success: true,
-        frames,
-        target: {
-          pluginId: pluginId || '(default)',
-          pageId: pageId || '(current)',
-        },
-      });
-    } catch (error) {
-      console.error('[HTTP] Figma frames error:', error);
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      return c.json({ error: message }, 500);
-    }
-  });
-
   // === Dashboard ===
 
   // Dashboard HTML (외부 파일에서 읽어서 반환)

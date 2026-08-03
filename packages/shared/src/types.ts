@@ -196,6 +196,14 @@ export type WebSocketMessage =
 /**
  * 트리 탐색 필터
  */
+/**
+ * 트리 노드에 실을 필드 집합.
+ * - 'all'(기본): 기존 그대로 — fullPath + meta(visible/locked/layoutMode/characters/layoutSizing/description) 포함
+ * - 'geometry': 좌표 작업 전용 — id/name/type/boundingBox/absolute/childCount/children 만. fullPath·meta 생략.
+ *   위치 보정처럼 좌표만 필요한 작업에서 meta.characters(최대 100자)·fullPath 가 페이로드를 지배하는 걸 막는다.
+ */
+export type TreeFields = 'all' | 'geometry';
+
 export interface TreeFilter {
   /** 허용할 노드 타입 (예: ['FRAME', 'SECTION']) */
   types?: string[];
@@ -220,8 +228,11 @@ export interface TreeNode {
   childCount: number;
   /** 자식 노드들 (depth > 0일 때만) */
   children?: TreeNode[];
-  /** 루트부터의 전체 경로 (예: "Section/Frame/Button") */
+  /** 루트부터의 전체 경로 (예: "Section/Frame/Button"). fields:"geometry" 에선 생략 */
   fullPath?: string;
+  /** 페이지 절대좌표 좌상단. fields:"geometry" 에서만 채워진다 — boundingBox 는 부모 로컬좌표라
+   *  다른 컨테이너에 속한 노드끼리 겹침·거리를 비교하려면 이 값이 필요하다. */
+  absolute?: { x: number; y: number };
   /** 타입별 추가 정보 */
   meta?: {
     visible?: boolean;

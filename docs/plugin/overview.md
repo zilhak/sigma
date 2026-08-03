@@ -64,7 +64,6 @@ MCP Handler → AI Agent에 응답
 | `create-from-html` | `createFrameFromHTML()` | converter/frame | `sigma_create_frame` |
 | `update-frame` | `updateExistingFrame()` | converter/frame | `sigma_update_frame` |
 | `modify-node` | `executeModifyNode()` | node-ops/modify | `sigma_modify_node` |
-| `get-frames` | `getFrames()` | node-ops/frames | `sigma_get_frames` |
 | `delete-frame` | `deleteFrame()` | node-ops/frames | `sigma_delete_frame` |
 | `find-node` | `findNodeWithDetails()` | node-ops/tree | `sigma_find_node` |
 | `get-tree` | `getTreeWithFilter()` | node-ops/tree | `sigma_get_tree` |

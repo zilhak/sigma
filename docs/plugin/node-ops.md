@@ -16,7 +16,7 @@ Figma 노드를 생성, 수정, 조회, 삭제하는 핵심 모듈입니다.
 | `batch.ts` | 배치 작업 (스캔/일괄수정/삭제) | `sigma_batch_modify/batch_delete/scan_*` |
 | `tree.ts` | 트리 탐색/검색 | `sigma_find_node/get_tree` |
 | `selection.ts` | 선택 관리 + 뷰포트 | `sigma_get/set_selection/viewport` |
-| `frames.ts` | 프레임 목록/삭제 | `sigma_get_frames/delete_frame` |
+| `frames.ts` | 프레임 삭제 | `sigma_delete_frame` |
 | `move.ts` | 이동/복제/그룹/언그룹/평탄화 | `sigma_move_node/clone_node/group_nodes/...` |
 | `boolean.ts` | Boolean 연산 | `sigma_boolean_operation` |
 | `section.ts` | Section 생성 | `sigma_create_section` |

@@ -262,22 +262,6 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
     },
   },
   {
-    name: 'sigma_get_frames',
-    description: `Figma 페이지의 모든 프레임 위치와 크기를 조회합니다.
-
-**바인딩 필수**: 토큰이 바인딩된 페이지의 프레임 목록을 반환합니다.`,
-    inputSchema: {
-      type: 'object',
-      properties: {
-        token: {
-          type: 'string',
-          description: 'Sigma 토큰 (stk-...)',
-        },
-      },
-      required: ['token'],
-    },
-  },
-  {
     name: 'sigma_delete_frame',
     description: `Figma에서 프레임을 삭제합니다.
 
@@ -521,10 +505,20 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
 
 **limit:** 최대 노드 수 (기본 1000, 대용량 방지)
 
+**fields — 응답에 실을 필드 (기본 "all"):**
+- \`all\`: 노드마다 id/name/type/boundingBox/childCount/children + \`fullPath\` + \`meta\`(visible·locked·layoutMode·characters(최대 100자)·layoutSizing·description)
+- \`geometry\`: **좌표 작업 전용 축약** — id/name/type/boundingBox/childCount/children + \`absolute\` 만. fullPath·meta 를 통째로 뺀다.
+  위치 보정처럼 좌표만 필요한 작업에서 meta.characters·fullPath 가 페이로드를 지배하는 걸 막는다.
+
+⚠️ **좌표계**: \`boundingBox\` 는 **직속 부모 로컬좌표**다(Figma 의 모든 컨테이너가 자식 원점을 새로 잡는다 — 섹션도 동일).
+\`fields:"geometry"\` 는 여기에 페이지 **절대좌표** \`absolute: {x, y}\` 를 같이 준다. 서로 다른 섹션에 든 노드끼리
+겹침·거리를 판단하려면 \`absolute\` 를, 실제로 위치를 고칠 땐(sigma_modify_node 의 move/resize) 로컬 \`boundingBox\` 를 쓴다.
+
 **사용 예시:**
 - 바인딩된 페이지 최상위: sigma_get_tree({ token })
 - 특정 섹션 내부: sigma_get_tree({ token, path: "Design System" })
-- 프레임 전체 구조: sigma_get_tree({ token, nodeId: "1:234", depth: "full" })`,
+- 프레임 전체 구조: sigma_get_tree({ token, nodeId: "1:234", depth: "full" })
+- 페이지 전체 좌표만: sigma_get_tree({ token, depth: "full", fields: "geometry" })`,
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -563,6 +557,11 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
         limit: {
           type: 'number',
           description: '최대 노드 수 (기본 1000)',
+        },
+        fields: {
+          type: 'string',
+          enum: ['all', 'geometry'],
+          description: '응답 필드 집합. "all"(기본)=fullPath+meta 포함 / "geometry"=좌표 전용 축약(fullPath·meta 생략, 절대좌표 absolute 추가)',
         },
       },
       required: ['token'],

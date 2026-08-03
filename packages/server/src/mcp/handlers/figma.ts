@@ -104,25 +104,6 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     });
   },
 
-  async sigma_get_frames(args, context) {
-    const { wsServer } = context;
-    const access = validateFigmaAccess(args.token as string, wsServer);
-    if (access.error) return access.error;
-
-    const { pluginId, pageId } = access;
-    const frames = await wsServer.getFrames(pluginId, pageId);
-
-    return jsonResponse({
-      success: true,
-      target: {
-        pluginId: pluginId || '(default)',
-        pageId: pageId || '(current)',
-      },
-      count: frames.length,
-      frames: frames,
-    });
-  },
-
   async sigma_delete_frame(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
@@ -315,6 +296,8 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const depth = args.depth as number | 'full' | undefined;
     const filter = args.filter as { types?: string[]; namePattern?: string } | undefined;
     const limit = args.limit as number | undefined;
+    // 좌표 전용 축약 응답. 잘못된 값은 무시하고 기본('all')로 — 조용히 필드가 빠지는 것보다 안전하다.
+    const fields = args.fields === 'geometry' ? 'geometry' as const : undefined;
 
     // 토큰 검증
     const tokenEntry = tokenStore.validateToken(token);
@@ -341,7 +324,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     try {
       const result = await wsServer.getTree(
-        { nodeId, path, depth, filter, limit, pageId },
+        { nodeId, path, depth, filter, limit, pageId, fields },
         pluginId
       );
       return jsonResponse(result);

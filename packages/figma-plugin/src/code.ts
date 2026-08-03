@@ -5,7 +5,7 @@ import { convertExtractedNodeToHTML } from './extractor';
 import { getTargetPage, getPageById, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage, reorderPage } from './node-ops';
 import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
-import { getFrames, deleteFrame } from './node-ops';
+import { deleteFrame } from './node-ops';
 import { createSection } from './node-ops';
 import { groupNodes, ungroupNodes, flattenNodes, moveNode, cloneNode } from './node-ops';
 import { exportImage } from './node-ops';
@@ -472,17 +472,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       break;
     }
 
-    case 'get-frames': {
-      const result = getFrames(msg.pageId as string | undefined);
-      figma.ui.postMessage({
-        type: 'frames-list',
-        commandId,
-        frames: result.frames,
-        pageId: result.pageId,
-        pageName: result.pageName,
-      });
-      break;
-    }
 
     case 'delete-frame': {
       try {
@@ -678,6 +667,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           filter: msg.filter as TreeFilter | undefined,
           limit: msg.limit as number | undefined,
           pageId: msg.pageId as string | undefined,
+          fields: msg.fields as 'all' | 'geometry' | undefined,
         });
         figma.ui.postMessage({
           type: 'tree-result',

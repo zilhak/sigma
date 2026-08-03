@@ -67,19 +67,6 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
       break;
     }
 
-    case PLUGIN_MSG.FRAMES_LIST:
-      // 프레임 목록을 서버에 전달
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        sendToServer({
-          type: 'FRAMES_LIST',
-          frames: msg.frames,
-          pageId: msg.pageId,
-          pageName: msg.pageName,
-          commandId: pendingCommandId,
-        });
-        log(`프레임 목록 전송: ${(msg.frames as unknown[]).length}개 (페이지: ${msg.pageName || 'unknown'})`, 'info');      }
-      break;
-
     case PLUGIN_MSG.PAGES_LIST:
       // 페이지 목록을 서버에 전달
       if (ws && ws.readyState === WebSocket.OPEN) {

@@ -128,9 +128,8 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_get_frames` | 페이지 모든 프레임 위치/크기 | `token` | — |
 | `sigma_find_node` | 경로/이름 검색, 또는 `where`로 속성 조건 검색 | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
-| `sigma_get_tree` | 문서 계층 구조 탐색 | `token` | `nodeId`, `path`, `depth`, `filter`, `limit` |
+| `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `filter`, `limit`, `fields` |
 | `sigma_get_node_info` | 노드 상세 정보 | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 일괄 조회 | `token`, `nodeIds` | — |
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지) | `token` | — |
@@ -144,6 +143,27 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 | `sigma_scan_nodes_by_types` | 하위 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능 폰트 목록 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
+
+### sigma_get_tree 의 `fields` — 좌표 전용 축약
+
+| 값 | 노드마다 실리는 것 |
+|----|-----------------|
+| `all` (기본) | `id`·`name`·`type`·`boundingBox`·`childCount`·`children` + `fullPath` + `meta`(visible·locked·layoutMode·characters(최대 100자)·layoutSizing·description) |
+| `geometry` | `id`·`name`·`type`·`boundingBox`·`childCount`·`children` + **`absolute`**. `fullPath`·`meta` 없음 |
+
+위치 보정처럼 좌표만 필요한 작업에서 `meta.characters`·`fullPath`가 응답을 지배하는 걸 막는다.
+
+**⚠️ 좌표계 — 두 좌표를 용도별로 나눠 쓴다:**
+- `boundingBox`는 **직속 부모 로컬좌표**다(Figma의 모든 컨테이너가 자식 원점을 새로 잡는다 — 섹션도 동일).
+  실제로 위치를 고칠 때(`sigma_modify_node`의 `move`/`resize`)는 이 좌표계로 값을 준다.
+- `absolute: {x, y}`는 페이지 **절대좌표** 좌상단이다. 서로 다른 섹션·프레임에 든 노드끼리
+  겹침·거리를 판단하려면 이 값이 필요하다(로컬좌표끼리는 비교 자체가 성립하지 않는다).
+
+```jsonc
+// 페이지 전체를 좌표만으로 조회 (위치 보정 작업의 기본 조회)
+sigma_get_tree({ token, depth: "full", fields: "geometry" })
+// → { id, name, type, boundingBox: {x,y,width,height}, absolute: {x,y}, childCount, children: [...] }
+```
 
 ### sigma_find_node 의 `where` — 속성 조건 검색
 
