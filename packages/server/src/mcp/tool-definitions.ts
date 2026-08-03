@@ -2538,6 +2538,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '(Figma 네이티브 컴포넌트는 인스턴스를 자식으로 품지만, 스펙 HTML은 못 품습니다. 표·차트 등 등록 컴포넌트에 없는 조각만 스펙으로 만들어 이 조합에 끼워넣으세요.) ' +
       '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
       'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
+      '[파일 등록 정책] 이 Figma 파일의 문서 노드에 저장된 lint config 의 `componentSpec.warn`(aliasPattern/message)에 alias 가 걸리면 ' +
+      '응답에 policyWarnings 가 실립니다 — **경고일 뿐 등록은 그대로 진행**됩니다(거부 아님). ' +
+      '정책 설정: sigma_set_page_data({ pageId: "document", key: "lint", value: JSON }). validateOnly 경로에선 파일을 특정할 수 없어 검사하지 않습니다. ' +
       '등록 후 sigma_create_component_spec_instance로 삽입, 카탈로그는 sigma_list_component_specs.',
     inputSchema: {
       type: 'object' as const,

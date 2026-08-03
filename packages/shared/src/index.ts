@@ -25,8 +25,11 @@ export type {
   ComponentSpecRecord,
   SpecValidationResult,
   ComponentSpecStamp,
+  ComponentSpecPolicy,
+  SpecNamingRule,
 } from './component-spec';
 export {
+  checkSpecNamingPolicy,
   validateComponentSpecHtml,
   isValidSpecName,
   ALLOWED_CSS_PROPS,

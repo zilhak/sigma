@@ -57,7 +57,33 @@ function validateShape(parsed: unknown, path: string): LintConfig {
     obj.custom.forEach((entry, i) => validateCustomEntry(entry, i, path));
   }
 
+  if (obj.componentSpec !== undefined) validateComponentSpecPolicy(obj.componentSpec, path);
+
   return obj as LintConfig;
+}
+
+/** config.componentSpec — 스펙 등록 시 alias 이름 패턴 경고 정책. */
+function validateComponentSpecPolicy(value: unknown, path: string): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new LintConfigError(`config.componentSpec 은 객체여야 합니다: ${path}`);
+  }
+  const warn = (value as Record<string, unknown>).warn;
+  if (warn === undefined) return;
+  if (!Array.isArray(warn)) {
+    throw new LintConfigError(`config.componentSpec.warn 은 배열이어야 합니다: ${path}`);
+  }
+  warn.forEach((entry, i) => {
+    if (typeof entry !== 'object' || entry === null) {
+      throw new LintConfigError(`config.componentSpec.warn[${i}] 는 객체여야 합니다: ${path}`);
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.aliasPattern !== 'string' || !e.aliasPattern) {
+      throw new LintConfigError(`config.componentSpec.warn[${i}].aliasPattern 은 필수 문자열입니다: ${path}`);
+    }
+    if (typeof e.message !== 'string' || !e.message) {
+      throw new LintConfigError(`config.componentSpec.warn[${i}].message 는 필수 문자열입니다: ${path}`);
+    }
+  });
 }
 
 function validateCustomEntry(entry: unknown, index: number, path: string): void {

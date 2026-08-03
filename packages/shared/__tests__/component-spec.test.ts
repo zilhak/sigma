@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { validateComponentSpecHtml, isValidSpecName } from '../src/component-spec';
+import { validateComponentSpecHtml, isValidSpecName, checkSpecNamingPolicy } from '../src/component-spec';
 
 const BADGE_HTML = `
 <div style="display: flex; align-items: center; gap: 4px; padding: 2px 8px; background-color: #E3F2FD; border-radius: 10px;">
@@ -370,5 +370,49 @@ describe('validateComponentSpecHtml — param 설명(data-sigma-desc)과 ellipsi
   test('slot 아닌 요소의 white-space 거부', () => {
     const html = '<div style="display: flex; width: 100px;"><span style="white-space: normal;">x</span></div>';
     expect(validateComponentSpecHtml(html).ok).toBe(false);
+  });
+});
+
+describe('checkSpecNamingPolicy — 파일 등록 정책(alias 이름 패턴 경고)', () => {
+  const policy = {
+    warn: [
+      { aliasPattern: '^table$', message: '테이블은 wire/table 프리셋을 쓰세요' },
+      { aliasPattern: '^btn_', message: '버튼은 ui_button 권장', namespace: 'design' },
+    ],
+  };
+
+  test('정책 없음 — 경고 없음', () => {
+    expect(checkSpecNamingPolicy(undefined, { alias: 'table', namespace: 'default' })).toEqual([]);
+    expect(checkSpecNamingPolicy({}, { alias: 'table', namespace: 'default' })).toEqual([]);
+  });
+
+  test('패턴 매칭 시 그 규칙의 message 를 반환', () => {
+    expect(checkSpecNamingPolicy(policy, { alias: 'table', namespace: 'default' }))
+      .toEqual(['테이블은 wire/table 프리셋을 쓰세요']);
+  });
+
+  test('매칭 안 되면 경고 없음', () => {
+    expect(checkSpecNamingPolicy(policy, { alias: 'ui_badge', namespace: 'default' })).toEqual([]);
+  });
+
+  test('namespace 지정 규칙은 그 namespace 에서만 적용', () => {
+    expect(checkSpecNamingPolicy(policy, { alias: 'btn_primary', namespace: 'plan' })).toEqual([]);
+    expect(checkSpecNamingPolicy(policy, { alias: 'btn_primary', namespace: 'design' }))
+      .toEqual(['버튼은 ui_button 권장']);
+  });
+
+  test('여러 규칙이 걸리면 전부 반환', () => {
+    const multi = { warn: [
+      { aliasPattern: '^tab', message: 'A' },
+      { aliasPattern: 'le$', message: 'B' },
+    ] };
+    expect(checkSpecNamingPolicy(multi, { alias: 'table', namespace: 'default' })).toEqual(['A', 'B']);
+  });
+
+  test('잘못된 정규식은 조용히 넘기지 않고 그 사실을 경고로 알린다', () => {
+    const broken = { warn: [{ aliasPattern: '[', message: '안 쓰임' }] };
+    const out = checkSpecNamingPolicy(broken, { alias: 'table', namespace: 'default' });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain('올바른 정규식이 아니라');
   });
 });

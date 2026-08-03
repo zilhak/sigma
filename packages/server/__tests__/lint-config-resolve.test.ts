@@ -7,6 +7,7 @@
  */
 import { describe, test, expect } from 'bun:test';
 import { mergeConfigs, resolvePageConfig, readStoredConfig } from '../src/lint/resolve-config';
+import { validateLintConfigShape, LintConfigError } from '../src/lint/load-config';
 import { renderReportMarkdown, type PageLintResult } from '../src/lint/report';
 import type { Violation } from '@sigma/shared';
 
@@ -132,5 +133,33 @@ describe('renderReportMarkdown', () => {
   test('skip 페이지는 위반수 대신 —', () => {
     const skipRow = md.split('\n').find(l => l.includes('Skipped Page'));
     expect(skipRow).toContain('—');
+  });
+});
+
+describe('config.componentSpec 형태검증 (스펙 등록 정책)', () => {
+  const shape = (v: unknown) => () => validateLintConfigShape(v, 'test');
+
+  test('올바른 정책은 통과', () => {
+    const cfg = validateLintConfigShape({
+      componentSpec: { warn: [{ aliasPattern: '^table$', message: '쓰지 마세요' }] },
+    }, 'test');
+    expect(cfg.componentSpec?.warn).toHaveLength(1);
+  });
+
+  test('componentSpec 이 객체가 아니면 거부', () => {
+    expect(shape({ componentSpec: [] })).toThrow(LintConfigError);
+  });
+
+  test('warn 이 배열이 아니면 거부', () => {
+    expect(shape({ componentSpec: { warn: {} } })).toThrow(LintConfigError);
+  });
+
+  test('aliasPattern/message 누락은 거부 — 조용히 안 도는 정책을 막는다', () => {
+    expect(shape({ componentSpec: { warn: [{ message: 'x' }] } })).toThrow(/aliasPattern/);
+    expect(shape({ componentSpec: { warn: [{ aliasPattern: '^t' }] } })).toThrow(/message/);
+  });
+
+  test('componentSpec 미지정은 통과(기존 config 호환)', () => {
+    expect(validateLintConfigShape({ builtins: {} }, 'test').componentSpec).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import type { LayoutFix } from './geometric';
+import type { ComponentSpecPolicy } from '../component-spec/policy';
 
 /**
  * 커스텀/JSON 규칙이 보는 노드 뷰. TreeNode(구조/좌표) + get_node_info 상세 필드(스타일/텍스트 등)를
@@ -98,4 +99,11 @@ export type CustomRuleRecord = MatchRule | PredicateRule;
 export interface LintConfig {
   builtins?: BuiltinsConfig;
   custom?: CustomRuleRecord[];
+  /**
+   * 컴포넌트 스펙 등록/갱신(sigma_create_component_spec) 시 alias 이름 패턴 경고.
+   * 문서(document)에 저장된 config 만 참조한다 = "이 Figma 파일의 등록 정책".
+   * lint 규칙(문서 노드 검사)과는 검사 시점·대상이 다르지만, 파일별 규약이라는 성격이 같아
+   * 저장소를 나누지 않고 같은 config 안에 둔다.
+   */
+  componentSpec?: ComponentSpecPolicy;
 }

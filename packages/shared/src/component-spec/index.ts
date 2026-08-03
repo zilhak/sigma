@@ -6,6 +6,9 @@ export type {
   ComponentSpecStamp,
 } from './types';
 
+export type { ComponentSpecPolicy, SpecNamingRule } from './policy';
+export { checkSpecNamingPolicy } from './policy';
+
 export {
   validateComponentSpecHtml,
   isValidSpecName,

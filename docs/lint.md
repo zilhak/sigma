@@ -93,6 +93,23 @@ sigma_set_page_data({ token, key: "lint", value: '{"builtins":{"raw_node":{"enab
 sigma_lint({ token, scope: "file", configMode: "per-page" })
 ```
 
+## 컴포넌트 스펙 등록 정책 (`componentSpec`)
+
+config의 `builtins`/`custom`이 **문서에 놓인 노드**를 검사한다면, `componentSpec`은
+**`sigma_create_component_spec` 호출 자체**를 검사한다(등록·`overwrite` 갱신 양쪽).
+
+```jsonc
+{ "componentSpec": { "warn": [
+    { "aliasPattern": "^table$", "message": "테이블은 wire/table 프리셋을 쓰세요" },
+    { "aliasPattern": "^btn_",  "message": "버튼은 ui_button 권장", "namespace": "design" }
+] } }
+```
+
+- **문서(document)에 저장된 config만** 참조한다(= 그 Figma 파일의 등록 정책). 페이지 저장 config는 보지 않는다.
+- 매칭되면 등록 응답에 `policyWarnings`가 실린다 — **경고만, 거부하지 않는다.**
+- 검사 시점·대상이 lint 규칙과 다르지만(호출 인자 vs 문서 상태), "파일별 규약"이라는 성격이 같아 저장소를 나누지 않고 같은 config에 둔다.
+- 상세·한계(도구 경로만 덮음 / 레지스트리는 서버 전역이라 우회 가능)는 [component-spec.md](component-spec.md) §파일별 등록 정책 참조.
+
 ## 노드 단위 억제 (inline suppress · `sigma_set_node_data`)
 
 페이지/파일 config가 "어떤 룰을 켜는가"라면, 노드 단위 억제는 "이 노드에서만 이 룰을 봐준다"이다 —

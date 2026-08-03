@@ -227,11 +227,36 @@ autocomplete, card, table — 전부 등록·인스턴스 생성·Auto Layout �
 | 알 수 없는 props | 에러 + 사용 가능 param 목록 |
 | 컴포넌트 노드 삭제 후 사용 | "계약 위반 ... 다시 등록하세요" (Figma의 limbo 컴포넌트로 조용히 생성하지 않음) |
 
+## 파일별 등록 정책 (`componentSpec.warn`)
+
+"이 Figma 파일에선 이런 이름으로 스펙을 등록하지 말자"를 **경고**로 거는 장치.
+저장소는 lint config와 같다 — 문서(document) 노드의 `sharedPluginData("sigma","lint")`.
+
+```jsonc
+// 파일 전체에 적용 (문서 노드에 저장)
+sigma_set_page_data({ token, pageId: "document", key: "lint", value: JSON.stringify({
+  componentSpec: {
+    warn: [
+      { aliasPattern: "^table$", message: "테이블은 wire/table 프리셋을 쓰세요" },
+      { aliasPattern: "^btn_",  message: "버튼은 ui_button 권장", namespace: "design" }
+    ]
+  }
+}) })
+```
+
+- **적용 시점**: `sigma_create_component_spec` 의 등록·`overwrite` 갱신 **양쪽**. 매칭되면 응답에 `policyWarnings` 배열이 실린다.
+- **경고일 뿐 거부가 아니다.** 등록은 그대로 완료된다 — 규약을 아직 합의하지 못한 팀에서 도구가 먼저 벽이 되는 걸 피한다.
+- 판정 입력은 **alias/namespace 뿐**이다(`aliasPattern`은 정규식, `namespace`는 선택적 한정). HTML 내용 검사는 §스펙 HTML 규칙, 문서에 놓인 노드 검사는 [lint.md](lint.md)의 몫이다.
+- `validateOnly: true`(토큰 없는 dry-run)에선 대상 파일을 특정할 수 없어 **검사하지 않는다**.
+- 잘못된 정규식은 조용히 무시하지 않고 "패턴이 잘못돼 건너뛰었다"는 경고를 대신 낸다(안 도는 정책이 통과처럼 보이는 걸 막는다). 정책 조회 자체가 실패하면 경고 없이 등록만 진행한다.
+- ⚠️ **한계 두 가지.** ① 게이트는 sigma 도구 경로만 덮는다 — 사람이 Figma에서 직접 만든 컴포넌트엔 안 걸린다. ② **레지스트리는 서버 전역**(`~/.sigma/component-specs/<namespace>__<alias>.json`)이라 다른 파일에 바인딩해 등록하면 정책을 우회할 수 있고, 그렇게 등록된 스펙은 이 파일에서도 보인다. 실수 방지용이지 강제 수단이 아니다.
+
 ## 구현 위치
 
 | 레이어 | 파일 |
 |--------|------|
 | 검증기 (규칙의 단일 원천) | `packages/shared/src/component-spec/validate.ts` |
+| 파일별 등록 정책 | `packages/shared/src/component-spec/policy.ts` (순수 함수) |
 | 타입 | `packages/shared/src/component-spec/types.ts` |
 | 빌드/사용 (Figma) | `packages/figma-plugin/src/node-ops/component-spec.ts` |
 | slot 마커 전달 | `packages/figma-plugin/src/converter/node-creator.ts` (`data-sigma-slot` → pluginData) |

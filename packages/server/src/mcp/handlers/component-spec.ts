@@ -1,9 +1,11 @@
 import {
   validateComponentSpecHtml,
   isValidSpecName,
+  checkSpecNamingPolicy,
   type ComponentSpecRecord,
 } from '@sigma/shared';
 import { jsonResponse, validateFigmaAccess, type ToolContext, type ToolResult } from '../helpers.js';
+import { readStoredConfig } from '../../lint/resolve-config.js';
 import {
   saveComponentSpec,
   getComponentSpec,
@@ -24,6 +26,21 @@ import { SPEC_PRESETS, SPEC_PRESET_NAMES } from '../spec-presets.js';
  *
  * 유일성 키는 (namespace, alias). namespace는 기획/디자인 등 스타일 체계 구분용.
  */
+
+/**
+ * 이 Figma 파일(문서)에 저장된 등록 정책으로 alias 를 검사해 경고 문구를 만든다.
+ * 저장소는 lint config 와 같다 — sigma_set_page_data({ pageId:"document", key:"lint" }) 의 `componentSpec`.
+ * 조회/파싱에 실패하면 경고 없이 진행한다(정책 조회 실패가 등록을 막지 않는다).
+ */
+async function collectSpecPolicyWarnings(
+  wsServer: ToolContext['wsServer'],
+  pluginId: string | undefined,
+  target: { alias: string; namespace: string },
+): Promise<string[]> {
+  const stored = await readStoredConfig(wsServer, 'document', pluginId);
+  if (!stored.config) return [];
+  return checkSpecNamingPolicy(stored.config.componentSpec, target);
+}
 
 /** namespace(선택) + alias로 레코드 결정. 미지정 시 유일하면 그것, 모호하면 에러 */
 async function resolveSpec(
@@ -166,8 +183,12 @@ export const componentSpecHandlers: Record<
       };
       await saveComponentSpec(record);
 
+      // 파일 등록 정책(문서 저장 config.componentSpec) — 경고만, 등록은 이미 완료된 상태다.
+      const policyWarnings = await collectSpecPolicyWarnings(wsServer, pluginId, { alias, namespace });
+
       return jsonResponse({
         success: true,
+        ...(policyWarnings.length ? { policyWarnings } : {}),
         message: result.updated
           ? `컴포넌트 "${namespace}/${alias}"가 in-place 갱신되었습니다 — 기존 인스턴스에 반영됩니다`
           : `컴포넌트 "${namespace}/${alias}"가 등록되었습니다`,
