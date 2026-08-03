@@ -46,6 +46,27 @@ occlusion 1종 + opt-in 5종)와 프로젝트별 커스텀 규칙(JSON 선언적
 
 `merge`는 "문서=공통 base + 페이지=override" 패턴에 쓴다(문서 base = `sigma_set_page_data({ pageId: "document", key: "lint", ... })`).
 
+### 서브트리 검사 (`nodeId` / `path`)
+
+`scope: "page"`에서 `nodeId`(또는 `path`)를 주면 **그 노드의 자식들**이 검사 대상이 된다.
+이때 **검사 시작 노드 자신이 컨테이너로 인식된다** — 서버가 `get_tree`의 `rootNode`(시작 노드의
+type·크기)를 엔진에 `scopeRoot`로 넘기기 때문이다. 그래서 서브트리 검사도 페이지 전체 검사와
+**같은 판정**을 받는다:
+
+| 시작 노드 | 자식에 적용되는 규칙 |
+|---|---|
+| SECTION | `card_overlap` · `frame_padding` · `child_overflow` · `component_needs_frame` (섹션 규칙) |
+| FRAME/COMPONENT/GROUP/INSTANCE | `child_overflow` (프레임 규칙). 직속 INSTANCE는 이미 래퍼 안이므로 `instance_orphan` 아님 |
+| (없음 = 페이지 전체) | `outside_section` 포함 페이지 규칙 |
+
+- **`outside_section`은 진짜 페이지 루트에서만 돈다.** 서브트리의 자식은 "섹션 밖"이 아니라
+  "그 컨테이너 안"이므로, 여기서 이 규칙을 돌리면 정상 자식이 전부 위반으로 잡힌다.
+- **페이지 루트 전용 2종**(`content_spread`·`origin_anchor`)은 서브트리에선 실행되지 않는다
+  (좌표가 페이지 절대좌표가 아니라 부모 로컬좌표라 원점·거리 판정이 무의미).
+- ⚠️ **플러그인이 구버전이면** `rootNode`가 오지 않아 시작 노드 직속 자식의 `child_overflow`·
+  `frame_padding`을 판정할 수 없다. 이 경우 응답에 `scopeContainerUnknown: true`와 `scopeWarning`이
+  실려 "왜 안 잡혔는지"가 드러난다(조용한 false clean 금지). 플러그인을 다시 빌드/로드하면 해소된다.
+
 ### 전체 파일 lint (`scope: "file"`)
 
 - 파일의 모든 페이지를 **현재 페이지 전환 없이** 순회한다(플러그인이 임의 페이지 트리를 동기 조회 가능).

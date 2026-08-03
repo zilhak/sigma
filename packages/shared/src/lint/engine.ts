@@ -62,6 +62,10 @@ export interface BuiltinRuleContext {
   /** roots 가 페이지 최상위인가(= nodeId/path 스코프가 아님). origin_anchor/content_spread 는 좌표가
    *  페이지 절대좌표일 때만 의미가 있어 이 플래그가 true 일 때만 실행된다. 미지정 = false(안전측). */
   isPageRoot?: boolean;
+  /** nodeId/path 로 스코프를 좁혔을 때의 **시작 노드 자신**(get_tree 의 rootNode). roots 는 이 노드의
+   *  자식이므로, 이걸 넘겨야 자식이 "페이지 직속"으로 오인되지 않고(outside_section 오탐) 컨테이너
+   *  밖으로 나갔는지도 판정된다(child_overflow). 페이지 전체 검사에선 undefined. */
+  scopeRoot?: TreeNode;
 }
 
 /** 페이지 트리(roots)에 config.builtins 로 켜진 규칙만 실행해 Violation[] 를 반환. */
@@ -77,6 +81,8 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
       padding: typeof paddingCfg === 'number' ? paddingCfg : DEFAULT_PADDING,
       sectionGap: typeof gapCfg === 'number' ? gapCfg : DEFAULT_SECTION_GAP,
       annotationLayerIds: layerIds,
+      scopeRoot: ctx.scopeRoot,
+      isPageRoot: ctx.isPageRoot !== false,
     });
     for (const v of result.violations) {
       if (isEnabled(builtins, v.rule)) {

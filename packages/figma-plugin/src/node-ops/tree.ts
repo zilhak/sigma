@@ -354,6 +354,20 @@ export function getTreeWithFilter(options: {
     pageName: targetPage.name,
     rootNodeId: startNode ? startNode.id : null,
     rootNodePath: rootPath,
+    // 스코프 노드 자신의 기하 정보 — lint 가 "자식이 이 컨테이너 안에 있는가"를 판정하는 데 쓴다.
+    rootNode: startNode
+      ? {
+          id: startNode.id,
+          name: startNode.name,
+          type: startNode.type,
+          boundingBox: {
+            x: 'x' in startNode ? startNode.x : 0,
+            y: 'y' in startNode ? startNode.y : 0,
+            width: 'width' in startNode ? startNode.width : 0,
+            height: 'height' in startNode ? startNode.height : 0,
+          },
+        }
+      : undefined,
     children,
     truncated: nodeCount.value >= effectiveLimit,
     totalCount: nodeCount.value,

@@ -74,6 +74,18 @@ export interface LintOptions {
   /** R4 예외로 볼 인스턴스 이름 집합 확장 (기획용 커스텀 등) */
   annoWireNames?: Iterable<string>;
   /**
+   * 검사 시작 노드(sigma_lint 의 nodeId/path 스코프). roots 는 이 노드의 **자식들**이므로,
+   * 이걸 주지 않으면 자식들이 "페이지 직속"으로 오인돼 outside_section 오탐이 나고, 동시에
+   * 부모 로컬박스를 몰라 child_overflow 를 판정하지 못한다(false clean). 둘은 같은 원인이다.
+   * 페이지 전체 검사에선 생략한다.
+   */
+  scopeRoot?: TreeNode;
+  /**
+   * roots 가 페이지 최상위인가. 기본 true. scopeRoot 없이 false 면 "서브트리인 건 알지만
+   * 컨테이너 정보가 없다"는 뜻 → 페이지 전용 규칙(outside_section)을 돌리지 않는다(오탐 방지).
+   */
+  isPageRoot?: boolean;
+  /**
    * 기획 레이어(annotation-layer)로 판정된 노드 id 집합. 이 노드와 그 하위 서브트리는
    * 겹침(card_overlap)·여백(frame_padding)·오버플로우(child_overflow)·orphan 규칙에서 면제된다.
    * ⚠️ 이름이 아니라 노드의 sharedPluginData(role) 로 판정한 결과를 **호출측(서버 핸들러)이 주입**한다
@@ -158,7 +170,7 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
     V.push(fix ? { rule, message, nodes, fix } : { rule, message, nodes });
 
   // container 의 직속 자식에 규칙 적용 후 재귀. kind: page | section | frame
-  function checkContainer(children: TreeNode[], container: TreeNode | null, kind: 'page' | 'section' | 'frame') {
+  function checkContainer(children: TreeNode[], container: TreeNode | null, kind: 'page' | 'section' | 'frame' | 'unknown') {
     // R1: 형제 SECTION 끼리 겹침 + 간격 부족 (모든 레벨)
     const sections = children.filter((c) => c.type === 'SECTION');
     for (let i = 0; i < sections.length; i++) {
@@ -253,8 +265,22 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
     for (const c of kids(n)) walkOrphan(c, nextWrap);
   }
 
-  checkContainer(roots, null, 'page');
-  for (const r of roots) walkOrphan(r, false);
+  // 검사 시작점 해석: 스코프 노드가 주어지면 그 노드를 컨테이너로 삼아 검사한다.
+  // (섹션이면 섹션 규칙, 그 외 배치형이면 프레임 규칙 — 페이지 전체 검사와 동일한 판정을 받는다)
+  const scopeRoot = opts.scopeRoot;
+  if (scopeRoot) {
+    checkContainer(roots, scopeRoot, scopeRoot.type === 'SECTION' ? 'section' : 'frame');
+    // 스코프 노드가 래퍼(프레임/컴포넌트/그룹/인스턴스)면 그 안의 인스턴스는 이미 감싸인 상태다.
+    const wrapped = WRAPPER_TYPES.has(scopeRoot.type);
+    for (const r of roots) walkOrphan(r, wrapped);
+  } else if (opts.isPageRoot === false) {
+    // 서브트리인데 컨테이너 정보가 없음 → 페이지 전용 규칙은 오탐이므로 돌리지 않는다.
+    checkContainer(roots, null, 'unknown');
+    for (const r of roots) walkOrphan(r, false);
+  } else {
+    checkContainer(roots, null, 'page');
+    for (const r of roots) walkOrphan(r, false);
+  }
 
   return { clean: V.length === 0, violationCount: V.length, violations: V };
 }

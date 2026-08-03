@@ -856,6 +856,48 @@ describe('instance_default_name (opt-in) — 인스턴스가 마스터 이름 �
   });
 });
 
+describe('스코프 검사(nodeId/path) — 검사 시작 노드가 컨테이너로 인식돼야 함', () => {
+  // sigma_lint(nodeId: 섹션) → roots = 섹션의 자식들. 이때 섹션 자신이 전달되지 않으면
+  // (1) 자식들이 "페이지 직속"으로 오인돼 outside_section 오탐, (2) 섹션 로컬박스를 몰라
+  // child_overflow 가 아예 판정 불가(false clean) 가 된다. 둘은 같은 원인의 양면이다.
+  const section = () => node('sec', '본문', 'SECTION', [0, 0, 600, 400]);
+  const scopedChildren = () => [
+    node('a', '카드A', 'FRAME', [20, 20, 200, 200]),   // 정상 (섹션 안)
+    node('b', '카드B', 'FRAME', [550, 350, 300, 300]), // 섹션 밖으로 넘침
+  ];
+
+  test('scopeRoot 없이 검사하면 정상 자식까지 outside_section 오탐 + 넘침 미검출', () => {
+    const rs = lintLayout(scopedChildren()).violations;
+    expect(rs.filter((v) => v.rule === 'outside_section')).toHaveLength(2); // 둘 다 오탐
+    expect(rs.filter((v) => v.rule === 'child_overflow')).toHaveLength(0);  // 넘침을 못 잡음
+  });
+
+  test('scopeRoot 를 주면 오탐 0 + 넘친 자식만 child_overflow', () => {
+    const rs = lintLayout(scopedChildren(), { scopeRoot: section() }).violations;
+    expect(rs.filter((v) => v.rule === 'outside_section')).toHaveLength(0);
+    const overflow = rs.filter((v) => v.rule === 'child_overflow');
+    expect(overflow.map((v) => v.nodes[0])).toEqual(['b']);
+  });
+
+  test('scopeRoot 가 FRAME 이면 프레임 규칙으로 검사 — 직속 INSTANCE 는 orphan 아님', () => {
+    const frame = node('fr', '래퍼', 'FRAME', [0, 0, 600, 400]);
+    const kids = [
+      node('i', '버튼', 'INSTANCE', [20, 20, 100, 40]),
+      node('over', '삐져나옴', 'FRAME', [500, 20, 300, 100]),
+    ];
+    const rs = lintLayout(kids, { scopeRoot: frame }).violations;
+    expect(rs.map((v) => v.rule)).not.toContain('instance_orphan');   // 래퍼 안이므로 정상
+    expect(rs.map((v) => v.rule)).not.toContain('outside_section');
+    expect(rs.filter((v) => v.rule === 'child_overflow').map((v) => v.nodes[0])).toEqual(['over']);
+  });
+
+  test('페이지 루트 검사(scopeRoot 없음)는 기존 동작 그대로 — 섹션→자식 넘침 검출', () => {
+    const roots = [node('sec', '본문', 'SECTION', [0, 0, 600, 400], scopedChildren())];
+    const overflow = lintLayout(roots).violations.filter((v) => v.rule === 'child_overflow');
+    expect(overflow.map((v) => v.nodes[0])).toEqual(['b']);
+  });
+});
+
 describe('origin_anchor (opt-in, 페이지 루트 전용) — 원점에서 시작하는 섹션', () => {
   const anchored = () => [
     node('s1', 'A', 'SECTION', [0, 0, 800, 600]),

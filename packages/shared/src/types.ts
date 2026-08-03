@@ -271,6 +271,9 @@ export interface GetTreeResult {
   rootNodeId: string | null;
   /** 탐색 시작점 경로 (path로 지정했을 때) */
   rootNodePath?: string;
+  /** 탐색 시작점 노드 자신의 정보 (nodeId/path 로 스코프를 좁혔을 때만). children 은 이 노드의 자식이므로,
+   *  스코프 검사에서 "자식이 이 컨테이너 안에 있는가"를 판정하려면 이 값이 필요하다. */
+  rootNode?: { id: string; name: string; type: string; boundingBox: { x: number; y: number; width: number; height: number } };
   /** 자식 노드들 */
   children: TreeNode[];
   /** limit에 의해 결과가 잘렸는지 */

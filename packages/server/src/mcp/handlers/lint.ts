@@ -181,6 +181,9 @@ async function collectInstanceComponentNames(
  * 한 트리(roots)에 config 를 적용해 위반 목록을 낸다(빌트인+occlusion+커스텀).
  * `isPageRoot` — roots 가 페이지 최상위인지(= nodeId/path 스코프가 아닌지). 페이지 절대좌표를
  * 전제하는 규칙(origin_anchor/content_spread)이 서브트리 검사에서 오탐하지 않도록 엔진에 넘긴다.
+ * `scopeRoot` — nodeId/path 로 좁혔을 때의 시작 노드 자신(get_tree 의 rootNode). roots 는 이 노드의
+ * 자식이므로, 넘겨야 자식이 "페이지 직속"으로 오인되지 않고(outside_section 오탐) 컨테이너 밖으로
+ * 나갔는지도 판정된다(child_overflow). 구버전 플러그인이면 undefined 로 와서 페이지 전용 규칙만 꺼진다.
  */
 async function runLintOnRoots(
   config: LintConfig,
@@ -188,12 +191,13 @@ async function runLintOnRoots(
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
   isPageRoot: boolean,
+  scopeRoot?: TreeNode,
 ): Promise<Violation[]> {
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId);
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
   return [
-    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot }),
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot, scopeRoot }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),
@@ -318,7 +322,8 @@ async function runPageLint(
 
   const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
   const roots = tree.children as TreeNode[];
-  const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot);
+  const scopeRoot = tree.rootNode as TreeNode | undefined;
+  const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot, scopeRoot);
   const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
 
   const fixable = collectFixableViolations(violations);
@@ -328,6 +333,12 @@ async function runPageLint(
   const base = {
     page: tree.pageName,
     scope: nodeId || path || '(page root)',
+    // 스코프 검사인데 컨테이너를 못 받았으면(구버전 플러그인) 그 사실을 명시한다 —
+    // 이 상태에선 시작 노드 직속 자식의 child_overflow/frame_padding 을 판정할 수 없다.
+    ...(!isPageRoot && !scopeRoot
+      ? { scopeContainerUnknown: true,
+          scopeWarning: '검사 시작 노드의 크기 정보를 받지 못해(플러그인 구버전) 직속 자식의 컨테이너 밖 이탈(child_overflow)·여백(frame_padding)은 검사되지 않았습니다. Figma 플러그인을 최신으로 다시 로드하세요.' }
+      : {}),
     configMode,
     configSource: resolved.source,
     ...(resolved.error ? { configError: resolved.error } : {}),
@@ -357,7 +368,7 @@ async function runPageLint(
     : { skipped: true, reason: '자동수정 대상 없음' };
 
   const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
-  const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot);
+  const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot, after.rootNode as TreeNode | undefined);
   const afterViolations = (await suppressViolations(afterRaw, wsServer, pluginId)).violations;
 
   return jsonResponse({

@@ -734,6 +734,7 @@ export class FigmaWebSocketServer {
     pageName: string;
     rootNodeId: string | null;
     rootNodePath?: string;
+    rootNode?: { id: string; name: string; type: string; boundingBox: { x: number; y: number; width: number; height: number } };
     children: unknown[];
     truncated?: boolean;
     totalCount?: number;
