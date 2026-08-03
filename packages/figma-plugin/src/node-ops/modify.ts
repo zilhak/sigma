@@ -200,7 +200,7 @@ export function getSupportedMethodsForType(nodeType: string): string[] {
  * 텍스트 노드의 모든 폰트를 로드하는 헬퍼
  * Mixed font 텍스트에서 range 작업 전에 필요
  */
-async function loadAllFonts(textNode: TextNode): Promise<void> {
+export async function loadAllFonts(textNode: TextNode): Promise<void> {
   const fontName = textNode.fontName;
   if (fontName !== figma.mixed) {
     await figma.loadFontAsync(fontName as FontName);
@@ -934,19 +934,31 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   // === Text Advanced ===
   setRangeHyperlink: {
-    description: '텍스트 일부에 하이퍼링크 추가/제거. args: { start: number, end: number, url?: string } (url 미지정 시 링크 제거)',
+    description: '텍스트 일부에 하이퍼링크 추가/제거. args: { start: number, end: number, url?: string, nodeId?: string } — url=외부 링크, nodeId=같은 파일 내 노드로 이동(fileKey 불필요). 둘 다 미지정 시 링크 제거',
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
       const end = toNum(args.end, 'end');
       await loadAllFonts(node as TextNode);
       const url = args.url as string | undefined;
-      if (url) {
+      const targetNodeId = args.nodeId as string | undefined;
+      if (url && targetNodeId) {
+        throw new Error('url 과 nodeId 는 함께 쓸 수 없습니다 — 링크 대상은 하나입니다');
+      }
+      if (targetNodeId) {
+        // NODE 링크: 같은 파일 안이라 fileKey 없이 nodeId 만으로 뷰가 그 노드로 이동한다.
+        (node as TextNode).setRangeHyperlink(start, end, { type: 'NODE', value: targetNodeId });
+      } else if (url) {
         (node as TextNode).setRangeHyperlink(start, end, { type: 'URL', value: url });
       } else {
         (node as TextNode).setRangeHyperlink(start, end, null);
       }
-      return { start, end, url: url !== undefined ? url : null };
+      return {
+        start,
+        end,
+        type: targetNodeId ? 'NODE' : (url ? 'URL' : null),
+        value: targetNodeId ? targetNodeId : (url ? url : null),
+      };
     },
   },
   setRangeListOptions: {

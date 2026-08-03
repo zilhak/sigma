@@ -1,6 +1,6 @@
 # MCP 도구 레퍼런스
 
-Sigma MCP 서버가 제공하는 128개 도구의 전체 목록입니다.
+Sigma MCP 서버가 제공하는 129개 도구의 전체 목록입니다.
 
 ## 사용 흐름
 
@@ -101,6 +101,8 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 **Rich Text (Range):**
 `setRangeFontSize`, `setRangeFontName`, `setRangeFills`, `setRangeTextDecoration`, `setRangeLineHeight`, `setRangeLetterSpacing`, `setRangeHyperlink`, `setRangeListOptions`, `setRangeIndentation`
 
+> `setRangeHyperlink` 는 `url`(외부 링크)과 `nodeId`(같은 파일 내 노드로 이동) 중 하나를 받는다. `nodeId` 링크는 fileKey 가 필요 없고, **편집 캔버스에서 그대로 클릭**된다(프로토타입 재생 모드 불필요). 둘 다 생략하면 해당 구간의 링크를 제거한다. 노드 쌍을 통째로 왕복 배선하려면 [`sigma_set_hyperlink`](#하이퍼링크-노드-간-상호-이동) 를 쓴다.
+
 **Plugin Data:**
 `setPluginData`, `getPluginData`, `getPluginDataKeys`, `setSharedPluginData`, `getSharedPluginData`
 
@@ -130,7 +132,7 @@ config 하나로 빌트인 규칙(기하 8종 + 구조/이름/가시성 6종 + o
 |------|------|-----------|-----------|
 | `sigma_find_node` | 경로/이름 검색, 또는 `where`로 속성 조건 검색 | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
 | `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `filter`, `limit`, `fields` |
-| `sigma_get_node_info` | 노드 상세 정보 | `token`, `nodeId` | — |
+| `sigma_get_node_info` | 노드 상세 정보 (TEXT 는 `hyperlinks` 포함 — 링크 배선 검증용) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 일괄 조회 | `token`, `nodeIds` | — |
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지) | `token` | — |
 | `sigma_get_styles` | 로컬 스타일 조회 | `token` | — |
@@ -263,6 +265,35 @@ sigma_find_node({ token, where: {
 **trigger 종류:** `ON_CLICK`, `ON_HOVER`, `ON_PRESS`, `ON_DRAG`, `MOUSE_ENTER`, `MOUSE_LEAVE`, `AFTER_TIMEOUT`
 
 **action 종류:** `NAVIGATE`(이동), `OVERLAY`(팝업), `BACK`(뒤로), `CLOSE`(닫기), `OPEN_URL`(외부 링크), `SCROLL_TO`(스크롤), `SWAP`(교체)
+
+## 하이퍼링크 (노드 간 상호 이동)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_set_hyperlink` | 노드 쌍이 서로를 가리키는 링크 배선 (누르면 상대 노드로 뷰 이동) | `token`, `links` | `direction`, `slot`, `remove` |
+
+**프로토타이핑과의 차이**: reaction 은 재생 모드에서만 동작하지만, 이 링크는 **편집 캔버스에서 그대로 클릭**된다. 기획 주석 마커 ↔ 범례처럼 "번호를 누르면 설명과 화면을 오가는" 문서형 이동에 맞다. 같은 파일 안이므로 fileKey 없이 노드 ID 만으로 동작한다.
+
+**대상 텍스트를 slot 으로 찾는다**: 하이퍼링크는 TEXT 노드에만 걸리는데, 실제로 지정하는 건 `anno/marker` 같은 **인스턴스**다. 스펙 등록 시 심어둔 slot 표시(pluginData `sigma-slot`)로 어느 텍스트에 걸지 정하므로 이름 규약이 생기지 않고, 텍스트가 여럿인 스펙(`anno/legend` = 번호 `n` + 설명 `desc`)에서도 정확히 번호만 집는다. 순서에 의존하는 "첫 번째 TEXT" 방식과 다른 점이다.
+
+대상 결정 순서:
+1. TEXT 노드면 그대로
+2. `slot`(기본 `"n"`)이 일치하는 하위 TEXT
+3. 하위 TEXT 가 정확히 하나면 그것
+4. 그 밖(후보 0개 또는 2개 이상)은 모호하므로 에러 — 사용 가능한 slot 목록을 함께 알린다
+
+**`direction`**: `both`(기본, 왕복) / `a_to_b` / `b_to_a`. 뷰포트 이동에는 뒤로가기가 없으므로 왕복하려면 양쪽에 다 걸어야 한다.
+
+**부분 실패 허용**: 한 쌍이 실패해도 나머지 쌍은 진행한다. 응답 `results[].error` 로 확인한다. 단 한 쌍 안에서는 양쪽 텍스트 해석이 모두 성공해야 걸린다(반쪽 배선 방지).
+
+**배선 확인**: 응답의 `aTextId`/`bTextId` 를 `sigma_get_node_info`(또는 배치로 `sigma_get_nodes_info`)로 조회하면 TEXT 노드의 `hyperlinks` 필드(`[{start, end, type, value}]`)로 나온다.
+
+```
+sigma_set_hyperlink({ links: [{ a: "182:125455", b: "182:125485" }, { a: "182:125457", b: "182:125489" }] })
+sigma_set_hyperlink({ links: [...], remove: true })   // 해제
+```
+
+외부 URL 링크나 문자열 일부에만 거는 부분 링크는 `sigma_modify_node` 의 `setRangeHyperlink` 를 쓴다.
 
 ## 이미지/추출
 

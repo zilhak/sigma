@@ -103,6 +103,7 @@ src/
 │   ├── figjam.ts             # FigJam 스티키/커넥터
 │   ├── annotations.ts        # 주석
 │   ├── prototyping.ts        # 프로토타이핑/인터랙션
+│   ├── hyperlink.ts          # 노드 간 상호 이동 링크 (slot 인지)
 │   ├── frames.ts             # 프레임 목록/삭제
 │   ├── section.ts            # Section 생성
 │   ├── move.ts               # 이동/복제/그룹/언그룹/평탄화

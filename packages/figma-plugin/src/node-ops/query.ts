@@ -29,6 +29,28 @@ function deepSanitizeMixed(value: unknown): unknown {
   return value;
 }
 
+/**
+ * 텍스트에 걸린 하이퍼링크를 range 단위로 읽는다.
+ *
+ * `textNode.hyperlink` 단일 속성은 문자마다 링크가 다르면 `figma.mixed`가 되어 어느 구간에
+ * 무엇이 걸렸는지 알 수 없다. 링크는 range 속성이므로 `getStyledTextSegments(['hyperlink'])`로
+ * 구간을 쪼개 읽어야 실제 배선 상태를 확인할 수 있다 — `sigma_set_hyperlink`로 건 링크가
+ * 제대로 걸렸는지 검증할 유일한 수단이라 조회에 노출한다.
+ */
+export function getTextHyperlinks(
+  textNode: TextNode
+): Array<{ start: number; end: number; type: string; value: string }> {
+  if (textNode.characters.length === 0) return [];
+  const links: Array<{ start: number; end: number; type: string; value: string }> = [];
+  const segments = textNode.getStyledTextSegments(['hyperlink']);
+  for (const segment of segments) {
+    const link = segment.hyperlink;
+    if (!link) continue;
+    links.push({ start: segment.start, end: segment.end, type: link.type, value: link.value });
+  }
+  return links;
+}
+
 export interface NodeDetailInfo {
   nodeId: string;
   name: string;
@@ -50,6 +72,7 @@ export interface NodeDetailInfo {
   fontName?: unknown;
   textAlignHorizontal?: string;
   textAlignVertical?: string;
+  hyperlinks?: Array<{ start: number; end: number; type: string; value: string }>;
   layoutMode?: string;
   layoutWrap?: string;
   paddingTop?: number;
@@ -119,6 +142,8 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     info.fontName = textNode.fontName;
     info.textAlignHorizontal = textNode.textAlignHorizontal;
     info.textAlignVertical = textNode.textAlignVertical;
+    const links = getTextHyperlinks(textNode);
+    if (links.length > 0) info.hyperlinks = links;
   }
 
   // Layout — 오토레이아웃 가능한 모든 타입(FRAME/COMPONENT/COMPONENT_SET/INSTANCE — BaseFrameMixin 상속)

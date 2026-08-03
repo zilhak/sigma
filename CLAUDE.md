@@ -5,7 +5,7 @@
 웹 컴포넌트를 추출하고 Figma와 AI Agent가 상호작용할 수 있는 모듈형 시스템.
 각 모듈은 독립적으로 동작하면서도, 로컬 서버를 중심으로 연결되면 자동화 파이프라인이 된다.
 
-Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 128개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
+Figma Plugin API가 제공하는 모든 기능 — 노드 생성/조작, 스타일/변수, 컴포넌트, 프로토타이핑, 페이지 관리, Team Library 등 — 을 MCP 도구로 1:1 매핑하는 것이 최종 목표다. 현재 129개 도구(모두 `sigma_*` 접두사)와 73개 modify 메서드가 구현되어 있다.
 
 ---
 
@@ -249,7 +249,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 |------|------|-----------|-----------|
 | `sigma_find_node` | 경로/이름으로 노드 검색, 또는 `where`로 속성 조건 검색 (예: width>1000 전부) | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
 | `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `filter`, `limit`, `fields` |
-| `sigma_get_node_info` | 노드 상세 정보 조회 (fills, strokes, text, layout) | `token`, `nodeId` | — |
+| `sigma_get_node_info` | 노드 상세 정보 조회 (fills, strokes, text, layout — TEXT 는 `hyperlinks` 포함) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 정보 일괄 조회 | `token`, `nodeIds` | — |
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지 목록) | `token` | — |
 | `sigma_get_styles` | 로컬 스타일 조회 (Paint, Text, Effect, Grid) | `token` | — |
@@ -320,6 +320,17 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 **trigger**: ON_CLICK, ON_HOVER, ON_PRESS, ON_DRAG, MOUSE_ENTER, MOUSE_LEAVE, AFTER_TIMEOUT
 **action**: NAVIGATE(이동), OVERLAY(팝업), BACK(뒤로), CLOSE(닫기), OPEN_URL(외부 링크), SCROLL_TO(스크롤), SWAP(교체)
+
+### 하이퍼링크 (노드 간 상호 이동, 토큰 필수)
+
+| 도구 | 설명 | 필수 인자 | 선택 인자 |
+|------|------|-----------|-----------|
+| `sigma_set_hyperlink` | 노드 쌍이 서로를 가리키는 링크 배선 (누르면 상대 노드로 뷰 이동) | `token`, `links` | `direction`, `slot`, `remove` |
+
+> **reaction 과 다른 물건이다**: 프로토타입 reaction 은 재생 모드에서만 동작하지만 하이퍼링크는 **편집 캔버스에서 그대로 클릭**된다. 기획 주석 마커 ↔ 범례처럼 "번호를 누르면 설명과 화면을 오가는" 문서형 이동에 맞다. 같은 파일 안이라 fileKey 없이 노드 ID 만으로 동작한다(`setRangeHyperlink` 의 `nodeId` 인자 = `type:'NODE'` 링크).
+> - **대상 텍스트는 slot 으로 찾는다**: 링크는 TEXT 에만 걸리는데 지정 대상은 보통 `anno/marker` 같은 인스턴스다. 스펙 등록 시 심어둔 slot pluginData(`sigma-slot`)로 판정하므로 **이름 규약이 생기지 않고**, 텍스트가 둘인 `anno/legend`(번호 `n` + 설명 `desc`)에서도 번호만 정확히 집는다. 순서 의존인 "첫 TEXT" 휴리스틱과 다른 점. 해석 순서 = TEXT 그대로 → slot 일치 → 하위 TEXT 가 유일 → 그 밖은 모호하므로 에러(가능한 slot 안내).
+> - `direction`: `both`(기본) / `a_to_b` / `b_to_a`. 뷰포트 이동엔 뒤로가기가 없어 왕복하려면 양쪽에 다 걸어야 한다. 쌍 단위 부분 실패 허용(단 한 쌍 안에서는 양쪽 해석이 다 되어야 걸린다 — 반쪽 배선 방지).
+> - 배선 검증은 응답 `aTextId`/`bTextId` → `sigma_get_node_info`(TEXT 는 `hyperlinks` 필드 반환). 외부 URL·부분 범위 링크는 이 도구가 아니라 `sigma_modify_node` 의 `setRangeHyperlink`.
 
 ### 이미지/추출 (토큰 필수)
 
@@ -578,6 +589,7 @@ packages/
 │       │   ├── component-spec.ts # 스펙 기반 컴포넌트 빌드/사용
 │       │   ├── annotations.ts # 주석 관리
 │       │   ├── prototyping.ts # 프로토타이핑/인터랙션
+│       │   ├── hyperlink.ts   # 노드 간 상호 이동 링크 (slot 인지)
 │       │   ├── frames.ts      # 프레임 목록/삭제
 │       │   ├── section.ts     # Section 생성
 │       │   ├── move.ts        # 이동/복제/그룹/언그룹/평탄화

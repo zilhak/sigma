@@ -14,7 +14,7 @@ Web Page → Chrome Extension → Local Server → Figma Plugin → Figma
 
 **핵심 철학:** 서로 연동하면 최고의 효율, 따로따로도 사용 가능
 
-Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 128개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
+Sigma는 Figma Plugin API가 제공하는 모든 기능을 MCP(Model Context Protocol) 도구로 1:1 매핑하여, AI Agent가 프로그래밍 방식으로 Figma를 완전히 제어할 수 있는 브릿지 시스템입니다. 현재 129개의 MCP 도구와 73개의 modify 메서드가 구현되어 있으며, Figma Plugin API의 전체 커버리지를 향해 지속 확장 중입니다.
 
 **멀티에이전트 동시 작업을 지원합니다.** 여러 에이전트가 각자 토큰을 발급·바인딩해 같은 Figma 파일에서 동시에 작업할 수 있습니다 — 순번을 정해 한 번에 하나씩 돌릴 필요가 없습니다. 모든 도구가 바인딩된 `pageId`와 `nodeId`로만 동작하고(현재 열린 페이지·현재 선택에 의존하지 않음), 명령은 고유 `commandId`로 다중화되며, 어떤 도구도 부작용으로 사용자의 페이지·뷰·선택 포커스를 바꾸지 않습니다. 단, 같은 노드를 동시에 수정하면 마지막 쓰기가 이기고(Figma 특성) `sigma_trigger_undo`는 문서 전역이므로 동시 작업 중에는 쓰지 마세요.
 
@@ -171,7 +171,7 @@ AI Agent:
 5. [Sigma MCP] sigma_create_frame(token, data) → Figma에 생성
 ```
 
-**MCP 도구 — 주요 도구 발췌 (전체 128개):**
+**MCP 도구 — 주요 도구 발췌 (전체 129개):**
 
 | 분류 | 도구 | 설명 |
 |------|------|------|
@@ -211,6 +211,7 @@ AI Agent:
 | | `sigma_set_multiple_annotations` | 주석 일괄 추가 |
 | 프로토타입 | `sigma_get_reactions` / `sigma_add_reaction` | 인터랙션 조회/추가 |
 | | `sigma_delete_reactions` | 인터랙션 제거 |
+| 하이퍼링크 | `sigma_set_hyperlink` | 노드 쌍 상호 이동 링크 배선 (재생 모드 없이 **편집 캔버스에서 클릭** — 주석 마커 ↔ 범례 왕복. 인스턴스는 slot 으로 내부 텍스트를 찾음) |
 | 페이지 | `sigma_create_page` / `sigma_rename_page` | 페이지 생성 / 이름 변경 |
 | | `sigma_switch_page` / `sigma_delete_page` | 페이지 전환 / 삭제 |
 | | `sigma_set_page_data` / `sigma_get_page_data` | 페이지·문서 노드 메타데이터 저장 / 조회 (예약 key `"lint"`) |
@@ -230,7 +231,7 @@ AI Agent:
 | 관리 | `sigma_server_status` / `sigma_storage_stats` | 서버 상태 / 스토리지 현황 |
 | | `sigma_cleanup` / `sigma_list_screenshots` / `sigma_delete_screenshot` | 스토리지 정리 / 스크린샷 관리 |
 
-위 표는 발췌입니다. 128개 전체 목록과 파라미터 상세는 [MCP 도구 레퍼런스](docs/mcp-tools.md)를 참조하세요.
+위 표는 발췌입니다. 129개 전체 목록과 파라미터 상세는 [MCP 도구 레퍼런스](docs/mcp-tools.md)를 참조하세요.
 
 ### Docker (선택 - 서버만)
 
@@ -246,7 +247,7 @@ docker compose up -d
 |------|------|
 | [아키텍처](docs/architecture.md) | 시스템 구조, 통신 흐름, 데이터 흐름 |
 | [패키지 구성](docs/packages.md) | 4개 패키지별 소스 구조와 핵심 기능 |
-| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 128개 MCP 도구 전체 목록 및 파라미터 |
+| [MCP 도구 레퍼런스](docs/mcp-tools.md) | 129개 MCP 도구 전체 목록 및 파라미터 |
 | [컴포넌트 스펙](docs/component-spec.md) | HTML 기반 컴포넌트 정의 규칙 (화이트리스트·값 검증·slot) |
 | [Lint](docs/lint.md) | 빌트인 20종 + 커스텀 규칙(JSON/predicate) 스키마, config 예제, 설계 근거 |
 | [임베드 스크립트 API](docs/embed-scripts.md) | Playwright 자동화용 스크립트 3종 API |

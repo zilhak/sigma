@@ -16,6 +16,7 @@ import { getNodeInfo, getDocumentInfo, getStyles, getNodesInfo, readMyDesign } f
 import { scanTextNodes, scanNodesByTypes, batchModify, batchDelete, setMultipleTextContents } from './node-ops';
 import { getAnnotations, setAnnotation, setMultipleAnnotations } from './node-ops';
 import { getReactions, addReaction, removeReactions } from './node-ops';
+import { setHyperlink } from './node-ops';
 import { performBooleanOperation } from './node-ops';
 import { createPaintStyle, createTextStyle, createEffectStyle, createGridStyle, applyStyle, deleteStyle } from './node-ops';
 import { createVariableCollection, createVariable, getVariables, setVariableValue, bindVariable, addVariableMode, setVariableScopes, setVariableAlias, setVariableCodeSyntax, renameVariable, deleteVariable } from './node-ops';
@@ -1579,6 +1580,22 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('remove-reactions-result', errMsg);
+      }
+      break;
+    }
+
+    case 'set-hyperlink': {
+      try {
+        const result = await setHyperlink({
+          links: msg.links as Array<{ a: string; b: string }>,
+          direction: msg.direction as 'both' | 'a_to_b' | 'b_to_a' | undefined,
+          slot: msg.slot as string | undefined,
+          remove: msg.remove as boolean | undefined,
+        });
+        sendResult('set-hyperlink-result', result);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('set-hyperlink-result', errMsg);
       }
       break;
     }

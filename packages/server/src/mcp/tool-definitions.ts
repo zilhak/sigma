@@ -2466,6 +2466,51 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       required: ['token', 'nodeId'],
     },
   },
+  {
+    name: 'sigma_set_hyperlink',
+    description: `두 노드가 서로를 가리키는 하이퍼링크를 겁니다 — 누르면 뷰가 상대 노드로 이동합니다.
+
+**바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인이 결정됩니다.
+
+**프로토타입(reaction)과 다릅니다**: 이 링크는 재생 모드가 아니라 **편집 캔버스에서 그대로 클릭**됩니다. 기획 주석 마커 ↔ 범례처럼 "번호를 누르면 설명과 화면을 오가는" 문서형 이동에 적합합니다. 같은 파일 안이라 fileKey 없이 노드 ID 만으로 동작합니다.
+
+**링크 대상 텍스트는 slot 으로 찾습니다**: 하이퍼링크는 TEXT 노드에만 걸리는데, 실제로 지정하는 건 \`anno/marker\` 같은 인스턴스입니다. 스펙 등록 시 심어둔 slot 표시(pluginData)로 어느 텍스트에 걸지 정하므로 이름 규약이 필요 없고, 텍스트가 여럿인 스펙(\`anno/legend\` = 번호 \`n\` + 설명 \`desc\`)에서도 정확히 번호만 집습니다. 대상 결정 순서: ① TEXT 면 그대로 ② slot 이 일치하는 하위 TEXT ③ 하위 TEXT 가 정확히 하나면 그것 ④ 그 밖은 모호하므로 에러(가능한 slot 을 알려줍니다).
+
+**사용 예시:**
+- 마커 ↔ 범례 왕복 배선: sigma_set_hyperlink({ links: [{ a: "182:125455", b: "182:125485" }, { a: "182:125457", b: "182:125489" }] })
+- 한 방향만: sigma_set_hyperlink({ links: [...], direction: "a_to_b" })
+- 링크 해제: sigma_set_hyperlink({ links: [...], remove: true })
+
+배선 확인은 응답의 aTextId/bTextId 를 \`sigma_get_node_info\`(또는 \`sigma_get_nodes_info\`)로 조회하면 TEXT 노드의 \`hyperlinks\` 필드로 나옵니다. 한 쌍이 실패해도 나머지 쌍은 계속 진행합니다(응답 results 의 error 확인).
+
+외부 URL 링크나 문자열 일부에만 거는 부분 링크는 이 도구가 아니라 \`sigma_modify_node\` 의 \`setRangeHyperlink\` 를 사용하세요.`,
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
+        links: {
+          type: 'array',
+          description: '서로 연결할 노드 쌍 목록 (최소 1쌍). 인스턴스를 그대로 넣으면 slot 으로 내부 텍스트를 찾습니다',
+          items: {
+            type: 'object',
+            properties: {
+              a: { type: 'string', description: '한쪽 노드 ID' },
+              b: { type: 'string', description: '다른 쪽 노드 ID' },
+            },
+            required: ['a', 'b'],
+          },
+        },
+        direction: {
+          type: 'string',
+          description: '링크 방향 (선택, 기본 both = 양방향 왕복)',
+          enum: ['both', 'a_to_b', 'b_to_a'],
+        },
+        slot: { type: 'string', description: '링크를 걸 텍스트의 slot 이름 (선택, 기본 "n" = 주석 마커·범례의 번호)' },
+        remove: { type: 'boolean', description: 'true 면 링크를 걸지 않고 제거합니다 (선택, 기본 false)' },
+      },
+      required: ['token', 'links'],
+    },
+  },
 
   // === Component Spec System (스펙 기반 컴포넌트) ===
   {

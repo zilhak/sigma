@@ -26,6 +26,8 @@ export { getAnnotations, setAnnotation, setMultipleAnnotations } from './annotat
 export type { GetAnnotationsResult, SetAnnotationResult, SetMultipleAnnotationsResult } from './annotations';
 export { getReactions, addReaction, removeReactions } from './prototyping';
 export type { GetReactionsResult, AddReactionParams, AddReactionResult, RemoveReactionsResult } from './prototyping';
+export { setHyperlink } from './hyperlink';
+export type { LinkDirection, SetHyperlinkParams, SetHyperlinkLinkResult, SetHyperlinkResult } from './hyperlink';
 export { performBooleanOperation } from './boolean';
 export type { BooleanOperationResult } from './boolean';
 export { createPaintStyle, createTextStyle, createEffectStyle, createGridStyle, applyStyle, deleteStyle } from './styles';

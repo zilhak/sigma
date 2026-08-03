@@ -4,6 +4,7 @@
 
 **소스:**
 - `node-ops/prototyping.ts` — 인터랙션/리액션
+- `node-ops/hyperlink.ts` — 노드 간 상호 이동 링크 (캔버스에서 클릭 가능)
 - `node-ops/annotations.ts` — 주석
 - `node-ops/page.ts` — 페이지 관리
 - `node-ops/figjam.ts` — FigJam 전용 (스티키, 커넥터)
@@ -54,6 +55,44 @@ Figma의 프로토타이핑 인터랙션(Reactions)을 조회, 추가, 제거합
 
 - `triggerType` 지정: 해당 트리거의 인터랙션만 제거
 - 미지정: 모든 인터랙션 제거
+
+---
+
+## 하이퍼링크 (hyperlink.ts)
+
+**MCP 도구:** `sigma_set_hyperlink(token, links, direction?, slot?, remove?)`
+
+노드 쌍이 서로를 가리키는 하이퍼링크를 건다. reaction 과 목적이 겹쳐 보이지만 **동작하는 자리가 다르다**:
+
+| | reaction | 하이퍼링크 |
+|---|---|---|
+| 동작 시점 | 프로토타입 재생 모드 | **편집 캔버스에서 바로** |
+| 대상 | 클릭 가능한 모든 노드 | TEXT 노드만 |
+| 용도 | 화면 전이 데모 | 기획 문서형 이동 (주석 마커 ↔ 범례) |
+
+같은 파일 안이므로 `{ type: 'NODE', value: nodeId }` 링크로 걸며 fileKey 가 필요 없다.
+
+### 대상 텍스트 해석 (`resolveTextNode`)
+
+링크는 TEXT 에만 걸리는데 호출자가 지정하는 건 보통 `anno/marker` 같은 **인스턴스**다. 그래서 인스턴스 안의 어느 텍스트에 걸지를 이 모듈이 정한다. 판정 기준은 이름이 아니라 스펙 등록 시 심어둔 slot pluginData(`SLOT_MARK_KEY = 'sigma-slot'`, `component-spec.ts`) — 이름 규약을 만들지 않기 위함이다.
+
+1. TEXT 노드면 그대로
+2. `slot`(기본 `"n"`)이 일치하는 하위 TEXT
+3. 하위 TEXT 가 정확히 하나면 그것
+4. 그 밖(후보 0개 또는 2개 이상)은 모호하므로 에러 — 사용 가능한 slot 목록을 함께 알린다
+
+3번 폴백 덕분에 anno 전용이 아니라 slot 을 가진 모든 스펙 인스턴스에 쓸 수 있다. 순서에 의존하는 "첫 번째 TEXT" 방식과 달리, 텍스트가 둘인 `anno/legend`(번호 `n` + 설명 `desc`)에서도 번호만 정확히 집는다.
+
+### 배선 규칙
+
+- `direction`: `both`(기본) / `a_to_b` / `b_to_a`. 뷰포트 이동에는 뒤로가기가 없으므로 왕복하려면 양쪽에 다 걸어야 한다.
+- 링크는 텍스트 **전체 범위**(0~length)에 건다. 빈 텍스트는 에러.
+- 쌍 단위 부분 실패 허용 — 한 쌍이 실패해도 나머지는 진행. 단 **한 쌍 안에서는 양쪽 해석이 모두 성공해야** 걸기 시작한다(반쪽 배선 방지).
+- `remove: true` 면 같은 대상에서 링크를 제거한다.
+
+### 검증
+
+`getTextHyperlinks()`(`query.ts`)가 `getStyledTextSegments(['hyperlink'])` 로 range 별 링크를 읽어 `sigma_get_node_info` 의 TEXT 응답에 `hyperlinks` 로 싣는다. `textNode.hyperlink` 단일 속성은 구간마다 다르면 `figma.mixed` 가 되어 쓸 수 없다.
 
 ---
 

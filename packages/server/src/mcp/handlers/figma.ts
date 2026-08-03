@@ -1826,6 +1826,42 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
   },
 
+  async sigma_set_hyperlink(args, context) {
+    const { wsServer } = context;
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+
+    const { pluginId } = access;
+    const links = args.links as Array<{ a: string; b: string }> | undefined;
+    if (!Array.isArray(links) || links.length === 0) {
+      return jsonResponse({ error: 'links 배열이 필요합니다 (최소 1쌍)' });
+    }
+    const invalid = links.findIndex((l) => !l || typeof l.a !== 'string' || typeof l.b !== 'string');
+    if (invalid !== -1) {
+      return jsonResponse({ error: `links[${invalid}] 에 a/b 노드 ID 가 없습니다` });
+    }
+
+    try {
+      const result = await wsServer.setHyperlink(
+        {
+          links,
+          direction: args.direction as string | undefined,
+          slot: args.slot as string | undefined,
+          remove: args.remove as boolean | undefined,
+        },
+        pluginId
+      );
+      return jsonResponse({
+        success: true,
+        ...(result as Record<string, unknown>),
+        hint: '이 링크는 프로토타입 재생 모드가 아니라 편집 캔버스에서 바로 클릭되며, 클릭하면 뷰가 대상 노드로 이동합니다. 배선 확인은 응답의 aTextId/bTextId 를 sigma_get_node_info 로 조회(TEXT 노드는 hyperlinks 필드를 반환)하세요.',
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return jsonResponse({ error: errorMessage });
+    }
+  },
+
   async sigma_clone_node(args, context) {
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);

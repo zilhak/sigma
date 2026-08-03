@@ -15,7 +15,7 @@ import { getOrCreateFileId } from './page';
  */
 
 const SPEC_STAMP_KEY = 'sigma-spec';
-const SLOT_MARK_KEY = 'sigma-slot';
+export const SLOT_MARK_KEY = 'sigma-slot';
 
 async function loadDefaultFonts(): Promise<void> {
   await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });

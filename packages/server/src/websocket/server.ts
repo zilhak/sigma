@@ -1226,6 +1226,13 @@ export class FigmaWebSocketServer {
     return this.sendCommand('REMOVE_REACTIONS', { nodeId, triggerType }, { pluginId });
   }
 
+  async setHyperlink(
+    args: { links: Array<{ a: string; b: string }>; direction?: string; slot?: string; remove?: boolean },
+    pluginId?: string
+  ): Promise<unknown> {
+    return this.sendCommand('SET_HYPERLINK', args, { pluginId });
+  }
+
   // === Component System (New) ===
 
   async createComponent(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {

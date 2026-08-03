@@ -76,6 +76,8 @@ Agent가 보내는 값을 정규화하는 유틸리티 함수들:
 **Rich Text — Range (9개):**
 `setRangeFontSize`, `setRangeFontName`, `setRangeFills`, `setRangeTextDecoration`, `setRangeLineHeight`, `setRangeLetterSpacing`, `setRangeHyperlink`, `setRangeListOptions`, `setRangeIndentation`
 
+> `setRangeHyperlink` 는 `url`(외부 링크) 또는 `nodeId`(같은 파일 내 노드 = `type:'NODE'` 링크, fileKey 불필요) 중 하나를 받고, 둘 다 없으면 링크를 제거한다. 노드 쌍 왕복 배선은 `hyperlink.ts` 참조.
+
 **Plugin Data (5개):**
 `setPluginData`, `getPluginData`, `getPluginDataKeys`, `setSharedPluginData`, `getSharedPluginData`
 
