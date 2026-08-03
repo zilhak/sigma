@@ -203,6 +203,11 @@ sigma_find_node({ token, where: {
 엄격한 규칙의 HTML로 컴포넌트를 등록하고, alias + props만으로 인스턴스를 삽입하는 시스템.
 **전체 규칙·근거는 [component-spec.md](component-spec.md) 참조.**
 
+**파일별 등록 정책**: 문서 노드에 저장된 lint config의 `componentSpec.warn`(`aliasPattern`/`message`/`namespace?`)에
+alias가 걸리면 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실린다 — **경고만, 거부하지 않는다.**
+설정은 `sigma_set_page_data({ pageId: "document", key: "lint", ... })`. `validateOnly` 경로는 파일을 특정할 수 없어 검사하지 않는다.
+게이트는 sigma 도구 경로만 덮고 레지스트리는 서버 전역이라 다른 파일에서 등록하면 우회된다(실수 방지용).
+
 **스펙 HTML 규칙 요약:**
 - 단일 루트 요소, inline `style=""`만 허용 (`<style>` 블록·class 셀렉터 불가)
 - 컨테이너(div/button)만 자식 보유 가능, 자식이 있으면 `display: flex` **명시 필수**.
@@ -320,6 +325,8 @@ PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어 전용 도�
 `key`는 `^[a-zA-Z0-9_.-]+$`, `value`는 유효한 JSON 문자열이어야 한다.
 `pageId`는 미지정=바인딩 페이지 / 페이지 ID / `"document"`(문서 루트).
 예약 key `"lint"`는 그 페이지(또는 문서)의 LintConfig로, `sigma_lint`의 `per-page`/`merge` 모드가 참조한다.
+**문서(`pageId:"document"`)에 저장한 경우** 같은 JSON의 `componentSpec.warn`이 그 파일의 **컴포넌트 스펙 등록 정책**으로도 쓰인다
+(alias가 패턴에 걸리면 `sigma_create_component_spec` 응답에 `policyWarnings` — 경고만, 등록은 진행). 아래 §컴포넌트 스펙 참조.
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|

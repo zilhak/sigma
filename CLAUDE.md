@@ -286,6 +286,8 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/4종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지) | `alias` | `namespace` |
 
+> **파일별 등록 정책(`componentSpec.warn`)**: 문서 노드에 저장된 lint config의 `componentSpec.warn`(`aliasPattern`/`message`/`namespace?`)에 alias가 걸리면 `sigma_create_component_spec`의 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실린다 — **경고만이고 등록을 막지 않는다**. 설정은 `sigma_set_page_data({ pageId: "document", key: "lint", ... })`. `validateOnly`(토큰 없는 dry-run)는 대상 파일을 특정할 수 없어 검사하지 않는다. **한계**: 게이트는 sigma 도구 경로만 덮고(사람이 Figma에서 직접 만든 컴포넌트는 안 걸림), 레지스트리는 서버 전역이라 다른 파일에 바인딩해 등록하면 우회된다 — 실수 방지용이지 강제 수단이 아니다. 상세는 [`docs/component-spec.md`](docs/component-spec.md) §파일별 등록 정책.
+
 ### 컴포넌트 (토큰 필수)
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
@@ -357,7 +359,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_delete_node_data` | 노드 메타데이터 키 삭제 | `token`, `nodeId`, `key` | — |
 
 > **페이지/문서/노드 메타데이터**: PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어 위 전용 도구로만 다룬다. 저장소는 그 노드의 `sharedPluginData`(namespace 고정 `"sigma"`)이며 `.fig`에 영속된다. `key`는 `^[a-zA-Z0-9_.-]+$`, `value`는 **유효한 JSON 문자열**. `pageId`는 미지정=바인딩 페이지 / 페이지 ID / `"document"`(문서 루트).
-> - 예약 key **`"lint"`**(페이지/문서) = LintConfig. `sigma_lint`의 `per-page`/`merge` 모드가 참조하며, 플러그인 UI "페이지" 탭의 `lint 보기`/`lint 설정하기`가 같은 저장소를 편집한다.
+> - 예약 key **`"lint"`**(페이지/문서) = LintConfig. `sigma_lint`의 `per-page`/`merge` 모드가 참조하며, 플러그인 UI "페이지" 탭의 `lint 보기`/`lint 설정하기`가 같은 저장소를 편집한다. **문서(`pageId:"document"`)에 저장하면** 같은 JSON의 `componentSpec.warn`이 그 파일의 컴포넌트 스펙 등록 정책으로도 쓰인다(아래 컴포넌트 스펙 절).
 > - 예약 key **`"lint-ignore"`**(일반 노드) = 그 노드만 룰 억제(inline suppress, `eslint-disable` 대응). `sigma_lint`가 위반 노드만 배치 조회해 걸러내고 `suppressed` 건수를 보고한다. 상세는 [`docs/lint.md`](docs/lint.md).
 
 ### 스타일 (토큰 필수)

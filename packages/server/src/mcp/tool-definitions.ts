@@ -587,6 +587,8 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
 - "document": 문서 루트(파일 전역 기본값 저장용).
 
 **예약 key:** \`"lint"\` = 그 페이지의 lint 설정(LintConfig JSON). sigma_lint의 per-page/merge 모드가 이 값을 참조합니다.
+**문서(pageId:"document")에 저장하면** 같은 JSON 의 \`componentSpec.warn\` 이 그 파일의 **컴포넌트 스펙 등록 정책**으로도 쓰입니다 —
+alias 가 패턴에 걸리면 sigma_create_component_spec 응답에 policyWarnings 가 실립니다(경고만, 등록은 진행).
 
 **예시:**
 - 페이지 lint 설정 저장: sigma_set_page_data({ token, key: "lint", value: '{"builtins":{"raw_node":{"enabled":true}}}' })
@@ -3084,7 +3086,13 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     // (b) JS 프레디케이트 — 관계형(형제/조상)·임의 로직. 서버 Worker에서 격리 실행(타임아웃 기본 2000ms).
     { "id": "modal-needs-overlay", "kind": "predicate",
       "code": "export default function(node, ctx) {\\n  if (node.type !== 'FRAME' || !node.name.startsWith('Modal/')) return null;\\n  if (!ctx.getSiblings(node.id).some(s => s.name === 'Overlay')) return { message: node.name + ' 옆에 Overlay 형제가 없음' };\\n  return null;\\n}" }
-  ]
+  ],
+  // 문서(document) 저장 config 에서만 의미 있음 — lint 검사가 아니라 **컴포넌트 스펙 등록 정책**이다.
+  // sigma_create_component_spec 의 등록/overwrite 시 alias 가 걸리면 응답에 policyWarnings(경고만, 거부 아님).
+  "componentSpec": { "warn": [
+    { "aliasPattern": "^table$", "message": "테이블은 wire/table 프리셋을 쓰세요" },
+    { "aliasPattern": "^btn_", "message": "버튼은 ui_button 권장", "namespace": "design" }
+  ] }
 }
 \`\`\`
 
