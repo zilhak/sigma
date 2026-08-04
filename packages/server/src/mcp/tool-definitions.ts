@@ -2525,6 +2525,8 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '엄격한 규칙의 HTML 스펙으로 재사용 가능한 Figma 컴포넌트를 등록합니다 (바인딩 필수, validateOnly는 예외). ' +
       '[구조] 단일 루트, inline style만(<style>·class 불가). 컨테이너 태그는 div/button뿐이며 자식이 있으면 display: flex 명시 필수. ' +
       '텍스트 태그(span/p/h1~h6/a/strong/em/b/i)는 자식 없는 leaf 전용. void는 img/br. 허용 HTML 속성: style, src, alt, href, data-sigma-*. ' +
+      '[이미지] <img src>는 **base64 data URI("data:image/…")만** 허용됩니다 — 원격 URL·상대 경로는 Figma 플러그인이 네트워크로 가져올 수 없어 ' +
+      '조용히 회색 플레이스홀더가 되므로 등록 단계에서 거부합니다(src 누락도 거부). 스펙 이미지는 scaleMode FIT(잘리지 않음), 노드 이름은 alt 우선. ' +
       '[CSS] 화이트리스트: display/flex-direction/justify-content/align-items/align-self/gap/flex-wrap/flex-grow/flex-shrink/overflow, ' +
       'width/height, padding(개별 포함), background-color/background/color/opacity, border-width·color(개별)·radius, ' +
       'font-size/font-weight/line-height/letter-spacing, box-shadow(inset 불가). ' +

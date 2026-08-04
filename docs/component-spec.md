@@ -6,7 +6,8 @@
 ```
 검증:  sigma_create_component_spec(alias, description, html, validateOnly: true)
        → Figma 연결·토큰 없이 규칙 검증만 (사전 점검 dry-run)
-등록:  sigma_create_component_spec(token, alias, description, html, namespace?, overwrite?)
+등록:  sigma_create_component_spec(token, alias, description, html|htmlPath, namespace?, overwrite?)
+       → html 대신 htmlPath(파일 경로)로 넘길 수 있다 (본문이 큰 스펙 — 아래 §이미지)
 조회:  sigma_list_component_specs(namespace?)  → alias/설명/params/size/sizing (카탈로그)
        sigma_list_component_specs(alias)       → HTML 원문 포함 상세
 사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId, namespace?, width?, height?)
@@ -89,7 +90,7 @@ OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이�
 | inline style만 | `<style>` 블록·class 셀렉터 불가 (variant 단계에서 확장 예정) |
 | 컨테이너 태그 | `div`, `button`만 자식 요소 보유 가능. **자식이 있으면 `display: flex` 명시 필수** (암시적 블록 배치 불가) |
 | 텍스트 태그 | `span, p, h1~h6, a, strong, em, b, i` — **leaf 전용** (자식 요소 금지, rich text 중첩은 이후 단계) |
-| void 태그 | `img`, `br` |
+| void 태그 | `img`, `br` — **`img`의 `src`는 base64 data URI만**(아래 §이미지) |
 | 허용 HTML 속성 | `style`, `src`, `alt`, `href`, `data-sigma-*` |
 
 ### 배치는 Auto Layout으로만
@@ -164,6 +165,35 @@ OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이�
 - 두 모드 모두 **직계 부모 컨테이너에 width 명시 필수** (hug 부모에서는 무의미 + 거부).
 - 둘 다 없는 fixed 컴포넌트에 긴 값을 넣으면 use 응답의 `warnings`로 넘침을 알려준다.
 - 카탈로그 param에 `truncates: true` / `wraps: true`로 노출된다.
+
+## 이미지 (`<img>`) — base64 data URI만
+
+```html
+<img src="data:image/png;base64,iVBORw0KGgo..." alt="로고"
+     style="width: 24px; height: 24px;">
+```
+
+- **`src`는 `data:image/…` 형태만 허용된다.** 원격 URL(`https://…`)·상대 경로는
+  **등록 단계에서 거부**된다 — Figma 플러그인은 네트워크로 이미지를 가져올 수 없어,
+  통과시키면 조용히 회색 플레이스홀더 프레임이 되기 때문이다. `src` 누락도 거부.
+- 스펙 경로의 이미지는 `scaleMode: FIT`으로 그려진다(잘리지 않음). 스펙에 넣는 건
+  대개 로고·마크라 크롭되면 안 되기 때문 — 브라우저 추출 경로(`FILL`)와 다르다.
+- 노드 이름은 `alt` 우선, 없으면 `"image"`. (data URI를 파일명처럼 자르면
+  `[IMG] png;base64,iVBORw0…`가 이름이 되므로.)
+
+### 본문이 큰 스펙은 `htmlPath`로
+
+base64 이미지를 담은 스펙은 본문이 수십 KB가 된다. 이걸 호출 인자로 옮겨 적으면
+**중간에 한 글자만 어긋나도 등록은 통과하고(구조는 멀쩡하니까) 렌더만 실패한다** —
+플러그인의 `createImage`가 던지고 회색 플레이스홀더만 남는 조용한 실패다.
+
+```
+sigma_create_component_spec({ token, alias, description, htmlPath: "~/.sigma/specs/logo.html" })
+```
+
+- `html`과 `htmlPath`는 **상호배타**(둘 다 주면 거부). 이제 `html`은 필수가 아니다.
+- 경로는 **서버 자신의 파일시스템 기준**이다 — Docker 배포면 컨테이너 경로
+  (호스트 `~/.sigma` ↔ 컨테이너 `/root/.sigma`). `configPath`와 같은 주의사항.
 
 ## 내장 프리셋 (표준 컴포넌트 팩)
 

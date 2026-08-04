@@ -216,12 +216,14 @@ alias가 걸리면 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실�
   길이는 **px만**(%, rem, em, calc, var 거부), 색상은 단색만(gradient 거부),
   enum 속성은 지원 값만(`display: flex`, `justify-content: space-between` 등)
 - `position`·`text-align` 불가 — 배치·정렬은 Auto Layout(flex) 속성으로만
+- `<img src>`는 **base64 data URI만** — 원격 URL·상대 경로는 등록 거부(Figma가 네트워크로 못 가져와 빈 프레임이 됨).
+  본문이 커지므로 이런 스펙은 `html` 대신 `htmlPath`(파일 경로)로 넘긴다
 - 텍스트 파라미터: `<span data-sigma-slot="이름">기본값</span>` — 텍스트 태그에만, 순수 텍스트 속성만 허용
 - 위반 시 조용히 근사하지 않고 위반 목록과 함께 등록 거부
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description`, `html` | `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
+| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description` + (`html` 또는 `htmlPath`) | `htmlPath`(파일에서 HTML 읽기 — 본문이 큰 스펙용, `html`과 상호배타), `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
 | `sigma_list_component_specs` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias`, `namespace` |
 | `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
 | `sigma_set_component_spec_instance_props` | 기존 인스턴스의 param 재설정 | `token`, `nodeId`, `props` | — |
