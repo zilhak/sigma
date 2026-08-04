@@ -246,6 +246,9 @@ export interface TreeNode {
     layoutSizingVertical?: string;
     /** COMPONENT/COMPONENT_SET만 해당 */
     description?: string;
+    /** fills 를 가질 수 있는 타입만 해당. 자식이 없어도 fill 로 내용을 그리는 노드(이미지 프레임 등)를
+     *  empty_container 가 오탐하지 않도록 하는 판정 근거. */
+    hasVisibleFill?: boolean;
   };
 }
 

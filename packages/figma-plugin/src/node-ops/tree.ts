@@ -168,6 +168,15 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     meta.description = (node as ComponentNode).description;
   }
 
+  // 자식이 없어도 fill 로 무언가를 그리는 컨테이너가 있다(이미지 프레임이 대표적) —
+  // empty_container 가 "비어있음"을 자식 수만으로 판정하면 이런 노드를 오탐한다.
+  if ('fills' in node) {
+    const fills = (node as GeometryMixin).fills;
+    if (fills !== figma.mixed && Array.isArray(fills)) {
+      meta.hasVisibleFill = fills.some((f) => f.visible !== false && (f.opacity ?? 1) > 0);
+    }
+  }
+
   // TreeNode 구성
   const treeNode: TreeNode = {
     id: node.id,

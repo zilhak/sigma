@@ -359,6 +359,19 @@ describe('simple-rules.ts (신규 빌트인 4종)', () => {
     expect(violated).not.toContain('b');
   });
 
+  test('empty_container — fill 로 내용을 그리는 컨테이너는 자식이 없어도 제외', () => {
+    // 이미지 프레임(<img> 스펙)은 자식 0 이지만 IMAGE fill 로 실제 내용을 그린다
+    const roots = [
+      node('img', 'photo', 'FRAME', [0, 0, 48, 48], [], { hasVisibleFill: true }),
+      node('bare', 'hollow', 'FRAME', [0, 0, 48, 48], [], { hasVisibleFill: false }),
+      node('unknown', 'nofillinfo', 'FRAME', [0, 0, 48, 48], []),
+    ];
+    const violated = emptyContainerRule(roots).map((v) => v.nodes[0]);
+    expect(violated).not.toContain('img');
+    expect(violated).toContain('bare');
+    expect(violated).toContain('unknown');
+  });
+
   test('hidden_leaf — visible:false 노드 검출', () => {
     const roots = [
       node('a', 'ghost', 'FRAME', [0, 0, 10, 10], [], { visible: false }),

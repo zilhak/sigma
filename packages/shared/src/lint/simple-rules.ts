@@ -48,6 +48,8 @@ export function defaultNameRule(roots: TreeNode[]): Violation[] {
 export function emptyContainerRule(roots: TreeNode[]): Violation[] {
   const out: Violation[] = [];
   walk(roots, (n) => {
+    // fill 로 내용을 그리는 컨테이너는 자식이 없어도 비어있지 않다(이미지 프레임이 대표적)
+    if (n.meta?.hasVisibleFill) return;
     if (CONTAINER_TYPES.has(n.type) && n.childCount === 0) {
       out.push({ rule: 'empty_container', source: 'builtin', message: `"${n.name}" (${n.id}) 빈 컨테이너`, nodes: [n.id] });
     }
