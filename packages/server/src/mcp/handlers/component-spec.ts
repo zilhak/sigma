@@ -90,7 +90,26 @@ export const componentSpecHandlers: Record<
     const alias = args.alias as string;
     const namespace = (args.namespace as string | undefined) || DEFAULT_NAMESPACE;
     const description = args.description as string;
-    const html = args.html as string;
+
+    // htmlPath: 스펙 HTML을 파일에서 읽는다. base64 data URI 이미지처럼 수십 KB짜리
+    // 본문을 호출 인자로 옮겨 적으면 중간에 깨져도 등록은 통과하고 렌더만 실패한다
+    // (createImage 예외 → 회색 플레이스홀더). 파일 경로로 받으면 그 전사 자체가 없어진다.
+    let html = args.html as string | undefined;
+    const htmlPath = args.htmlPath as string | undefined;
+    if (htmlPath) {
+      if (html) {
+        return jsonResponse({ error: 'html과 htmlPath는 함께 쓸 수 없습니다 — 하나만 지정하세요' });
+      }
+      try {
+        const { readFile } = await import('node:fs/promises');
+        const { resolve } = await import('node:path');
+        html = await readFile(resolve(htmlPath), 'utf-8');
+      } catch (e) {
+        return jsonResponse({
+          error: `htmlPath를 읽지 못했습니다: ${htmlPath} (${e instanceof Error ? e.message : String(e)}). 서버가 컨테이너로 뜬 경우 컨테이너 경로여야 합니다 — 호스트 ~/.sigma 는 /root/.sigma 로 마운트됩니다`,
+        });
+      }
+    }
 
     if (!alias || !isValidSpecName(alias)) {
       return jsonResponse({ error: `잘못된 alias: "${alias}" (규칙: 소문자로 시작, [a-z0-9_]만 사용. 예: ui_badge)` });
@@ -102,7 +121,7 @@ export const componentSpecHandlers: Record<
       return jsonResponse({ error: 'description은 필수입니다 — 에이전트가 카탈로그에서 컴포넌트를 고르는 근거가 됩니다' });
     }
     if (!html) {
-      return jsonResponse({ error: 'html은 필수입니다' });
+      return jsonResponse({ error: 'html은 필수입니다 (또는 htmlPath로 파일에서 읽기)' });
     }
 
     // validateOnly: Figma 연결·토큰 없이 규칙 검증만 (사전 점검용 dry-run)

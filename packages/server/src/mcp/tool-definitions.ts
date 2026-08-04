@@ -2540,6 +2540,8 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '(Figma 네이티브 컴포넌트는 인스턴스를 자식으로 품지만, 스펙 HTML은 못 품습니다. 표·차트 등 등록 컴포넌트에 없는 조각만 스펙으로 만들어 이 조합에 끼워넣으세요.) ' +
       '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
       'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
+      '[본문이 큰 스펙] html 대신 htmlPath로 파일에서 읽을 수 있습니다. <img>에 base64 data URI를 넣는 스펙은 본문이 수십 KB라 ' +
+      '호출 인자로 옮겨 적는 과정에서 깨지기 쉽고, 깨져도 등록은 통과하고 렌더만 실패하므로(이미지 디코드 예외 → 회색 플레이스홀더) 파일로 넘기세요. ' +
       '[파일 등록 정책] 이 Figma 파일의 문서 노드에 저장된 lint config 의 `componentSpec.warn`(aliasPattern/message)에 alias 가 걸리면 ' +
       '응답에 policyWarnings 가 실립니다 — **경고일 뿐 등록은 그대로 진행**됩니다(거부 아님). ' +
       '정책 설정: sigma_set_page_data({ pageId: "document", key: "lint", value: JSON }). validateOnly 경로에선 파일을 특정할 수 없어 검사하지 않습니다. ' +
@@ -2550,7 +2552,8 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         token: { type: 'string', description: '인증 토큰 (validateOnly: true면 생략 가능)' },
         alias: { type: 'string', description: '의미론적 식별자 (소문자 시작, [a-z0-9_]). 예: ui_badge' },
         description: { type: 'string', description: '컴포넌트 용도 설명 — 카탈로그에서 선택 근거가 됨' },
-        html: { type: 'string', description: '스펙 HTML (단일 루트, inline style, data-sigma-slot으로 텍스트 파라미터 선언)' },
+        html: { type: 'string', description: '스펙 HTML (단일 루트, inline style, data-sigma-slot으로 텍스트 파라미터 선언). htmlPath와 함께 쓸 수 없음' },
+        htmlPath: { type: 'string', description: '(선택) 스펙 HTML을 읽어올 파일 경로. html 대신 사용. base64 data URI 이미지처럼 본문이 큰 스펙은 인자로 옮겨 적다 깨지면 등록은 통과하고 렌더만 실패하므로(회색 플레이스홀더) 파일로 넘기세요. 서버가 컨테이너면 컨테이너 경로 — 호스트 ~/.sigma ↔ /root/.sigma' },
         namespace: { type: 'string', description: '(선택) 스타일 체계 구분용 네임스페이스 (소문자 시작, [a-z0-9_]). 예: plan(기획), design(디자인). 기본 "default". 유일성 키는 namespace+alias' },
         position: {
           type: 'object',
@@ -2560,7 +2563,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         overwrite: { type: 'boolean', description: '(선택) 같은 namespace+alias가 있으면 in-place 갱신(인스턴스 전파). 기본 false' },
         validateOnly: { type: 'boolean', description: '(선택) true면 등록 없이 HTML 규칙 검증만 수행 — Figma 연결·토큰 불필요. 결과로 ok/violations/params/sizing 반환' },
       },
-      required: ['alias', 'description', 'html'],
+      required: ['alias', 'description'],
     },
   },
   {
