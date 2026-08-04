@@ -73,7 +73,7 @@ export const SVG_BLOCKED_TAGS = new Set([
 export const ALLOWED_CSS_PROPS = new Set([
   'width', 'height',
   'background-color', 'background', 'color', 'opacity',
-  'font-size', 'font-weight', 'line-height', 'letter-spacing',
+  'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
   'display', 'flex-direction', 'justify-content', 'align-items', 'gap',
   'flex-wrap', 'flex-grow', 'flex-shrink', 'align-self',
   'overflow',
@@ -101,7 +101,7 @@ export const SLOT_ALLOWED_TAGS = TEXT_TAGS;
  * 보장이 깨지고, width/height는 TextNode에서 무시되므로 모두 거부한다.
  */
 export const SLOT_ALLOWED_CSS_PROPS = new Set([
-  'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'opacity',
+  'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'opacity',
   // ellipsis: 고정폭 컨테이너 안에서 넘치는 텍스트를 …으로 처리 (slot 전용, 단일 행)
   'text-overflow',
   // wrap: 고정폭 컨테이너 안에서 줄바꿈되는 다중 행 텍스트 (slot 전용)
@@ -131,6 +131,13 @@ const COLOR_PROPS = new Set([
 
 /** 단위 없는 숫자 속성 */
 const NUMBER_PROPS = new Set(['opacity', 'flex-grow', 'flex-shrink']);
+
+/**
+ * 폰트 패밀리 이름 — 영숫자/한글/공백/점/하이픈/밑줄만.
+ * 괄호를 막아 var()·local()·url() 같은 함수 표기를 자동으로 배제한다
+ * (변환기가 해석할 수 없고, 색상 속성이 var()를 막는 것과 같은 이유).
+ */
+const FONT_FAMILY_NAME_RE = /^[\w가-힣][\w가-힣 .-]*$/;
 
 /** enum 값 속성 — 변환기가 매핑을 보장하는 값만 */
 const ENUM_PROPS: Record<string, string[]> = {
@@ -172,6 +179,18 @@ function validateCssValue(prop: string, value: string): string | null {
     return /^(normal|bold|[1-9]00)$/.test(value)
       ? null
       : `지원하지 않는 값 "${value}" (normal, bold, 100~900)`;
+  }
+  if (prop === 'font-family') {
+    // 폴백 체인(쉼표 구분)을 그대로 허용한다 — 변환기가 앞에서부터 Figma에
+    // 실제로 있는 패밀리를 찾고, 하나도 없으면 기본 폰트로 폴백한다.
+    const families = value.split(',').map((f) => f.trim().replace(/^['"]|['"]$/g, ''));
+    for (const family of families) {
+      if (!family) return `빈 폰트명이 있습니다: "${value}"`;
+      if (!FONT_FAMILY_NAME_RE.test(family)) {
+        return `폰트명으로 쓸 수 없는 값 "${family}" — 이름만 허용 (var()·local()·url() 등 함수 표기 불가)`;
+      }
+    }
+    return null;
   }
   if (NUMBER_PROPS.has(prop)) {
     return /^\d*\.?\d+$/.test(value) ? null : `단위 없는 숫자만 허용: "${value}" 불가`;

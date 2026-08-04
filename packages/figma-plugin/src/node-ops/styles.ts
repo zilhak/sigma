@@ -2,6 +2,8 @@
  * Style CRUD — 스타일 생성, 적용, 삭제
  */
 
+import { getDefaultFontFamily } from '../converter/font-loader';
+
 // === Paint Style ===
 
 export interface CreatePaintStyleOptions {
@@ -56,7 +58,7 @@ export async function createTextStyle(options: CreateTextStyleOptions): Promise<
   const style = figma.createTextStyle();
   style.name = options.name;
 
-  const family = options.fontFamily !== undefined ? options.fontFamily : 'Inter';
+  const family = options.fontFamily !== undefined ? options.fontFamily : getDefaultFontFamily();
   const weight = options.fontWeight !== undefined ? options.fontWeight : 'Regular';
   await figma.loadFontAsync({ family, style: weight });
 

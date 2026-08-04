@@ -270,6 +270,28 @@ describe('validateComponentSpecHtml — 값 수준 검증', () => {
     expect(validateComponentSpecHtml('<div style="display: flex;"><span style="font-weight: 600;">x</span></div>').ok).toBe(true);
     expect(validateComponentSpecHtml('<div style="display: flex;"><span style="font-weight: 650;">x</span></div>').ok).toBe(false);
   });
+
+  test('font-family 허용 — 단일/폴백 체인/따옴표/한글 폰트명', () => {
+    const ok = (style: string) =>
+      validateComponentSpecHtml(`<div style="display: flex;"><span style="${style}">x</span></div>`).ok;
+    expect(ok('font-family: Pretendard;')).toBe(true);
+    expect(ok('font-family: Pretendard, sans-serif;')).toBe(true);
+    expect(ok("font-family: 'Noto Sans KR', Pretendard;")).toBe(true);
+    expect(ok('font-family: 나눔고딕;')).toBe(true);
+  });
+
+  test('font-family 값 검증 — 함수 표기/빈 이름 거부', () => {
+    const ok = (style: string) =>
+      validateComponentSpecHtml(`<div style="display: flex;"><span style="${style}">x</span></div>`).ok;
+    expect(ok('font-family: var(--font-body);')).toBe(false);
+    expect(ok('font-family: local(Pretendard);')).toBe(false);
+    expect(ok('font-family: Pretendard,;')).toBe(false);
+  });
+
+  test('slot에도 font-family 허용', () => {
+    const html = '<div style="display: flex;"><span data-sigma-slot="text" style="font-family: Pretendard; font-size: 13px;">x</span></div>';
+    expect(validateComponentSpecHtml(html).ok).toBe(true);
+  });
 });
 
 describe('validateComponentSpecHtml — 구조 규칙', () => {

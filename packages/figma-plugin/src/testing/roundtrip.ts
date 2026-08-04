@@ -1,5 +1,5 @@
 import type { ExtractedNode, ComputedStyles, RGBA } from '@sigma/shared';
-import { createFigmaNode, parseHTML } from '../converter';
+import { createFigmaNode, parseHTML, loadFontsForTree } from '../converter';
 import { extractNodeToJSON } from '../extractor/extract';
 import { convertExtractedNodeToHTML } from '../extractor/html-export';
 
@@ -23,10 +23,7 @@ export async function testRoundtripJSON(originalNode: ExtractedNode, name?: stri
 
   try {
     // 1. 프레임 생성
-    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+    await loadFontsForTree(originalNode);
 
     const frame = await createFigmaNode(originalNode);
     if (!frame) {
@@ -93,11 +90,6 @@ export async function testRoundtripHTML(originalHTML: string, name?: string): Pr
 
   try {
     // 1. HTML 파싱 및 프레임 생성
-    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-    await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
-
     const parsedNode = parseHTML(originalHTML);
     if (!parsedNode) {
       return {
@@ -108,6 +100,8 @@ export async function testRoundtripHTML(originalHTML: string, name?: string): Pr
         extracted: '',
       };
     }
+
+    await loadFontsForTree(parsedNode);
 
     const frame = await createFigmaNode(parsedNode);
     if (!frame) {

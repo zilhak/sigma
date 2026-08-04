@@ -1,6 +1,7 @@
 import type { ExtractedNode } from '@sigma/shared';
 import { createFigmaNode, createTextNode } from './node-creator';
 import { parseHTML } from './html-parser';
+import { loadFontsForTree } from './font-loader';
 import { applyBackground, applyBorder, applyCornerRadius, applyBoxShadow, applyPadding } from './styles';
 import { applyLayoutMode, applySizingMode, applyAlignment } from './layout';
 
@@ -47,11 +48,8 @@ export async function createFrameFromJSON(
   const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
   const isCurrentPage = targetPage.id === figma.currentPage.id;
 
-  // 폰트 로드 (영문 + 한글)
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+  // 폰트 로드 — 트리가 실제로 쓰는 패밀리/weight를 변환 전에 확보한다
+  await loadFontsForTree(node);
 
   // 노드 생성
   const frame = await createFigmaNode(node, true, forceAbsolute || false);
@@ -108,17 +106,14 @@ export async function createFrameFromHTML(
   const targetPage = getTargetPage ? getTargetPage(pageId) : figma.currentPage;
   const isCurrentPage = targetPage.id === figma.currentPage.id;
 
-  // 폰트 로드
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
-
   // HTML 파싱 → ExtractedNode 변환
   const node = parseHTML(html);
   if (!node) {
     throw new Error('HTML 파싱 실패');
   }
+
+  // 폰트 로드 — 파싱된 트리를 봐야 어떤 패밀리/weight가 필요한지 알 수 있다
+  await loadFontsForTree(node);
 
   // 기존 JSON 변환 로직 재사용
   const frame = await createFigmaNode(node, true, forceAbsolute || false);
@@ -193,11 +188,8 @@ export async function updateExistingFrame(
     sourceNode = data as ExtractedNode;
   }
 
-  // 4. 폰트 로드
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+  // 4. 폰트 로드 (소스 트리 기준)
+  await loadFontsForTree(sourceNode);
 
   // 5. 기존 자식 모두 제거 (역순으로 제거하여 인덱스 안정성 보장)
   const childCount = frame.children.length;

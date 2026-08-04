@@ -80,7 +80,9 @@ export function createDefaultStyles(): ComputedStyles {
     // 텍스트
     color: { r: 0, g: 0, b: 0, a: 1 },
     fontSize: 14,
-    fontFamily: 'Inter',
+    // 빈 값 = "CSS가 폰트를 지정하지 않음" — 변환기(font-loader)가 기본 폰트를 적용한다.
+    // 여기에 특정 패밀리를 박으면 폰트를 적지 않은 모든 노드가 그 폰트로 굳는다.
+    fontFamily: '',
     fontWeight: '400',
     fontStyle: 'normal',
     textAlign: 'left',

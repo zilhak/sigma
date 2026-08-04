@@ -1,6 +1,7 @@
 import type { ComponentParam, ComponentSpecStamp } from '@sigma/shared';
 import { parseHTML } from '../converter/html-parser';
 import { createFigmaNode } from '../converter/node-creator';
+import { loadFontsForTree } from '../converter/font-loader';
 import { getOrCreateFileId } from './page';
 
 /**
@@ -17,11 +18,17 @@ import { getOrCreateFileId } from './page';
 const SPEC_STAMP_KEY = 'sigma-spec';
 export const SLOT_MARK_KEY = 'sigma-slot';
 
-async function loadDefaultFonts(): Promise<void> {
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Semi Bold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Bold' });
+/**
+ * 스펙 HTML을 파싱하고, 그 트리가 쓰는 폰트를 변환 전에 로드한다.
+ * (createTextNode는 동기라 폰트가 미리 로드돼 있어야 한다)
+ */
+async function parseSpecAndLoadFonts(html: string) {
+  const parsed = parseHTML(html);
+  if (!parsed) {
+    throw new Error('스펙 HTML 파싱 실패');
+  }
+  await loadFontsForTree(parsed);
+  return parsed;
 }
 
 export interface BuildComponentFromSpecOptions {
@@ -217,11 +224,7 @@ export async function buildComponentFromSpec(
     if (existing && existing.type === 'COMPONENT' && existing.parent && stampMatches) {
       const component = existing as ComponentNode;
 
-      await loadDefaultFonts();
-      const parsed = parseHTML(options.html);
-      if (!parsed) {
-        throw new Error('스펙 HTML 파싱 실패');
-      }
+      const parsed = await parseSpecAndLoadFonts(options.html);
       const fresh = await createFigmaNode(parsed, true, false);
       if (!fresh || fresh.type !== 'FRAME') {
         if (fresh) fresh.remove();
@@ -283,12 +286,7 @@ export async function buildComponentFromSpec(
   }
 
   // ── 신규 빌드 경로 ──
-  await loadDefaultFonts();
-
-  const extracted = parseHTML(options.html);
-  if (!extracted) {
-    throw new Error('스펙 HTML 파싱 실패');
-  }
+  const extracted = await parseSpecAndLoadFonts(options.html);
 
   const frame = await createFigmaNode(extracted, true, false);
   if (!frame) {

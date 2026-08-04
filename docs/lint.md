@@ -83,6 +83,7 @@ PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어, 전용 도�
 - **형식 강제**: `key`는 `^[a-zA-Z0-9_.-]+$`, `value`는 **유효한 JSON 문자열**이어야 함(서버 핸들러가 검증).
 - **대상(`pageId`)**: 미지정=바인딩 페이지 / 페이지 ID / `"document"`(문서 루트).
 - **예약 key `"lint"`**: 그 페이지(또는 문서)의 LintConfig. `sigma_lint`의 per-page/merge 모드가 이 값을 참조한다.
+- **예약 key `"fonts"`**(문서 전용): 그 파일의 기본 폰트(`{"default":"Pretendard"}`). 폰트를 지정하지 않은 텍스트가 이 폰트로 렌더된다(미설정 시 Inter). 상세는 `component-spec.md`.
 - Figma 플러그인 UI **"페이지" 탭**의 `lint 보기`/`lint 설정하기`가 같은 저장소(현재 페이지 `"sigma"/"lint"`)를 편집한다 —
   플러그인에서 편집한 게 서버 lint(per-page)에 그대로 반영되고 역도 성립. (플러그인은 메타데이터 편집/뷰잉만, lint 실행은 항상 서버.)
 

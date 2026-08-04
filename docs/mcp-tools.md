@@ -330,6 +330,10 @@ PAGE/DOCUMENT 노드는 `sigma_modify_node` 가드로 막혀 있어 전용 도�
 **문서(`pageId:"document"`)에 저장한 경우** 같은 JSON의 `componentSpec.warn`이 그 파일의 **컴포넌트 스펙 등록 정책**으로도 쓰인다
 (alias가 패턴에 걸리면 `sigma_create_component_spec` 응답에 `policyWarnings` — 경고만, 등록은 진행). 아래 §컴포넌트 스펙 참조.
 
+예약 key **`"fonts"`**(문서 전용)는 그 파일의 **기본 폰트**다 — 예: `'{"default":"Pretendard"}'`.
+`font-family`를 지정하지 않은 HTML/스펙 텍스트와, `fontFamily`를 생략한 `sigma_create_text`/`sigma_create_text_style`이 이 폰트로 만들어진다.
+미설정이면 Inter(Figma 기본)다. 설정한 폰트가 실행 환경에 없으면 Inter로 폴백한다.
+
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_set_page_data` | 페이지/문서 노드에 메타데이터 저장 | `token`, `key`, `value` | `pageId` |

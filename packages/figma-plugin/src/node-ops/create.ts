@@ -3,22 +3,7 @@
  * cursor-talk-to-figma의 create_rectangle, create_text, create_frame 참고
  */
 
-// fontWeight → Figma style name 매핑
-const WEIGHT_TO_STYLE: Record<number, string> = {
-  100: 'Thin',
-  200: 'Extra Light',
-  300: 'Light',
-  400: 'Regular',
-  500: 'Medium',
-  600: 'Semi Bold',
-  700: 'Bold',
-  800: 'Extra Bold',
-  900: 'Black',
-};
-
-function getStyleFromWeight(weight: number): string {
-  return WEIGHT_TO_STYLE[weight] !== undefined ? WEIGHT_TO_STYLE[weight] : 'Regular';
-}
+import { loadFontForWeight, getDefaultFontFamily } from '../converter/font-loader';
 
 /**
  * 생성된 노드를 최종 컨테이너에 배치한다.
@@ -143,16 +128,14 @@ export interface CreateTextResult {
 }
 
 export async function createText(options: CreateTextOptions): Promise<CreateTextResult> {
-  const family = options.fontFamily !== undefined ? options.fontFamily : 'Inter';
+  const family = options.fontFamily !== undefined ? options.fontFamily : getDefaultFontFamily();
   const weight = options.fontWeight !== undefined ? options.fontWeight : 400;
-  const style = getStyleFromWeight(weight);
-
-  await figma.loadFontAsync({ family, style });
+  const fontName = await loadFontForWeight(family, weight);
 
   // createText()는 노드를 현재 activePage 에 붙이지만, 아래 placeNode 가 targetPage/
   // parentId 로 다시 배치하므로 await 중 currentPage 가 드리프트해도 무관하다.
   const text = figma.createText();
-  text.fontName = { family, style };
+  text.fontName = fontName;
   text.characters = options.text;
   text.x = options.x;
   text.y = options.y;

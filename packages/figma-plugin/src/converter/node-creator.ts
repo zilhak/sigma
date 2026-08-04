@@ -2,16 +2,17 @@ import type { ExtractedNode, ComputedStyles } from '@sigma/shared';
 import { createSolidPaint } from '../utils';
 import { applyBackground, applyBorder, applyBorderOverlays, applyCornerRadius, applyBoxShadow, applyPadding } from './styles';
 import { applyLayoutMode, applySizingMode, applyAlignment, applyChildMargins, createGridLayout } from './layout';
-import { createSvgNode, createImageNode, createInputNode, createPseudoElementNode, resolveFontStyle } from './special-nodes';
+import { createSvgNode, createImageNode, createInputNode, createPseudoElementNode } from './special-nodes';
+import { resolveFigmaFontName } from './font-loader';
 
 /**
  * 절대 배치(forceAbsolute/fallback) 시 자식 노드 크기 보정.
  *
  * 텍스트 노드는 폭을 boundingRect(브라우저 계측 폭)로 강제하면 안 된다.
- * Figma는 Inter를 쓰는데 원본 폰트(Pretendard 등)보다 글리프가 넓어,
- * 브라우저 폭으로 고정하면 꼬리 글자가 두 번째 줄로 wrap된다(예: "override →"의 →).
+ * 원본 폰트가 Figma에 없으면 폴백 폰트로 렌더되는데, 폴백 글리프가 더 넓으면
+ * 브라우저 폭으로 고정한 꼬리 글자가 두 번째 줄로 wrap된다(예: "override →"의 →).
  * - WIDTH_AND_HEIGHT(자동 폭 단일 줄): 크기 강제 없이 자연 크기 유지
- * - HEIGHT(고정 폭 래핑): 폭만 맞추고 높이는 자동(Inter가 더 넓어 줄 수가 늘 수 있음)
+ * - HEIGHT(고정 폭 래핑): 폭만 맞추고 높이는 자동(폴백 폰트가 넓으면 줄 수가 늘 수 있음)
  * - 그 외 노드(FRAME 등): 기존대로 boundingRect 폭·높이로 강제
  */
 function resizeAbsoluteChild(childNode: SceneNode, rect: { width: number; height: number }): void {
@@ -579,9 +580,9 @@ export function createTextNode(text: string, styles: ComputedStyles): TextNode |
   // 폰트 크기
   textNode.fontSize = styles.fontSize || 14;
 
-  // 폰트 스타일 (resolveFontStyle 헬퍼 사용)
+  // 폰트 (loadFontsForTree가 선행 로드한 패밀리에서 해석 — 미지정이면 기본 폰트)
   const weight = parseInt(styles.fontWeight) || 400;
-  textNode.fontName = { family: 'Inter', style: resolveFontStyle(weight) };
+  textNode.fontName = resolveFigmaFontName(styles.fontFamily, weight);
 
   // 텍스트 색상
   if (styles.color) {

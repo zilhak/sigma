@@ -2,17 +2,7 @@ import type { ExtractedNode, ComputedStyles } from '@sigma/shared';
 import { createSolidPaint } from '../utils';
 import { applyBackground, applyBorder, applyBorderOverlays, applyCornerRadius, applyPadding } from './styles';
 import { createTextNode } from './node-creator';
-
-/**
- * 폰트 weight 값을 Figma 폰트 스타일 문자열로 변환
- * createTextNode, createInputNode 등에서 공통 사용
- */
-export function resolveFontStyle(weight: number): string {
-  if (weight >= 700) return 'Bold';
-  if (weight >= 600) return 'Semi Bold';
-  if (weight >= 500) return 'Medium';
-  return 'Regular';
-}
+import { resolveFigmaFontName } from './font-loader';
 
 /**
  * SVG 문자열에서 CSS 변수를 fallback 값으로 치환
@@ -223,7 +213,7 @@ export function createInputNode(node: ExtractedNode): FrameNode {
       textNode.fontSize = styles.fontSize || 14;
 
       const weight = parseInt(styles.fontWeight) || 400;
-      textNode.fontName = { family: 'Inter', style: resolveFontStyle(weight) };
+      textNode.fontName = resolveFigmaFontName(styles.fontFamily, weight);
 
       if (isPlaceholder) {
         // placeholder: 회색 텍스트

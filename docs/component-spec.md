@@ -110,7 +110,7 @@ OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이�
 | 여백 | `padding`(+개별 4방향) |
 | 배경/색 | `background-color`, `background`(단색만), `color`, `opacity` |
 | 테두리 | `border-width`(+개별), `border-color`(+개별), `border-radius`(1~4값) |
-| 텍스트 | `font-size`, `font-weight`, `line-height`, `letter-spacing` |
+| 텍스트 | `font-family`, `font-size`, `font-weight`, `line-height`, `letter-spacing` |
 | 효과 | `box-shadow`(inset 불가) |
 
 ### 값 규칙 (속성이 허용되어도 값이 틀리면 거부)
@@ -122,10 +122,16 @@ OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이�
 | enum | `display: flex` / `flex-direction: row\|column` / `justify-content: flex-start\|center\|flex-end\|space-between` / `align-items: flex-start\|center\|flex-end\|stretch` / `flex-wrap: nowrap\|wrap` / `overflow: visible\|hidden` | `display: block`, `justify-content: space-around` |
 | 숫자 | `opacity`, `flex-grow`, `flex-shrink` — 단위 없는 숫자 | — |
 | font-weight | `normal`, `bold`, `100`~`900` | `650` |
+| font-family | 폰트 이름 (쉼표 폴백 체인 가능, 따옴표 허용) | `var(--font)`, `local(X)` |
 
 > 이 값 규칙들은 라이브 검증에서 발견된 실제 손상 사례에 근거한다:
 > `width: 100%` → 100px로 오변환, `1.5rem` → 1.5px, gradient → 배경 소실, `1em` → 1px.
 > parseFloat 기반 파서가 단위를 버리기 때문에, 값 검증 없이는 조용히 틀린 결과가 나온다.
+
+**`font-family`는 대개 생략한다.** 생략하면 그 파일의 기본 폰트로 렌더된다 —
+`sigma_set_page_data(pageId: "document", key: "fonts", value: '{"default":"Pretendard"}')`.
+폰트는 파일의 디자인 시스템에 속하는 결정이므로 스펙마다 반복해 적지 않는다(설정이 없으면 Inter).
+지정한 폰트가 실행 환경에 없으면 파일 기본 폰트 → Inter 순으로 폴백한다.
 
 ### 텍스트 파라미터 (slot)
 
@@ -138,8 +144,8 @@ OneUI 검색/버튼의 외형을 raw `div`로 **흉내내게 되는데 — 이�
 - `data-sigma-desc="설명"` — (선택) 카탈로그에 노출되는 파라미터 설명. slot 요소에만 허용.
 - slot 이름: `^[a-z][a-z0-9_]*$`, 스펙 내 중복 불가.
 - **텍스트 태그에만**, **루트 불가**, 자식 요소 불가, 기본 텍스트 필수.
-- slot 요소에는 순수 텍스트 속성만 허용: `font-size`, `font-weight`, `line-height`,
-  `letter-spacing`, `color`, `opacity`, `text-overflow`(아래).
+- slot 요소에는 순수 텍스트 속성만 허용: `font-family`, `font-size`, `font-weight`,
+  `line-height`, `letter-spacing`, `color`, `opacity`, `text-overflow`(아래).
   배경/패딩/보더/크기는 부모 컨테이너에 둔다 — slot이 프레임으로 승격되면
   "slot = 단일 TextNode" 계약이 깨지기 때문.
 

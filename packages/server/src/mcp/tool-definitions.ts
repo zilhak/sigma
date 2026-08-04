@@ -590,6 +590,11 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
 **문서(pageId:"document")에 저장하면** 같은 JSON 의 \`componentSpec.warn\` 이 그 파일의 **컴포넌트 스펙 등록 정책**으로도 쓰입니다 —
 alias 가 패턴에 걸리면 sigma_create_component_spec 응답에 policyWarnings 가 실립니다(경고만, 등록은 진행).
 
+**예약 key:** \`"fonts"\` (pageId:"document" 전용) = 이 파일의 **기본 폰트**. 예: \`'{"default":"Pretendard"}'\`.
+HTML/스펙이 font-family를 지정하지 않은 텍스트, 그리고 fontFamily 인자를 생략한 sigma_create_text/create_text_style이 이 폰트로 만들어집니다.
+미설정이면 Inter(Figma 기본)입니다 — 폰트는 파일의 디자인 시스템 결정이므로 변환기가 특정 폰트를 강요하지 않습니다.
+설정한 폰트가 그 환경에 설치돼 있지 않으면 Inter로 폴백합니다.
+
 **예시:**
 - 페이지 lint 설정 저장: sigma_set_page_data({ token, key: "lint", value: '{"builtins":{"raw_node":{"enabled":true}}}' })
 - 문서 전역 base 저장: sigma_set_page_data({ token, key: "lint", value: '{...}', pageId: "document" })`,
@@ -1187,8 +1192,8 @@ category로 extracted/screenshots/reports/all 중 대상을 선택할 수 있습
         name: { type: 'string', description: '노드 이름 (선택)' },
         parentId: { type: 'string', description: '부모 노드 ID (선택)' },
         fontSize: { type: 'number', description: '폰트 크기 (기본 14)' },
-        fontFamily: { type: 'string', description: '폰트 패밀리 (기본 "Inter")' },
-        fontWeight: { type: 'number', description: '폰트 굵기 (100~900, 기본 400)' },
+        fontFamily: { type: 'string', description: '폰트 패밀리 (기본: 파일 설정 fonts.default, 미설정 시 "Inter")' },
+        fontWeight: { type: 'number', description: '폰트 굵기 (100~900, 기본 400). 폰트별 스타일 이름 차이(SemiBold/Semi Bold)는 자동 처리' },
         fontColor: {
           type: 'object',
           description: '폰트 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -1843,7 +1848,7 @@ Figma 무료 플랜에서는 최대 1개의 모드만 지원합니다.`,
         token: { type: 'string', description: 'Sigma 토큰 (stk-...)' },
         name: { type: 'string', description: '스타일 이름 (예: "Heading/H1")' },
         fontSize: { type: 'number', description: '폰트 크기 (선택)' },
-        fontFamily: { type: 'string', description: '폰트 패밀리 (기본 Inter)' },
+        fontFamily: { type: 'string', description: '폰트 패밀리 (기본: 파일 설정 fonts.default, 미설정 시 Inter)' },
         fontWeight: { type: 'string', description: '폰트 두께 (기본 Regular)' },
         lineHeight: {
           description: '줄 높이 — "AUTO" 또는 { value, unit: "PIXELS"|"PERCENT" }',
@@ -2529,7 +2534,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       '조용히 회색 플레이스홀더가 되므로 등록 단계에서 거부합니다(src 누락도 거부). 스펙 이미지는 scaleMode FIT(잘리지 않음), 노드 이름은 alt 우선. ' +
       '[CSS] 화이트리스트: display/flex-direction/justify-content/align-items/align-self/gap/flex-wrap/flex-grow/flex-shrink/overflow, ' +
       'width/height, padding(개별 포함), background-color/background/color/opacity, border-width·color(개별)·radius, ' +
-      'font-size/font-weight/line-height/letter-spacing, box-shadow(inset 불가). ' +
+      'font-family/font-size/font-weight/line-height/letter-spacing, box-shadow(inset 불가). ' +
+      'font-family는 생략 가능 — 생략하면 **파일 기본 폰트**로 렌더됩니다(문서 설정 `fonts.default`, 미설정 시 Inter). ' +
+      '지정 시 이름만 허용(쉼표 폴백 체인 가능, var()·local() 불가)하고, Figma에 없는 폰트면 파일 기본 폰트로 폴백합니다. ' +
       '[값] 길이는 px만(0만 단위 생략, %·rem·em·calc·var 불가), 색상은 단색만(hex/rgb/rgba/색상명, gradient 불가), ' +
       'position·text-align 불가 — 배치·정렬은 flex 속성으로. 순수 텍스트 요소의 width/height 불가(부모 div로 감싸기). ' +
       '[slot] <span data-sigma-slot="이름" data-sigma-desc="설명">기본값</span> → Figma TEXT 속성으로 승격. ' +

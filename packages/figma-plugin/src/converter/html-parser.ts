@@ -348,6 +348,9 @@ function applyStyleProperty(styles: ComputedStyles, prop: string, value: string)
     case 'fontSize':
       styles.fontSize = numValue || 14;
       break;
+    case 'fontFamily':
+      styles.fontFamily = value;
+      break;
     case 'fontWeight':
       styles.fontWeight = value;
       break;
