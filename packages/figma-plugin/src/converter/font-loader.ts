@@ -53,16 +53,16 @@ export function parseFontFamilies(cssValue: string): string[] {
  * 폰트마다 스타일 이름이 다를 수 있으므로 여러 변형을 시도
  * (예: Pretendard는 "SemiBold", Inter는 "Semi Bold")
  */
-function getStyleCandidates(weight: number): string[] {
-  if (weight >= 900) return ['Black', 'Heavy', 'ExtraBold', 'Extra Bold'];
-  if (weight >= 800) return ['ExtraBold', 'Extra Bold'];
+export function getStyleCandidates(weight: number): string[] {
+  if (weight >= 900) return ['Black', 'Heavy'];
+  if (weight >= 800) return ['ExtraBold', 'Extra Bold', 'UltraBold', 'Ultra Bold'];
   if (weight >= 700) return ['Bold'];
-  if (weight >= 600) return ['SemiBold', 'Semi Bold', 'Semibold', 'DemiBold'];
+  if (weight >= 600) return ['SemiBold', 'Semi Bold', 'Semibold', 'DemiBold', 'Demi Bold'];
   if (weight >= 500) return ['Medium'];
+  if (weight >= 400) return ['Regular', 'Normal', 'Book'];
   if (weight >= 300) return ['Light'];
-  if (weight >= 200) return ['ExtraLight', 'Extra Light', 'Thin'];
-  if (weight >= 100) return ['Thin', 'Hairline'];
-  return ['Regular'];
+  if (weight >= 200) return ['ExtraLight', 'Extra Light', 'UltraLight', 'Ultra Light'];
+  return ['Thin', 'Hairline'];
 }
 
 /**
