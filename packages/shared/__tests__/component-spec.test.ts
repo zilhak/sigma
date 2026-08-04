@@ -49,8 +49,9 @@ describe('validateComponentSpecHtml — 통과 케이스', () => {
     expect(result.params[1].defaultValue).toBe('Body text here');
   });
 
-  test('void 태그(br, img) 허용', () => {
-    const html = '<div style="display: flex; padding: 8px;"><img src="x.png" alt="icon"><br></div>';
+  test('void 태그(br, img) 허용 — img는 base64 data URI', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const html = `<div style="display: flex; padding: 8px;"><img src="${png}" alt="icon"><br></div>`;
     expect(validateComponentSpecHtml(html).ok).toBe(true);
   });
 
@@ -180,6 +181,27 @@ describe('validateComponentSpecHtml — 거부 케이스', () => {
     const result = validateComponentSpecHtml(html);
     expect(result.ok).toBe(false);
     expect(result.errors.join('\n')).toContain('텍스트 태그');
+  });
+
+  test('img 원격 URL 거부 (Figma에서 렌더 불가 → 빈 프레임)', () => {
+    const html = '<div><img src="https://example.com/logo.png" alt="logo"></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('data URI');
+  });
+
+  test('img 상대 경로 거부', () => {
+    const html = '<div><img src="x.png" alt="icon"></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('data URI');
+  });
+
+  test('img src 누락 거부', () => {
+    const html = '<div><img alt="icon"></div>';
+    const result = validateComponentSpecHtml(html);
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('src');
   });
 });
 

@@ -113,16 +113,25 @@ export function createImageNode(node: ExtractedNode): FrameNode {
 
   frame.resize(Math.max(width, 1), Math.max(height, 1));
 
-  // imageDataUrl이 있으면 실제 이미지 렌더링
-  if (node.imageDataUrl) {
+  // 이미지 소스 결정.
+  // - 브라우저 추출 경로: imageDataUrl이 채워져 있다 (실제 크기로 배치되므로 FILL)
+  // - component-spec HTML 경로: 추출기를 거치지 않아 imageDataUrl이 없다.
+  //   src가 data: URI면 그것이 곧 이미지이므로 폴백으로 쓴다.
+  //   이 경우 로고·마크가 잘리면 안 되므로 FIT으로 넣는다.
+  const srcAttr = attributes && typeof attributes.src === 'string' ? attributes.src : '';
+  const isDataUriSrc = srcAttr.indexOf('data:') === 0;
+  const dataUrl = node.imageDataUrl || (isDataUriSrc ? srcAttr : undefined);
+  const scaleMode: 'FILL' | 'FIT' = node.imageDataUrl ? 'FILL' : 'FIT';
+
+  if (dataUrl) {
     try {
       // data:image/png;base64,xxxxx 에서 base64 부분만 추출
-      const commaIndex = node.imageDataUrl.indexOf(',');
+      const commaIndex = dataUrl.indexOf(',');
       if (commaIndex >= 0) {
-        const base64Data = node.imageDataUrl.substring(commaIndex + 1);
+        const base64Data = dataUrl.substring(commaIndex + 1);
         const imageBytes = figma.base64Decode(base64Data);
         const image = figma.createImage(imageBytes);
-        frame.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }];
+        frame.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode }];
       } else {
         // base64 prefix 없는 경우 fallback
         frame.fills = [{ type: 'SOLID', color: { r: 0.9, g: 0.9, b: 0.9 }, opacity: 1 }];
@@ -143,9 +152,10 @@ export function createImageNode(node: ExtractedNode): FrameNode {
 
   // 이름 설정
   const alt = attributes && attributes.alt ? attributes.alt : '';
-  const src = attributes && attributes.src ? attributes.src : '';
   const tagPrefix = node.tagName === 'canvas' ? '[CANVAS]' : '[IMG]';
-  const imageName = alt || (src ? (src.split('/').pop() || 'image') : (node.tagName === 'canvas' ? 'canvas' : 'image'));
+  // data: URI를 파일명처럼 자르면 "png;base64,iVBORw0..."가 노드 이름이 되므로 제외한다
+  const fromSrc = srcAttr && !isDataUriSrc ? (srcAttr.split('/').pop() || '') : '';
+  const imageName = alt || fromSrc || (node.tagName === 'canvas' ? 'canvas' : 'image');
   frame.name = tagPrefix + ' ' + imageName;
 
   // 모서리 라운드 적용

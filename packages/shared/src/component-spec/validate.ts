@@ -439,6 +439,19 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       }
     }
 
+    // <img>는 base64 data URI만 렌더된다. 원격 URL은 Figma 플러그인이 네트워크로
+    // 가져올 수 없어 조용히 빈 플레이스홀더 프레임이 되므로 등록 단계에서 거부한다.
+    if (tagName === 'img') {
+      const src = attrs['src'];
+      if (src === undefined || src === '') {
+        errors.push('<img>에는 src가 필요합니다 (base64 data URI)');
+      } else if (src.indexOf('data:image/') !== 0) {
+        errors.push(
+          `<img src>는 base64 data URI만 허용됩니다 ("data:image/…") — 원격 URL·파일 경로는 Figma에서 렌더되지 않고 빈 프레임이 됩니다: "${src.slice(0, 40)}${src.length > 40 ? '…' : ''}"`
+        );
+      }
+    }
+
     const styleProps = attrs['style'] !== undefined
       ? validateStyle(attrs['style'], tagName, slotName !== null)
       : new Set<string>();
