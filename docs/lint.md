@@ -152,7 +152,7 @@ sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 | `child_overflow` | 트리상 자식이면 좌표상으로도 부모 로컬박스(0,0~W,H) 안에 있어야 함(배치형만, 리프 제외) | — | — |
 | `stray_pixel` | x/y/width/height 중 정수가 아닌 값이 있으면 위반 | — | — |
 | `default_name` | `Rectangle 123`/`Frame 45`/`Group 12` 등 Figma 기본 이름 방치 | — | — |
-| `empty_container` | FRAME/GROUP인데 자식이 0개 | — | — |
+| `empty_container` | FRAME/GROUP인데 자식이 0개 (**fill 로 내용을 그리는 노드는 제외** — 이미지 프레임처럼 자식 없이 IMAGE fill 만으로 렌더되는 경우) | — | — |
 | `hidden_leaf` | `visible:false`인 노드가 트리에 잔존 | — | — |
 | `fill_sizing_orphan` | `layoutSizingHorizontal/Vertical`이 `FILL`인데 부모가 오토레이아웃(`layoutMode !== 'NONE'`)이 아님 — FILL은 오토레이아웃 부모 안에서만 의미가 있어, 이 상태는 `resize()`/reparent 이후 남은 무효 상태가 거의 유일한 원인 | — | — |
 | `component_description_empty` | COMPONENT/COMPONENT_SET의 `description`이 비어있거나 공백만 있음 | — | — |
