@@ -30,7 +30,7 @@ src/
 ├── mcp/
 │   ├── server.ts             # MCP 서버 인스턴스 + 세션 관리
 │   ├── router.ts             # /api/mcp 라우팅
-│   ├── tool-definitions.ts   # 128개 MCP 도구 스키마 정의
+│   ├── tool-definitions.ts   # 129개 MCP 도구 스키마 정의
 │   ├── tool-handler.ts       # Record 기반 핸들러 라우터
 │   ├── helpers.ts            # 공통 헬퍼 (인증, 검증)
 │   ├── spec-presets.ts       # 내장 스펙 프리셋 (anno/wire)
@@ -64,7 +64,7 @@ src/
 
 - **HTTP API**: 헬스체크, 추출 데이터 CRUD, Figma 상태/임포트
 - **WebSocket**: Plugin 연결 관리, 1MB 청킹, 비동기 명령 대기 (PendingCommand)
-- **MCP**: 128개 도구를 stdio와 Streamable HTTP 두 가지 방식으로 제공
+- **MCP**: 129개 도구를 stdio와 Streamable HTTP 두 가지 방식으로 제공
 - **토큰 관리**: `stk-{16자리 hex}`, 10분 만료 (사용 시 자동 갱신), 100회마다 자동 정리
 - **스토리지**: TTL 7일, 100MB 초과 시 50MB로 자동 축소
 
