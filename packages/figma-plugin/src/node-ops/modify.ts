@@ -399,12 +399,43 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   // === Layout (Auto Layout) ===
   setLayoutMode: {
-    description: 'Auto Layout 모드 설정. args: { layoutMode: "NONE" | "HORIZONTAL" | "VERTICAL" }',
+    description: 'Auto Layout 모드 설정. args: { layoutMode: "NONE" | "HORIZONTAL" | "VERTICAL" }. ⚠️ 오토레이아웃을 켜면 sizing 이 HUG 가 되어 프레임 크기가 자식에 맞춰 즉시 바뀔 수 있고, 이후 자식을 추가할 때도 계속 따라 줄어든다(넓은 자식은 클리핑되어 안 보임). 응답의 width/height·layoutSizing*·sizingWarning 을 확인할 것',
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const mode = toEnum(args.layoutMode, ['NONE','HORIZONTAL','VERTICAL'] as const, 'layoutMode');
-      (node as FrameNode).layoutMode = mode as 'NONE' | 'HORIZONTAL' | 'VERTICAL';
-      return { layoutMode: (node as FrameNode).layoutMode };
+      const f = node as FrameNode;
+
+      // 오토레이아웃을 켜면 Figma 가 sizing 을 AUTO(=HUG)로 잡으므로
+      // 자식이 있는 프레임은 이 줄에서 즉시 자식 크기로 줄어든다.
+      // 크기가 바뀐 사실을 응답으로 알리지 않으면 호출자는 "노드는 멀쩡한데 화면에서 사라진" 상태를 겪게 된다.
+      const beforeW = f.width;
+      const beforeH = f.height;
+      f.layoutMode = mode as 'NONE' | 'HORIZONTAL' | 'VERTICAL';
+
+      const isAutoLayout = f.layoutMode !== 'NONE';
+      const hugAxes: string[] = [];
+      if (isAutoLayout) {
+        if (f.layoutSizingHorizontal === 'HUG') hugAxes.push('width');
+        if (f.layoutSizingVertical === 'HUG') hugAxes.push('height');
+      }
+      const resized = f.width !== beforeW || f.height !== beforeH;
+
+      const notes: string[] = [];
+      if (resized) {
+        notes.push(`이 호출로 크기가 ${beforeW}x${beforeH} → ${f.width}x${f.height} 로 바뀌었습니다`);
+      }
+      if (hugAxes.length > 0) {
+        notes.push(`${hugAxes.join('/')} 축이 HUG 라 앞으로 자식을 넣을 때마다 ${hugAxes.join('/')} 가 자식 크기를 따라갑니다(넓은 자식은 클리핑되어 화면에서 사라집니다). 고정하려면 setLayoutSizing({ horizontal: "FIXED", vertical: "FIXED" }) 을 호출하세요`);
+      }
+
+      return {
+        layoutMode: f.layoutMode,
+        width: f.width,
+        height: f.height,
+        layoutSizingHorizontal: isAutoLayout ? f.layoutSizingHorizontal : undefined,
+        layoutSizingVertical: isAutoLayout ? f.layoutSizingVertical : undefined,
+        sizingWarning: notes.length > 0 ? notes.join('. ') : undefined,
+      };
     },
   },
   setPadding: {
