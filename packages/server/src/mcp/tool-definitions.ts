@@ -1230,7 +1230,10 @@ category로 extracted/screenshots/reports/all 중 대상을 선택할 수 있습
     description: `Figma에 빈 프레임(Frame)을 생성합니다.
 
 **바인딩 필수**: 토큰 바인딩에 따라 대상 플러그인/페이지가 결정됩니다.
-Auto Layout, 패딩, 정렬 등 모든 프레임 옵션을 지원합니다.`,
+Auto Layout, 패딩, 정렬 등 모든 프레임 옵션을 지원합니다.
+
+⚠️ **\`layoutMode\` 를 켜면 \`width\`/\`height\` 는 그대로 유지되지 않습니다.** 오토레이아웃 프레임의 sizing 은 Figma 기본값이 **HUG** 라, **자식을 넣는 순간** 지정한 크기가 무효가 되고 프레임이 자식 크기로 줄어듭니다(넓은 자식은 클리핑되어 **화면에서 사라짐** — 노드 속성은 멀쩡해 보여서 원인 추적이 어렵습니다).
+→ 크기를 고정하려면 **\`layoutSizingHorizontal\`/\`layoutSizingVertical\` 을 \`"FIXED"\` 로 함께 지정**하세요. 응답의 \`layoutSizingHorizontal/Vertical\` 과 \`sizingWarning\` 으로 실효 상태를 확인할 수 있습니다.`,
     inputSchema: {
       type: 'object' as const,
       properties: {

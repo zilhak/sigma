@@ -206,6 +206,15 @@ export interface CreateEmptyFrameResult {
   width: number;
   height: number;
   layoutMode: string;
+  /** 오토레이아웃일 때의 실효 sizing. layoutMode 가 NONE 이면 undefined */
+  layoutSizingHorizontal?: string;
+  layoutSizingVertical?: string;
+  /**
+   * HUG 축이 있을 때만 채워진다.
+   * width/height 인자는 자식이 붙는 순간 무효가 되므로, 응답의 width/height 만 보고
+   * "지정한 크기로 만들어졌다"고 판단하면 안 된다는 것을 호출자에게 알린다.
+   */
+  sizingWarning?: string;
 }
 
 export function createEmptyFrame(options: CreateEmptyFrameOptions): CreateEmptyFrameResult {
@@ -279,6 +288,18 @@ export function createEmptyFrame(options: CreateEmptyFrameOptions): CreateEmptyF
 
   placeNode(frame, options.parentId, options.targetPage);
 
+  // 오토레이아웃을 켜면 Figma 가 sizing 을 AUTO(=HUG)로 되돌린다.
+  // 그 상태에서는 위 resize() 로 넣은 width/height 가 "자식이 붙는 순간" 무효가 되어
+  // 프레임이 자식 크기로 줄고, 넓은 자식은 클리핑되어 보이지 않는다.
+  // 반환 시점엔 자식이 없어 width/height 가 아직 요청값 그대로라 호출자가 눈치챌 수 없으므로,
+  // 실효 sizing 과 경고를 함께 실어 보낸다.
+  const isAutoLayout = frame.layoutMode !== 'NONE';
+  const hugAxes: string[] = [];
+  if (isAutoLayout) {
+    if (frame.layoutSizingHorizontal === 'HUG') hugAxes.push('width');
+    if (frame.layoutSizingVertical === 'HUG') hugAxes.push('height');
+  }
+
   return {
     nodeId: frame.id,
     name: frame.name,
@@ -287,6 +308,11 @@ export function createEmptyFrame(options: CreateEmptyFrameOptions): CreateEmptyF
     width: frame.width,
     height: frame.height,
     layoutMode: frame.layoutMode,
+    layoutSizingHorizontal: isAutoLayout ? frame.layoutSizingHorizontal : undefined,
+    layoutSizingVertical: isAutoLayout ? frame.layoutSizingVertical : undefined,
+    sizingWarning: hugAxes.length > 0
+      ? `${hugAxes.join('/')} 축이 HUG 입니다 — 자식을 넣는 순간 지정한 ${hugAxes.join('/')} 값이 무효가 되고 프레임이 자식 크기로 줄어듭니다(넓은 자식은 클리핑되어 화면에서 사라집니다). 크기를 고정하려면 layoutSizingHorizontal/layoutSizingVertical 을 "FIXED" 로 지정하세요.`
+      : undefined,
   };
 }
 
