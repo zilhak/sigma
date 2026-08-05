@@ -31,6 +31,9 @@ export interface LintNode {
   layoutSizingHorizontal?: string;
   layoutSizingVertical?: string;
   description?: string;
+  /** TEXT 에 걸린 하이퍼링크 구간(없으면 빈 배열이 아니라 undefined). 링크는 range 속성이라
+   *  `hyperlink` 단일 속성으로는 읽을 수 없어 서버가 get_nodes_info 상세에서 실어 준다. */
+  hyperlinks?: Array<{ start: number; end: number; type: string; value: string }>;
   [key: string]: unknown;
 }
 

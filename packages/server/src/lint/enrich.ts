@@ -27,6 +27,9 @@ export interface NodeInfoLike {
   layoutSizingHorizontal?: string;
   layoutSizingVertical?: string;
   description?: string;
+  /** TEXT 에 걸린 하이퍼링크 구간. 링크는 range 속성이라 이걸 안 실어 주면 규칙이 배선 여부를
+   *  전혀 볼 수 없다(기획 주석 마커 ↔ 범례 왕복 링크 누락 검사용). */
+  hyperlinks?: Array<{ start: number; end: number; type: string; value: string }>;
 }
 
 export interface BuildLintNodesResult {
@@ -67,6 +70,7 @@ export function buildLintNodes(roots: TreeNode[], nodesInfo: NodeInfoLike[]): Bu
       base.layoutSizingHorizontal = info.layoutSizingHorizontal;
       base.layoutSizingVertical = info.layoutSizingVertical;
       base.description = info.description;
+      base.hyperlinks = info.hyperlinks;
     }
     return base;
   });
