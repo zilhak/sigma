@@ -87,6 +87,11 @@ export interface SpecValidationResult {
 /** Figma 컴포넌트 노드에 pluginData('sigma-spec')로 스탬프되는 계약 정보 */
 export interface ComponentSpecStamp {
   alias: string;
+  /**
+   * 그 스펙의 네임스페이스. 유일성 키가 (namespace, alias) 라 alias 만으로는 특정되지 않는다.
+   * 나중에 추가돼서 그 전에 등록된 마스터에는 없다 — 읽는 쪽은 없을 수 있다고 보고 다뤄야 한다.
+   */
+  namespace?: string;
   params: ComponentParam[];
   /** param 이름 → Figma component property id 매핑 */
   propertyIds: Record<string, string>;

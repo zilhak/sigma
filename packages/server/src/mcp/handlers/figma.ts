@@ -1,5 +1,6 @@
-import type { ExtractedNode } from '@sigma/shared';
+import type { ComponentSpecRecord, ExtractedNode } from '@sigma/shared';
 import { queryNodes, type NodeQuery, type TreeNode } from '@sigma/shared';
+import { resolveSpec } from '../spec-resolve.js';
 import { buildLintNodes, collectNodeIds, type NodeInfoLike } from '../../lint/enrich.js';
 import * as storage from '../../storage/index.js';
 import { tokenStore } from '../../auth/token.js';
@@ -2069,11 +2070,27 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
 
+    // 컴포넌트 스펙은 어디서나 (namespace, alias) 로 가리킨다 — 등록·인스턴스 생성·삭제가 전부 그렇다.
+    // 여기만 raw key 를 요구하면 "상태 교체"라는 가장 흔한 쓰임에서 상세 조회를 한 번 더 돌아야 하고,
+    // 그걸 모르면 "인스턴스를 새로 만들고 옛 것을 지우는" 우회로 새어 나간다(자식 순서·pluginData 손실).
+    const alias = args.alias as string | undefined;
+    let newComponentKey = args.newComponentKey as string | undefined;
+    if (alias) {
+      const { record, error } = await resolveSpec(alias, args.namespace as string | undefined);
+      if (error) return error;
+      newComponentKey = (record as ComponentSpecRecord).componentKey;
+    }
+    if (!newComponentKey) {
+      return jsonResponse({
+        error: 'newComponentKey 또는 alias 중 하나가 필요합니다 — 등록된 컴포넌트 스펙이면 alias(+namespace)를 주세요.',
+      });
+    }
+
     const { pluginId } = access;
     try {
       const result = await wsServer.swapComponent(
         args.nodeId as string,
-        args.newComponentKey as string,
+        newComponentKey,
         pluginId
       );
       return jsonResponse({ success: true, message: '컴포넌트가 교체되었습니다', ...result as object });

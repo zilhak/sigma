@@ -2795,15 +2795,17 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   },
   {
     name: 'sigma_swap_component',
-    description: '인스턴스의 메인 컴포넌트를 다른 컴포넌트로 교체',
+    description: '인스턴스의 메인 컴포넌트를 다른 컴포넌트로 교체. 등록된 컴포넌트 스펙이면 alias(+namespace)로 지정 — 상태 variant 교체(예: 체크박스 unchecked→checked)의 정석이며, 인스턴스를 새로 만들고 옛 것을 지우면 자식 순서·pluginData·하이퍼링크가 날아간다',
     inputSchema: {
       type: 'object' as const,
       properties: {
         token: { type: 'string', description: '인증 토큰' },
         nodeId: { type: 'string', description: 'INSTANCE 노드 ID' },
-        newComponentKey: { type: 'string', description: '새 컴포넌트의 key' },
+        alias: { type: 'string', description: '교체할 컴포넌트 스펙의 alias (newComponentKey 대신 사용)' },
+        namespace: { type: 'string', description: 'alias의 네임스페이스 (여러 ns에 같은 alias가 있으면 필수)' },
+        newComponentKey: { type: 'string', description: '새 컴포넌트의 key. 스펙이 아닌 일반 컴포넌트일 때 사용 (alias를 주면 불필요)' },
       },
-      required: ['token', 'nodeId', 'newComponentKey'],
+      required: ['token', 'nodeId'],
     },
   },
 

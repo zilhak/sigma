@@ -91,8 +91,15 @@ export interface NodeDetailInfo {
   /** INSTANCE 의 마스터 크기. 인스턴스가 마스터와 다른 크기로 늘어났는지 판정하는 유일한 근거다. */
   componentWidth?: number;
   componentHeight?: number;
+  /**
+   * INSTANCE 마스터의 Figma component key. sigma_swap_component(newComponentKey) 에 그대로 쓴다 —
+   * "이 인스턴스와 같은 컴포넌트로 바꿔라"를 레지스트리 조회 없이 할 수 있게 한다.
+   */
+  componentKey?: string;
   /** 마스터가 컴포넌트 스펙(sigma_create_component_spec)으로 만들어졌다면 그 alias. */
   specAlias?: string;
+  /** 그 스펙의 네임스페이스. alias 는 여러 ns 에 같은 이름이 있을 수 있어 이것 없이는 특정되지 않는다. */
+  specNamespace?: string;
   description?: string;
 }
 
@@ -200,11 +207,14 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     if (main) {
       info.componentWidth = main.width;
       info.componentHeight = main.height;
+      info.componentKey = main.key;
       const stampRaw = main.getPluginData(SPEC_STAMP_KEY);
       if (stampRaw) {
         try {
-          const alias = (JSON.parse(stampRaw) as { alias?: string }).alias;
-          if (typeof alias === 'string') info.specAlias = alias;
+          const stamp = JSON.parse(stampRaw) as { alias?: string; namespace?: string };
+          if (typeof stamp.alias === 'string') info.specAlias = stamp.alias;
+          // namespace 는 나중에 스탬프에 추가됐다 — 그 전에 등록된 마스터에는 없다(그때는 alias 만).
+          if (typeof stamp.namespace === 'string') info.specNamespace = stamp.namespace;
         } catch { /* 스탬프가 깨졌으면 스펙 인스턴스로 보지 않는다 */ }
       }
     }

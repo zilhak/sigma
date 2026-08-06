@@ -34,6 +34,8 @@ async function parseSpecAndLoadFonts(html: string) {
 export interface BuildComponentFromSpecOptions {
   html: string;
   alias: string;
+  /** 스펙 네임스페이스 — 스탬프에 남겨 인스턴스에서 (namespace, alias) 로 특정할 수 있게 한다 */
+  namespace?: string;
   /** 서버(검증기)가 추출한 파라미터 목록 */
   params: ComponentParam[];
   position?: { x: number; y: number };
@@ -185,10 +187,12 @@ function restoreTransparentRoot(component: ComponentNode, html: string): void {
 function stampComponent(
   component: ComponentNode,
   alias: string,
+  namespace: string | undefined,
   params: ComponentParam[],
   propertyIds: Record<string, string>
 ): void {
   const stamp: ComponentSpecStamp = { alias, params, propertyIds };
+  if (namespace) stamp.namespace = namespace;
   component.setPluginData(SPEC_STAMP_KEY, JSON.stringify(stamp));
 }
 
@@ -261,7 +265,7 @@ export async function buildComponentFromSpec(
       component.name = options.alias;
 
       const propertyIds = bindSlots(component, options.params);
-      stampComponent(component, options.alias, options.params, propertyIds);
+      stampComponent(component, options.alias, options.namespace, options.params, propertyIds);
 
       const pageName = component.parent && component.parent.type === 'PAGE'
         ? (component.parent as PageNode).name
@@ -325,7 +329,7 @@ export async function buildComponentFromSpec(
   }
 
   const propertyIds = bindSlots(component, options.params);
-  stampComponent(component, options.alias, options.params, propertyIds);
+  stampComponent(component, options.alias, options.namespace, options.params, propertyIds);
 
   return {
     nodeId: component.id,

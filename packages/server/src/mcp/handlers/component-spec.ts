@@ -6,11 +6,11 @@ import {
 } from '@sigma/shared';
 import { jsonResponse, validateFigmaAccess, type ToolContext, type ToolResult } from '../helpers.js';
 import { readStoredConfig } from '../../lint/resolve-config.js';
+import { resolveSpec } from '../spec-resolve.js';
 import {
   saveComponentSpec,
   getComponentSpec,
   listComponentSpecs,
-  findComponentSpecsByAlias,
   deleteComponentSpec,
   DEFAULT_NAMESPACE,
 } from '../../storage/component-specs.js';
@@ -40,43 +40,6 @@ async function collectSpecPolicyWarnings(
   const stored = await readStoredConfig(wsServer, 'document', pluginId);
   if (!stored.config) return [];
   return checkSpecNamingPolicy(stored.config.componentSpec, target);
-}
-
-/** namespace(선택) + alias로 레코드 결정. 미지정 시 유일하면 그것, 모호하면 에러 */
-async function resolveSpec(
-  alias: string,
-  namespace: string | undefined
-): Promise<{ record?: ComponentSpecRecord; error?: ToolResult }> {
-  if (namespace) {
-    const record = await getComponentSpec(namespace, alias);
-    if (!record) {
-      const inNs = (await listComponentSpecs(namespace)).map((r) => r.alias);
-      return {
-        error: jsonResponse({
-          error: `네임스페이스 "${namespace}"에 등록되지 않은 alias: "${alias}"`,
-          availableInNamespace: inNs,
-        }),
-      };
-    }
-    return { record };
-  }
-
-  const matches = await findComponentSpecsByAlias(alias);
-  if (matches.length === 0) {
-    const available = (await listComponentSpecs()).map((r) => `${r.namespace}/${r.alias}`);
-    return {
-      error: jsonResponse({ error: `등록되지 않은 alias: "${alias}"`, available }),
-    };
-  }
-  if (matches.length > 1) {
-    return {
-      error: jsonResponse({
-        error: `alias "${alias}"가 여러 네임스페이스에 존재합니다 — namespace 인자로 지정하세요`,
-        namespaces: matches.map((r) => r.namespace),
-      }),
-    };
-  }
-  return { record: matches[0] };
 }
 
 export const componentSpecHandlers: Record<
@@ -167,6 +130,7 @@ export const componentSpecHandlers: Record<
         {
           html,
           alias,
+          namespace,
           params: validation.params,
           position: args.position as { x: number; y: number } | undefined,
           pageId,
@@ -280,7 +244,9 @@ export const componentSpecHandlers: Record<
           ...(p.truncates ? { truncates: true } : {}),
         })),
       })),
-      hint: 'HTML 원문·미리보기는 alias 인자로 상세 조회 (componentNodeId를 sigma_screenshot으로 캡처 가능), 삽입은 sigma_create_component_spec_instance',
+      // 이 카탈로그는 토큰 절약형이라 html·componentKey·componentNodeId 를 뺀다. 어디에 있는지
+      // 안 적어 두면 "그 값을 얻을 방법이 없다"고 오해한다(실제로 그렇게 오진한 적이 있다).
+      hint: 'HTML 원문·componentKey·componentNodeId 는 alias 인자로 상세 조회 (componentNodeId를 sigma_screenshot으로 캡처 가능). 삽입은 sigma_create_component_spec_instance, 상태 교체는 sigma_swap_component(alias) — key 없이 alias 로 바로 된다',
     });
   },
 
