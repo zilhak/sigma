@@ -92,6 +92,7 @@ export {
 export { fullyOccludedSiblingRule } from './lint/occlusion';
 export { instanceResizedFromSpecRule, type InstanceResizedConfig } from './lint/spec-instance';
 export { annotationMarkerPairRule, type AnnotationMarkerPairConfig } from './lint/annotation-marker';
+export { fontNotDefaultRule, type FontNotDefaultConfig } from './lint/font';
 export {
   originAnchorRule, contentSpreadRule,
   DEFAULT_ORIGIN_TOLERANCE, DEFAULT_MAX_GAP,

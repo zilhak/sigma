@@ -1,7 +1,7 @@
 import {
   runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule, isEnabled,
-  fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule,
-  type InstanceResizedConfig, type AnnotationMarkerPairConfig,
+  fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule, fontNotDefaultRule,
+  type InstanceResizedConfig, type AnnotationMarkerPairConfig, type FontNotDefaultConfig,
   type TreeNode, type Violation, type LintConfig, type LayoutFix,
 } from '@sigma/shared';
 import { validateFigmaAccess, jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
@@ -79,7 +79,8 @@ async function enrichIfNeeded(
   // instance_resized_from_spec 은 opt-in — 켰을 때만 상세 조회(마스터 크기·스펙 alias)를 태운다.
   const needsSpecSize = config.builtins?.instance_resized_from_spec?.enabled === true;
   const needsMarkerPair = config.builtins?.annotation_marker_pair?.enabled === true;
-  if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair) return null;
+  const needsFont = config.builtins?.font_not_default?.enabled === true;
+  if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont) return null;
 
   const nodeIds = collectNodeIds(roots);
   const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
@@ -148,6 +149,31 @@ async function collectAnnotationLayerIds(
 }
 
 /**
+ * font_not_default 규칙이 켜졌을 때, 이 파일이 정한 기본 폰트 패밀리를 읽는다.
+ * 출처는 폰트 파이프라인과 같은 자리 — 문서 노드 sharedPluginData("sigma","fonts")의 `default`.
+ * 규칙이 꺼져 있으면 조회하지 않고(비용 0), 설정이 없거나 조회에 실패하면 undefined
+ * → 규칙이 "기대값을 모르므로 판정하지 않음"으로 스스로 비활성된다.
+ */
+async function resolveDefaultFontFamily(
+  builtins: LintConfig['builtins'],
+  wsServer: ToolContext['wsServer'],
+  pluginId: string | undefined,
+): Promise<string | undefined> {
+  if (builtins?.font_not_default?.enabled !== true) return undefined;
+  const configured = builtins.font_not_default.family;
+  if (typeof configured === 'string' && configured) return configured;
+  try {
+    const res = await wsServer.getPageData({ key: 'fonts', pageId: 'document' }, pluginId);
+    const raw = (res.value ?? null) as string | null;
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { default?: unknown };
+    return typeof parsed.default === 'string' && parsed.default ? parsed.default : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * instance_default_name 규칙이 켜졌을 때, INSTANCE id → 마스터 컴포넌트 이름 맵을 만든다.
  * 마스터 이름은 TreeNode 에 없어 get_nodes_info(componentName)로 resolve 한다.
  * 후보 = 최상위(다른 INSTANCE 내부가 아닌) INSTANCE 노드. 배치 1왕복으로 조회.
@@ -205,6 +231,7 @@ async function runLintOnRoots(
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom);
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
+  const defaultFontFamily = await resolveDefaultFontFamily(config.builtins, wsServer, pluginId);
   return [
     ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot, scopeRoot }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
@@ -215,6 +242,12 @@ async function runLintOnRoots(
       : []),
     ...(enriched && config.builtins?.annotation_marker_pair?.enabled === true
       ? annotationMarkerPairRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_pair as AnnotationMarkerPairConfig)
+      : []),
+    ...(enriched && config.builtins?.font_not_default?.enabled === true
+      ? fontNotDefaultRule(enriched.nodes, {
+          ...(config.builtins.font_not_default as FontNotDefaultConfig),
+          family: defaultFontFamily,
+        })
       : []),
     ...(enriched ? await runCustomRulesFromEnriched(config, enriched) : []),
   ];
