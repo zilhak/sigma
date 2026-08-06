@@ -45,6 +45,9 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   // 않는다 — 마스터 크기·스펙 alias 가 TreeNode 에 없어 서버가 enrich 한 LintNode 로 판정한다
   // (spec-instance.ts). 의도적으로 늘려 쓴 인스턴스가 많은 파일에선 폭주하므로 기본 강제 안 함.
   'instance_resized_from_spec',
+  // annotation_marker_pair 도 **opt-in(기본 OFF)** — 기획 레이어 안의 마커 ↔ 범례 짝·왕복 링크 검사.
+  // 관계(children/ancestors)와 하이퍼링크가 필요해 enrich 한 LintNode 로 판정한다(annotation-marker.ts).
+  'annotation_marker_pair',
   // fully_occluded_sibling 은 여기 목록엔 있지만 runBuiltinRules 안에서 실행되지 않는다 —
   // fills/opacity(get_nodes_info 상세)가 필요해 서버가 LintNode 로 enrich 한 뒤
   // occlusion.ts 의 fullyOccludedSiblingRule 을 별도로 호출한다(isEnabled 로 opt-out 확인은 동일).

@@ -1,6 +1,7 @@
 import {
   runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule, isEnabled,
-  fullyOccludedSiblingRule, instanceResizedFromSpecRule,
+  fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule,
+  type InstanceResizedConfig, type AnnotationMarkerPairConfig,
   type TreeNode, type Violation, type LintConfig, type LayoutFix,
 } from '@sigma/shared';
 import { validateFigmaAccess, jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
@@ -77,7 +78,8 @@ async function enrichIfNeeded(
   const needsOcclusion = isEnabled(config.builtins || {}, 'fully_occluded_sibling');
   // instance_resized_from_spec 은 opt-in — 켰을 때만 상세 조회(마스터 크기·스펙 alias)를 태운다.
   const needsSpecSize = config.builtins?.instance_resized_from_spec?.enabled === true;
-  if (!needsCustom && !needsOcclusion && !needsSpecSize) return null;
+  const needsMarkerPair = config.builtins?.annotation_marker_pair?.enabled === true;
+  if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair) return null;
 
   const nodeIds = collectNodeIds(roots);
   const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
@@ -209,7 +211,10 @@ async function runLintOnRoots(
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),
     ...(enriched && config.builtins?.instance_resized_from_spec?.enabled === true
-      ? instanceResizedFromSpecRule(enriched.nodes, config.builtins.instance_resized_from_spec)
+      ? instanceResizedFromSpecRule(enriched.nodes, config.builtins.instance_resized_from_spec as InstanceResizedConfig)
+      : []),
+    ...(enriched && config.builtins?.annotation_marker_pair?.enabled === true
+      ? annotationMarkerPairRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_pair as AnnotationMarkerPairConfig)
       : []),
     ...(enriched ? await runCustomRulesFromEnriched(config, enriched) : []),
   ];

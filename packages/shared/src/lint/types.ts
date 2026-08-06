@@ -64,7 +64,8 @@ export type BuiltinRuleId =
   | 'stray_pixel' | 'default_name' | 'empty_container' | 'hidden_leaf'
   | 'fill_sizing_orphan' | 'component_description_empty' | 'fully_occluded_sibling'
   | 'raw_node' | 'annotation_layer' | 'instance_default_name'
-  | 'origin_anchor' | 'content_spread' | 'instance_resized_from_spec';
+  | 'origin_anchor' | 'content_spread' | 'instance_resized_from_spec'
+  | 'annotation_marker_pair';
 
 export interface BuiltinRuleConfig {
   /** 생략하면 기본 ON (opt-out 모델 — 8개 기하 규칙의 기존 동작을 그대로 유지하기 위함) */

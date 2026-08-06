@@ -3119,7 +3119,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 }
 \`\`\`
 
-**빌트인 규칙 21개**:
+**빌트인 규칙 22개**:
 - 기하 8종(좌표, sigma_layout_lint 시절과 동일): \`outside_section\`(섹션 밖 배치 노드) · \`section_overlap\`(형제 섹션 겹침) · \`section_gap\`(형제 섹션 간격 부족, 기본 80px — 섹션 라벨이 경계를 가림) · \`card_overlap\`(섹션 안 카드끼리 겹침) · \`frame_padding\`(섹션 안 프레임 여백 부족, 기본 20px) · \`instance_orphan\`(래퍼 없이 뜬 INSTANCE) · \`component_needs_frame\`(섹션 직속 COMPONENT/GROUP) · \`child_overflow\`(자식이 로컬좌표 기준 부모 밖).
 - 구조/이름/가시성 6종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 Figma 기본 이름 방치) · \`empty_container\`(자식 없는 FRAME/GROUP — 단 fill 로 내용을 그리는 이미지 프레임 등은 제외) · \`hidden_leaf\`(visible:false 로 트리에 잔존) · \`fill_sizing_orphan\`(layoutSizing이 FILL인데 부모가 오토레이아웃 아님 — 무효 상태) · \`component_description_empty\`(COMPONENT/COMPONENT_SET의 description 비어있음).
 - occlusion 1종: \`fully_occluded_sibling\`(같은 부모 안에서 나중에 그려지는 형제가 불투명 SOLID fill로 완전히 덮어 절대 안 보임 — 켜져 있으면 fills/opacity 조회를 위해 get_nodes_info 왕복이 추가됨).
@@ -3128,6 +3128,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 - 찾기 쉬움 2종 **(opt-in, 기본 OFF, 페이지 루트 전용)**: \`content_spread\`(최상위 노드를 \`maxGap\`(기본 3000px) 이내로 이어지는 덩어리로 묶어, 본진 밖에 홀로 떨어진 이상치를 검출 — 이런 노드 하나가 zoom-to-fit 범위를 삼켜 "페이지를 열었는데 내용을 못 찾는" 상태를 만든다. 숨김 노드 제외) · \`origin_anchor\`(최상위 SECTION 이 있는 페이지는 그 중 하나가 원점(0,0) \`tolerance\`(기본 100px) 이내에서 시작해야 함 — 좌표 규약 고정용, 위반은 페이지당 1건이고 주체는 원점에 가장 가까운 섹션). **둘 다 \`nodeId\`/\`path\` 로 서브트리를 검사할 땐 실행되지 않는다**(그 트리는 부모 로컬좌표라 원점·거리 판정이 무의미). 자동수정 없음.
 - 인스턴스 이름 강제 1종 **(opt-in, 기본 OFF)**: \`instance_default_name\`(\`default_name\` 의 인스턴스 판 — INSTANCE 이름이 **마스터 컴포넌트 이름 그대로**면 고유 이름 미부여로 보고 위반). 마스터명은 TreeNode 에 없어 서버가 \`get_nodes_info\` 의 \`componentName\` 을 resolve 해 판정(규칙 ON 일 때만 1왕복). **중첩 인스턴스(다른 INSTANCE 내부)는 제외**(정의의 사본). 실화면엔 마스터명 유지 인스턴스가 흔해 기본 ON 이면 폭주 → strict 네이밍 원하는 파일만 opt-in.
 - 스펙 인스턴스 크기 강제 1종 **(opt-in, 기본 OFF)**: \`instance_resized_from_spec\`(컴포넌트 스펙으로 만든 마스터의 INSTANCE 를 **마스터와 다른 크기로** 놔둔 것 검출). 스펙 마스터는 HTML 을 **고정 크기 자식 트리로 구운 것**이라 오토레이아웃·제약이 없다 → 인스턴스를 늘리거나 줄여도 **자식이 따라오지 않는다**(24×24 아이콘을 16×16 으로 줄여 child_overflow 7건, 16×16 체크박스를 48×42 표 칸으로 늘려 선택 상태에서 색 덩어리가 된 사례). 손으로 만든 일반 컴포넌트는 제약으로 정상 리플로우되므로 **스펙 스탬프를 가진 마스터의 인스턴스만** 대상. 파라미터: \`tolerance\`(기본 0.5px — 부동소수 반올림 무시). 마스터 크기·스펙 alias 는 TreeNode 에 없어 서버가 \`get_nodes_info\` 로 resolve(규칙 ON 일 때만 1왕복). 자동수정 없음 — 크기를 되돌리거나 그 크기의 스펙을 따로 등록한다.
+- 기획 주석 짝 검사 1종 **(opt-in, 기본 OFF)**: \`annotation_marker_pair\`(기획 레이어 안에서 **마커 ↔ 범례가 1:1 이고 서로 왕복 하이퍼링크가 걸려 있는지**). 결번(설명 없는 마커)·유령(가리키는 곳 없는 범례)·중복 번호·링크 누락을 잡는다 — 마커를 빼고 재번호하다 어긋나기 쉬운데 눈으로는 번호를 하나씩 세어야만 보이고, 링크는 화면에 표시가 없어 빠뜨려도 티가 안 난다. 짝은 **기획 레이어 단위**로 맞춘다(한 페이지에 섹션이 여럿이면 ① 번 마커도 여럿이라 페이지 전체로 묶으면 전부 중복이 된다). 판정은 이름이 아니라 **스펙 alias + 인스턴스 안 번호 글자 + 실제 하이퍼링크 데이터**다. 파라미터: \`markerAlias\`(기본 \`marker\`) · \`legendAlias\`(기본 \`legend\`) · \`requireHyperlink\`(기본 true) · \`symbolPattern\`(기본 원문자 숫자 한 글자 — ㉑(U+3251)은 ①(U+2460)과 연속이 아니라 범위를 나눠 넣었다).
 
 **JSON \`check.op\`**: \`equals | range(min/max) | regex(pattern) | oneOf(values) | exists\` — 5개뿐이며 더 늘리지 않습니다(새 언어 발명 방지). 형제/조상 조회나 유도값 계산이 필요하면 \`kind:"predicate"\`를 쓰세요.
 
