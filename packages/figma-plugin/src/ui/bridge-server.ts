@@ -279,6 +279,12 @@ export function handleServerMessage(msg: ServerMessage) {
             filter: msg.filter,
             limit: msg.limit,
             pageId: msg.pageId,
+            // ⚠️ 이 브리지는 필드를 손으로 골라 넘긴다 — 여기 빠진 인자는 **서버가 보내도 조용히 사라진다.**
+            // 실제로 fields 가 빠져 있어 `fields:"geometry"` 가 MCP 경로에서 한 번도 동작하지 않았고
+            // (응답에 fullPath·meta 가 그대로 오고 absolute 는 오지 않았다), 도구 설명은 그동안
+            // 절대좌표를 준다고 적혀 있었다. 새 인자를 추가할 때 여기도 함께 늘릴 것.
+            fields: msg.fields,
+            includeAbsolute: msg.includeAbsolute,
             commandId: msg.commandId,
           },
         },

@@ -70,7 +70,6 @@ export interface SerializeContext {
   parentPath: string;
   /** 'geometry' 면 좌표에 필요한 것만 싣는다(fullPath·meta 생략, absolute 추가). 기본 'all' */
   fields?: TreeFields;
-  includeAbsolute?: boolean;
   /**
    * 'all' 모드에서도 absolute(절대좌표)를 함께 싣는다.
    *
