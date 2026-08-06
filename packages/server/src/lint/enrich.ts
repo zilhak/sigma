@@ -37,7 +37,14 @@ export interface BuildLintNodesResult {
   relations: CtxRelations;
 }
 
-export function buildLintNodes(roots: TreeNode[], nodesInfo: NodeInfoLike[]): BuildLintNodesResult {
+export function buildLintNodes(
+  roots: TreeNode[],
+  nodesInfo: NodeInfoLike[],
+  /** 기획 레이어로 판정된 노드 id. 빌트인은 이미 주입받아 쓰는데 커스텀 규칙만 못 봐서
+   *  이름으로 짐작해야 했다(레이어 이름 규약을 만들지 않는다는 원칙과 어긋난다). */
+  annotationLayerIds?: Iterable<string>,
+): BuildLintNodesResult {
+  const layerIds = new Set(annotationLayerIds || []);
   const infoById = new Map(nodesInfo.filter((n) => !n.error).map((n) => [n.nodeId, n]));
   const flat = flattenTree(roots);
 
@@ -54,6 +61,9 @@ export function buildLintNodes(roots: TreeNode[], nodesInfo: NodeInfoLike[]): Bu
       childCount: node.childCount,
       visible: node.meta?.visible,
       locked: node.meta?.locked,
+      // 기획 레이어 본체(pluginData role 판정). 하위 노드는 false — 조상으로 거슬러
+      // 판정하려면 ctx.getAncestors 를 쓴다.
+      isAnnotationLayer: layerIds.has(node.id),
     };
     if (info) {
       base.opacity = info.opacity;

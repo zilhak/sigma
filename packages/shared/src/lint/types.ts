@@ -34,6 +34,9 @@ export interface LintNode {
   /** TEXT 에 걸린 하이퍼링크 구간(없으면 빈 배열이 아니라 undefined). 링크는 range 속성이라
    *  `hyperlink` 단일 속성으로는 읽을 수 없어 서버가 get_nodes_info 상세에서 실어 준다. */
   hyperlinks?: Array<{ start: number; end: number; type: string; value: string }>;
+  /** 이 노드가 기획 레이어 본체인지(pluginData role="annotation-layer"). 빌트인은 주입받은
+   *  layerIds 로 쓰는 것과 같은 판정. 커스텀 규칙이 이름으로 짐작하지 않게 실어 준다. */
+  isAnnotationLayer?: boolean;
   [key: string]: unknown;
 }
 

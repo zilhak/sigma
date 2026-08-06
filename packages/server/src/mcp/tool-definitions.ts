@@ -190,6 +190,10 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
           type: ['object', 'string'],
           description: '프레임 데이터. format=json이면 ExtractedNode 객체, format=html이면 HTML 문자열',
         },
+        html: {
+          type: 'string',
+          description: "(선택) data 의 별칭 — HTML 문자열을 바로 전달. 이걸 쓰면 format 은 자동으로 'html'",
+        },
         format: {
           type: 'string',
           enum: ['json', 'html'],

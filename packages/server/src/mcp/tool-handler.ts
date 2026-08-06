@@ -48,7 +48,9 @@ const ARG_ALIASES: Record<string, string> = {
 function rejectUnknownArgs(name: string, args: Record<string, unknown>): ToolResult | null {
   const known = knownArgsByTool.get(name);
   if (!known || known.size === 0) return null;   // 스키마 미상 도구는 통과(과거 호환)
-  const unknown = Object.keys(args).filter((k) => !known.has(k));
+  // token 은 거의 모든 도구가 받으므로, 안 받는 몇 개에 딸려 와도 그냥 무시한다.
+  // 넘겨도 동작이 조용히 달라지는 일이 없어(인증 인자일 뿐) 이 거부의 대상이 아니다.
+  const unknown = Object.keys(args).filter((k) => k !== 'token' && !known.has(k));
   if (unknown.length === 0) return null;
   return jsonResponse({
     error:

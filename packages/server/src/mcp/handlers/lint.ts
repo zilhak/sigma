@@ -71,6 +71,7 @@ async function enrichIfNeeded(
   roots: TreeNode[],
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
+  annotationLayerIds?: Iterable<string>,
 ): Promise<BuildLintNodesResult | null> {
   const needsCustom = (config.custom || []).length > 0;
   const needsOcclusion = isEnabled(config.builtins || {}, 'fully_occluded_sibling');
@@ -78,7 +79,7 @@ async function enrichIfNeeded(
 
   const nodeIds = collectNodeIds(roots);
   const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
-  return buildLintNodes(roots, extractNodesInfo(nodesInfoRaw));
+  return buildLintNodes(roots, extractNodesInfo(nodesInfoRaw), annotationLayerIds);
 }
 
 function runCustomRulesFromEnriched(config: LintConfig, enriched: BuildLintNodesResult): Promise<Violation[]> {
@@ -107,9 +108,12 @@ async function collectAnnotationLayerIds(
   roots: TreeNode[],
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
+  alsoForCustom = false,
 ): Promise<Set<string>> {
   const empty = new Set<string>();
-  if (builtins?.annotation_layer?.enabled !== true) return empty;
+  // 빌트인 annotation_layer 가 꺼져 있어도 커스텀 규칙이 있으면 수집한다 — 커스텀이
+  // 레이어 여부를 보려면 이 판정이 필요하고, 없으면 이름으로 짐작하게 된다.
+  if (builtins?.annotation_layer?.enabled !== true && !alsoForCustom) return empty;
 
   const candidates: string[] = [];
   const walk = (nodes: TreeNode[]) => {
@@ -193,8 +197,9 @@ async function runLintOnRoots(
   isPageRoot: boolean,
   scopeRoot?: TreeNode,
 ): Promise<Violation[]> {
-  const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId);
-  const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId);
+  const hasCustom = (config.custom || []).length > 0;
+  const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom);
+  const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
   return [
     ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot, scopeRoot }),
