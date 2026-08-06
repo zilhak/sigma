@@ -320,6 +320,8 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const limit = args.limit as number | undefined;
     // 좌표 전용 축약 응답. 잘못된 값은 무시하고 기본('all')로 — 조용히 필드가 빠지는 것보다 안전하다.
     const fields = args.fields === 'geometry' ? 'geometry' as const : undefined;
+    // 'all' 응답에도 절대좌표를 함께 싣는다 — meta/fullPath 를 잃지 않고 컨테이너를 넘나드는 좌표 비교를 하려면 필요하다.
+    const includeAbsolute = args.includeAbsolute === true;
 
     // 토큰 검증
     const tokenEntry = tokenStore.validateToken(token);
@@ -346,7 +348,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     try {
       const result = await wsServer.getTree(
-        { nodeId, path, depth, filter, limit, pageId, fields },
+        { nodeId, path, depth, filter, limit, pageId, fields, includeAbsolute },
         pluginId
       );
       return jsonResponse(result);

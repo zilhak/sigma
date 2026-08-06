@@ -11,6 +11,7 @@ import { runPredicateRule } from '../../lint/run-custom-rule.js';
 import { resolvePageConfig, readStoredConfig, type ConfigMode } from '../../lint/resolve-config.js';
 import { writeLintReport, type PageLintResult } from '../../lint/report.js';
 import { filterSuppressed, collectSubjectNodeIds } from '../../lint/suppress.js';
+import { listComponentSpecs } from '../../storage/component-specs.js';
 
 /**
  * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + opt-in 5종) + config.custom
@@ -119,7 +120,12 @@ async function collectAnnotationLayerIds(
   const empty = new Set<string>();
   // 빌트인 annotation_layer 가 꺼져 있어도 커스텀 규칙이 있으면 수집한다 — 커스텀이
   // 레이어 여부를 보려면 이 판정이 필요하고, 없으면 이름으로 짐작하게 된다.
-  if (builtins?.annotation_layer?.enabled !== true && !alsoForCustom) return empty;
+  // 기획 주석 규칙들(marker_pair/marker_gap)도 이 판정 위에서만 동작한다 — 자기가 켜졌는데
+  // 수집이 안 되면 **위반이 없는 게 아니라 규칙이 아예 안 도는데 0건으로 보인다**(실측으로 확인).
+  const needsForAnnotationRules =
+    builtins?.annotation_marker_pair?.enabled === true ||
+    builtins?.annotation_marker_gap?.enabled === true;
+  if (builtins?.annotation_layer?.enabled !== true && !alsoForCustom && !needsForAnnotationRules) return empty;
 
   const candidates: string[] = [];
   const walk = (nodes: TreeNode[]) => {
@@ -155,6 +161,32 @@ async function collectAnnotationLayerIds(
  * 규칙이 꺼져 있으면 조회하지 않고(비용 0), 설정이 없거나 조회에 실패하면 undefined
  * → 규칙이 "기대값을 모르므로 판정하지 않음"으로 스스로 비활성된다.
  */
+/**
+ * instance_resized_from_spec 이 켜졌을 때, alias → 축별 sizing 맵을 만든다.
+ * hug 축(내용에 따라 늘어남)은 커지는 게 정상이라 판정에서 빼야 하는데, 그 정보는 Figma 노드가
+ * 아니라 **스펙 레지스트리**에 있다. 같은 alias 가 여러 namespace 에 있고 sizing 이 엇갈리면
+ * 그 alias 는 넣지 않는다(애매하면 판정하지 않는 쪽).
+ */
+async function resolveSpecSizing(
+  builtins: LintConfig['builtins'],
+): Promise<Record<string, { horizontal?: string; vertical?: string }>> {
+  if (builtins?.instance_resized_from_spec?.enabled !== true) return {};
+  const records = await listComponentSpecs();
+  const out: Record<string, { horizontal?: string; vertical?: string }> = {};
+  const conflicting = new Set<string>();
+  for (const r of records) {
+    if (!r.sizing) continue;
+    const prev = out[r.alias];
+    if (prev && (prev.horizontal !== r.sizing.horizontal || prev.vertical !== r.sizing.vertical)) {
+      conflicting.add(r.alias);
+      continue;
+    }
+    out[r.alias] = { horizontal: r.sizing.horizontal, vertical: r.sizing.vertical };
+  }
+  for (const alias of conflicting) delete out[alias];
+  return out;
+}
+
 async function resolveDefaultFontFamily(
   builtins: LintConfig['builtins'],
   wsServer: ToolContext['wsServer'],
@@ -233,13 +265,17 @@ async function runLintOnRoots(
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
   const defaultFontFamily = await resolveDefaultFontFamily(config.builtins, wsServer, pluginId);
+  const sizingByAlias = await resolveSpecSizing(config.builtins);
   return [
     ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot, scopeRoot }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),
     ...(enriched && config.builtins?.instance_resized_from_spec?.enabled === true
-      ? instanceResizedFromSpecRule(enriched.nodes, config.builtins.instance_resized_from_spec as InstanceResizedConfig)
+      ? instanceResizedFromSpecRule(enriched.nodes, {
+          ...(config.builtins.instance_resized_from_spec as InstanceResizedConfig),
+          sizingByAlias,
+        })
       : []),
     ...(enriched && config.builtins?.annotation_marker_pair?.enabled === true
       ? annotationMarkerPairRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_pair as AnnotationMarkerPairConfig)
