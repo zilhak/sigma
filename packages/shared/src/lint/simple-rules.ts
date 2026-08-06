@@ -20,9 +20,40 @@ function walk(roots: TreeNode[], visit: (n: TreeNode) => void): void {
   }
 }
 
-export function strayPixelRule(roots: TreeNode[]): Violation[] {
+/**
+ * 인스턴스 **내부**를 건너뛰는 옵션이 있는 순회.
+ *
+ * ⚠️ 왜 필요한가: 이름·소수 좌표·빈 프레임 계열 규칙이 **오탐이 너무 많다는 이유로 통째로 꺼져
+ * 있었다.** 실측해 보니 그 오탐이 전부 한 곳에서 나왔다 — component-spec 인스턴스 내부다.
+ * 스펙 HTML 이 만든 래퍼는 이름이 "Frame" 이고, CSS 로 계산된 좌표는 소수이며, 아이콘 프레임은
+ * 자식이 없다. 전부 **스펙이 정하는 것이라 이 화면에서 고칠 수 없는 것들**이다.
+ * L1-2 기준 default_name 5277건·empty_container 72건이 **100% 인스턴스 내부**였고,
+ * 그것만 빼면 각각 0건 — 즉 규칙이 죽어 있을 이유가 없었다.
+ *
+ * 마스터 페이지에서는 그 안쪽이 곧 검사 대상이므로 `includeInsideInstances: true` 로 켠다.
+ */
+function walkOutsideInstances(
+  roots: TreeNode[],
+  includeInside: boolean,
+  visit: (n: TreeNode) => void,
+): void {
+  const stack: Array<{ n: TreeNode; inside: boolean }> = roots.map((n) => ({ n, inside: false }));
+  while (stack.length) {
+    const { n, inside } = stack.pop() as { n: TreeNode; inside: boolean };
+    if (!inside || includeInside) visit(n);
+    const childInside = inside || n.type === 'INSTANCE';
+    if (n.children) for (const c of n.children) stack.push({ n: c, inside: childInside });
+  }
+}
+
+/** 인스턴스 내부까지 볼지 정하는 공통 옵션. 기본 = 보지 않는다. */
+export interface InstanceScopeOption {
+  includeInsideInstances?: boolean;
+}
+
+export function strayPixelRule(roots: TreeNode[], opts: InstanceScopeOption = {}): Violation[] {
   const out: Violation[] = [];
-  walk(roots, (n) => {
+  walkOutsideInstances(roots, opts.includeInsideInstances === true, (n) => {
     const b = n.boundingBox;
     if (!Number.isInteger(b.x) || !Number.isInteger(b.y) || !Number.isInteger(b.width) || !Number.isInteger(b.height)) {
       out.push({
@@ -35,9 +66,9 @@ export function strayPixelRule(roots: TreeNode[]): Violation[] {
   return out;
 }
 
-export function defaultNameRule(roots: TreeNode[]): Violation[] {
+export function defaultNameRule(roots: TreeNode[], opts: InstanceScopeOption = {}): Violation[] {
   const out: Violation[] = [];
-  walk(roots, (n) => {
+  walkOutsideInstances(roots, opts.includeInsideInstances === true, (n) => {
     if (DEFAULT_NAME_RE.test(n.name)) {
       out.push({ rule: 'default_name', source: 'builtin', message: `"${n.name}" (${n.id}) 기본 이름 방치`, nodes: [n.id] });
     }
@@ -45,9 +76,9 @@ export function defaultNameRule(roots: TreeNode[]): Violation[] {
   return out;
 }
 
-export function emptyContainerRule(roots: TreeNode[]): Violation[] {
+export function emptyContainerRule(roots: TreeNode[], opts: InstanceScopeOption = {}): Violation[] {
   const out: Violation[] = [];
-  walk(roots, (n) => {
+  walkOutsideInstances(roots, opts.includeInsideInstances === true, (n) => {
     // fill 로 내용을 그리는 컨테이너는 자식이 없어도 비어있지 않다(이미지 프레임이 대표적)
     if (n.meta?.hasVisibleFill) return;
     if (CONTAINER_TYPES.has(n.type) && n.childCount === 0) {

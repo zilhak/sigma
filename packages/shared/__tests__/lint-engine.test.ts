@@ -395,6 +395,40 @@ describe('simple-rules.ts (신규 빌트인 4종)', () => {
     expect(strayPixelRule(roots)).toHaveLength(0);
   });
 
+  // 이 셋이 통째로 꺼져 있던 이유가 인스턴스 내부 오탐이었다 — 스펙 HTML 이 만든 래퍼 이름·
+  // CSS 계산 소수 좌표·자식 없는 아이콘 프레임. 이 화면에서 고칠 수 없는 것들이라 기본 제외.
+  test('인스턴스 내부는 기본으로 건너뛴다 (스펙이 정하는 것이라 화면에서 못 고친다)', () => {
+    const roots = [
+      node('inst', 'button_primary', 'INSTANCE', [0, 0, 100, 40], [
+        node('w', 'Frame', 'FRAME', [0.5, 0, 100, 40], [
+          node('deep', 'Rectangle 3', 'RECTANGLE', [1.5, 2, 10, 10]),
+        ]),
+        node('empty', 'Frame 2', 'FRAME', [0, 0, 8, 8]),
+      ]),
+    ];
+    expect(strayPixelRule(roots)).toHaveLength(0);
+    expect(defaultNameRule(roots)).toHaveLength(0);
+    expect(emptyContainerRule(roots)).toHaveLength(0);
+  });
+
+  test('includeInsideInstances 를 켜면 인스턴스 내부도 본다 (마스터 페이지 감사용)', () => {
+    const roots = [
+      node('inst', 'button_primary', 'INSTANCE', [0, 0, 100, 40], [
+        node('w', 'Frame', 'FRAME', [0.5, 0, 100, 40]),
+      ]),
+    ];
+    const o = { includeInsideInstances: true };
+    expect(strayPixelRule(roots, o)).toHaveLength(1);
+    expect(defaultNameRule(roots, o)).toHaveLength(1);
+    expect(emptyContainerRule(roots, o)).toHaveLength(1);
+  });
+
+  test('인스턴스 **자신**은 건너뛰지 않는다 (내부만 제외)', () => {
+    const roots = [node('inst', 'Frame 9', 'INSTANCE', [0.5, 0, 100, 40])];
+    expect(defaultNameRule(roots)).toHaveLength(1);
+    expect(strayPixelRule(roots)).toHaveLength(1);
+  });
+
   test('default_name — Figma 기본 이름 패턴 검출', () => {
     const roots = [
       node('a', 'Rectangle 123', 'RECTANGLE', [0, 0, 10, 10]),

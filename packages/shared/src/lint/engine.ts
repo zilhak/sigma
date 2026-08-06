@@ -104,9 +104,16 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
     }
   }
 
-  if (isEnabled(builtins, 'stray_pixel')) out.push(...strayPixelRule(roots));
-  if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots));
-  if (isEnabled(builtins, 'empty_container')) out.push(...emptyContainerRule(roots));
+  // 이 셋은 **인스턴스 내부를 기본으로 건너뛴다** — 스펙 HTML 이 만든 래퍼 이름("Frame")·
+  // CSS 계산 소수 좌표·자식 없는 아이콘 프레임이 오탐의 전부였고(L1-2 실측: default_name 5277건,
+  // empty_container 72건이 100% 인스턴스 내부), 그것 때문에 세 규칙이 통째로 꺼져 있었다.
+  // 마스터 페이지처럼 그 안쪽이 검사 대상이면 includeInsideInstances: true 로 켠다.
+  const instScope = (id: string) => ({
+    includeInsideInstances: (builtins[id] as { includeInsideInstances?: boolean } | undefined)?.includeInsideInstances === true,
+  });
+  if (isEnabled(builtins, 'stray_pixel')) out.push(...strayPixelRule(roots, instScope('stray_pixel')));
+  if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots, instScope('default_name')));
+  if (isEnabled(builtins, 'empty_container')) out.push(...emptyContainerRule(roots, instScope('empty_container')));
   if (isEnabled(builtins, 'hidden_leaf')) out.push(...hiddenLeafRule(roots));
   if (isEnabled(builtins, 'fill_sizing_orphan')) out.push(...fillSizingOrphanRule(roots));
   if (isEnabled(builtins, 'component_description_empty')) out.push(...componentDescriptionEmptyRule(roots));
