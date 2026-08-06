@@ -1643,6 +1643,10 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           {
             html: msg.html as string,
             alias: msg.alias as string,
+            // ⚠️ 여기는 전달 필드를 손으로 나열한다 — 서버가 새 인자를 보내도 이 목록에 없으면
+            // **조용히 사라진다**(get-tree 의 fields/includeAbsolute 가 같은 이유로 없어졌다).
+            // 인자를 늘릴 때 이 줄을 함께 고칠 것.
+            namespace: msg.namespace as string | undefined,
             params: msg.params as ComponentParam[],
             position: msg.position as { x: number; y: number } | undefined,
             pageId: msg.pageId as string | undefined,
