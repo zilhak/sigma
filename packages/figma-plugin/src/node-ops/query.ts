@@ -86,8 +86,16 @@ export interface NodeDetailInfo {
   layoutSizingVertical?: string;
   childCount?: number;
   componentName?: string;
+  /** INSTANCE 의 마스터 크기. 인스턴스가 마스터와 다른 크기로 늘어났는지 판정하는 유일한 근거다. */
+  componentWidth?: number;
+  componentHeight?: number;
+  /** 마스터가 컴포넌트 스펙(sigma_create_component_spec)으로 만들어졌다면 그 alias. */
+  specAlias?: string;
   description?: string;
 }
+
+/** 컴포넌트 스펙 마스터에 찍히는 스탬프 pluginData 키 (node-ops/component-spec.ts 와 동일). */
+const SPEC_STAMP_KEY = 'sigma-spec';
 
 export function getNodeInfo(nodeId: string): NodeDetailInfo {
   const node = figma.getNodeById(nodeId);
@@ -178,10 +186,24 @@ export function getNodeInfo(nodeId: string): NodeDetailInfo {
     info.childCount = (scene as ChildrenMixin).children.length;
   }
 
-  // Instance
+  // Instance — 이름뿐 아니라 **마스터 크기와 스펙 alias**도 싣는다.
+  // 인스턴스를 마스터와 다른 크기로 늘리거나 줄이는 것은 컴포넌트 스펙(HTML 로 구운 트리)에서는
+  // 자식이 따라오지 않아 레이아웃이 깨지는데, 크기 비교 없이는 그 사실을 밖에서 알 방법이 없다.
   if (scene.type === 'INSTANCE') {
     const instance = scene as InstanceNode;
-    info.componentName = instance.mainComponent ? instance.mainComponent.name : undefined;
+    const main = instance.mainComponent;
+    info.componentName = main ? main.name : undefined;
+    if (main) {
+      info.componentWidth = main.width;
+      info.componentHeight = main.height;
+      const stampRaw = main.getPluginData(SPEC_STAMP_KEY);
+      if (stampRaw) {
+        try {
+          const alias = (JSON.parse(stampRaw) as { alias?: string }).alias;
+          if (typeof alias === 'string') info.specAlias = alias;
+        } catch { /* 스탬프가 깨졌으면 스펙 인스턴스로 보지 않는다 */ }
+      }
+    }
   }
 
   return deepSanitizeMixed(info) as NodeDetailInfo;

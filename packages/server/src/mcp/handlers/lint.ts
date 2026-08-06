@@ -1,6 +1,6 @@
 import {
   runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule, isEnabled,
-  fullyOccludedSiblingRule,
+  fullyOccludedSiblingRule, instanceResizedFromSpecRule,
   type TreeNode, type Violation, type LintConfig, type LayoutFix,
 } from '@sigma/shared';
 import { validateFigmaAccess, jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
@@ -75,7 +75,9 @@ async function enrichIfNeeded(
 ): Promise<BuildLintNodesResult | null> {
   const needsCustom = (config.custom || []).length > 0;
   const needsOcclusion = isEnabled(config.builtins || {}, 'fully_occluded_sibling');
-  if (!needsCustom && !needsOcclusion) return null;
+  // instance_resized_from_spec 은 opt-in — 켰을 때만 상세 조회(마스터 크기·스펙 alias)를 태운다.
+  const needsSpecSize = config.builtins?.instance_resized_from_spec?.enabled === true;
+  if (!needsCustom && !needsOcclusion && !needsSpecSize) return null;
 
   const nodeIds = collectNodeIds(roots);
   const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
@@ -205,6 +207,9 @@ async function runLintOnRoots(
     ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot, scopeRoot }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
+      : []),
+    ...(enriched && config.builtins?.instance_resized_from_spec?.enabled === true
+      ? instanceResizedFromSpecRule(enriched.nodes, config.builtins.instance_resized_from_spec)
       : []),
     ...(enriched ? await runCustomRulesFromEnriched(config, enriched) : []),
   ];

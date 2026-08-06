@@ -34,6 +34,11 @@ export interface LintNode {
   /** TEXT 에 걸린 하이퍼링크 구간(없으면 빈 배열이 아니라 undefined). 링크는 range 속성이라
    *  `hyperlink` 단일 속성으로는 읽을 수 없어 서버가 get_nodes_info 상세에서 실어 준다. */
   hyperlinks?: Array<{ start: number; end: number; type: string; value: string }>;
+  /** INSTANCE 의 마스터 크기와 스펙 alias. 스펙 인스턴스를 마스터와 다른 크기로 놔뒀는지
+   *  판정하는 근거(instance_resized_from_spec). TreeNode 에 없어 서버가 get_nodes_info 로 실어 준다. */
+  componentWidth?: number;
+  componentHeight?: number;
+  specAlias?: string;
   /** 이 노드가 기획 레이어 본체인지(pluginData role="annotation-layer"). 빌트인은 주입받은
    *  layerIds 로 쓰는 것과 같은 판정. 커스텀 규칙이 이름으로 짐작하지 않게 실어 준다. */
   isAnnotationLayer?: boolean;
@@ -59,7 +64,7 @@ export type BuiltinRuleId =
   | 'stray_pixel' | 'default_name' | 'empty_container' | 'hidden_leaf'
   | 'fill_sizing_orphan' | 'component_description_empty' | 'fully_occluded_sibling'
   | 'raw_node' | 'annotation_layer' | 'instance_default_name'
-  | 'origin_anchor' | 'content_spread';
+  | 'origin_anchor' | 'content_spread' | 'instance_resized_from_spec';
 
 export interface BuiltinRuleConfig {
   /** 생략하면 기본 ON (opt-out 모델 — 8개 기하 규칙의 기존 동작을 그대로 유지하기 위함) */

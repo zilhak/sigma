@@ -13,6 +13,10 @@ export interface NodeInfoLike {
   error?: string;
   /** INSTANCE 의 마스터 컴포넌트 이름 (get_nodes_info 가 인스턴스에 대해 반환). instance_default_name 규칙용. */
   componentName?: string;
+  /** INSTANCE 의 마스터 크기·스펙 alias. instance_resized_from_spec 규칙용. */
+  componentWidth?: number;
+  componentHeight?: number;
+  specAlias?: string;
   opacity?: number;
   fills?: unknown;
   strokes?: unknown;
@@ -81,6 +85,9 @@ export function buildLintNodes(
       base.layoutSizingVertical = info.layoutSizingVertical;
       base.description = info.description;
       base.hyperlinks = info.hyperlinks;
+      base.componentWidth = info.componentWidth;
+      base.componentHeight = info.componentHeight;
+      base.specAlias = info.specAlias;
     }
     return base;
   });

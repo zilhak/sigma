@@ -90,6 +90,7 @@ export {
   fillSizingOrphanRule, componentDescriptionEmptyRule,
 } from './lint/simple-rules';
 export { fullyOccludedSiblingRule } from './lint/occlusion';
+export { instanceResizedFromSpecRule, type InstanceResizedConfig } from './lint/spec-instance';
 export {
   originAnchorRule, contentSpreadRule,
   DEFAULT_ORIGIN_TOLERANCE, DEFAULT_MAX_GAP,
