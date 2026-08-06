@@ -223,6 +223,44 @@ describe('annotationMarkerGapRule', () => {
     expect(v[0].message).toContain('가리킬 만한 요소가 없다');
   });
 
+  test('배경판을 덮은 것은 결함이 아니다 (마커는 어느 화면에서든 배경 위에 얹힌다)', () => {
+    // 자식 없는 큰 RECTANGLE = 배경. 덮어도 가려지는 정보가 없다.
+    const { nodes, relations } = gapScene({ x: 300, y: 300 }, [
+      { id: 'bg', x: 0, y: 0, w: 1000, h: 800, type: 'RECTANGLE' },
+      { id: 'btn', x: 300, y: 334 },
+    ]);
+    expect(annotationMarkerGapRule(nodes, relations)).toEqual([]);
+  });
+
+  test('배경 위의 작은 요소를 덮으면 그쪽으로 잡는다', () => {
+    const { nodes, relations } = gapScene({ x: 300, y: 300 }, [
+      { id: 'bg', x: 0, y: 0, w: 1000, h: 800, type: 'RECTANGLE' },
+      { id: 'toggle', x: 296, y: 296, w: 40, h: 24 },
+    ]);
+    const v = annotationMarkerGapRule(nodes, relations);
+    expect(v.length).toBe(1);
+    expect(v[0].message).toContain('"toggle"');
+  });
+
+  test('스치기만 한 것은 덮음이 아니다 (제목 텍스트 상자의 디센더 공백)', () => {
+    // 마커 24×24 중 세로 6px 만 겹친다 = 25%
+    const { nodes, relations } = gapScene({ x: 0, y: 94 }, [
+      { id: 'title', x: 0, y: 70, w: 200, h: 30 },
+      { id: 'btn', x: 0, y: 126 },
+    ]);
+    expect(annotationMarkerGapRule(nodes, relations)).toEqual([]);
+  });
+
+  test('minCoverRatio 를 낮추면 스친 것도 잡는다', () => {
+    const { nodes, relations } = gapScene({ x: 0, y: 94 }, [
+      { id: 'title', x: 0, y: 70, w: 200, h: 30 },
+      { id: 'btn', x: 0, y: 126 },
+    ]);
+    const v = annotationMarkerGapRule(nodes, relations, { minCoverRatio: 0.2 });
+    expect(v.length).toBe(1);
+    expect(v[0].message).toContain('덮고 있다');
+  });
+
   test('절대좌표가 없으면 판정하지 않는다 (로컬좌표로는 애초에 비교가 안 된다)', () => {
     const { nodes, relations } = gapScene({ x: 10, y: 105 }, [{ id: 'btn', x: 0, y: 100 }]);
     const stripped = nodes.map((n) => ({ ...n, absoluteX: undefined, absoluteY: undefined }));

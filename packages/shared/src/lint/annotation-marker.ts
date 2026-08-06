@@ -201,10 +201,32 @@ export function annotationMarkerPairRule(
 
 export interface AnnotationMarkerGapConfig {
   markerAlias?: string;
-  /** 이 거리를 넘으면 "떠 있음". 기본 12(규약: 4~10px 권장, 12 초과 금지) */
+  /**
+   * 이 거리를 넘으면 "떠 있음". 기본 12(규약: 4~10px 권장, 12 초과 금지)
+   *
+   * ⚠️ 한계 — **상태·영역 전체를 가리키는 마커**(빈 상태 프레임, 다이얼로그, 구역)는 원래 가까이 붙일
+   * 대상이 없어 100px 넘게 떨어져 있는 게 정상이다. 도구는 이 둘을 구분하지 못하므로 그런 마커에는
+   * 사유를 적은 `lint-ignore` 를 붙인다.
+   */
   maxGap?: number;
   /** 이 거리 안에 후보가 하나도 없으면 "가리키는 대상이 없음". 기본 240 */
   orphanRadius?: number;
+  /**
+   * 마커 넓이의 몇 배부터 "배경·컨테이너" 로 볼지. 기본 30.
+   *
+   * 실측에서 덮음 판정의 대부분이 `content_overview_bg`·`dialog_overlay`·`dim` 같은 **배경판**이었다.
+   * 마커는 어느 화면에서든 배경 위에 얹히므로 이건 결함이 아니다 — 배경을 덮어서 가려지는 정보가 없다.
+   * 그 안의 작은 요소를 덮었다면 그쪽으로 잡히므로(같은 거리면 더 작은 후보를 고른다) 놓치지 않는다.
+   */
+  backgroundAreaRatio?: number;
+  /**
+   * 마커 넓이의 몇 할을 덮어야 "덮음" 으로 볼지. 기본 0.5.
+   *
+   * 실측 분포가 이유다 — 덮음 판정 43건 중 30건이 겹침 5% 이하였다. 대부분은 제목 텍스트 상자의
+   * 디센더 공백을 스친 것이라(TEXT 상자는 글자보다 넓다) 눈으로 보면 아무것도 가리지 않는다.
+   * 마커가 요소 **위에 올라앉은** 경우만 남긴다.
+   */
+  minCoverRatio?: number;
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -214,6 +236,14 @@ function gapBetween(a: Rect, b: Rect): number {
   const dx = Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)));
   const dy = Math.max(0, Math.max(a.y - (b.y + b.h), b.y - (a.y + a.h)));
   return Math.max(dx, dy);
+}
+
+/** 겹친 넓이가 마커 넓이의 몇 할인지 — "스쳤다" 와 "위에 올라앉았다" 를 가른다. */
+function overlapRatio(m: Rect, c: Rect, markerArea: number): number {
+  if (markerArea <= 0) return 0;
+  const ox = Math.max(0, Math.min(m.x + m.w, c.x + c.w) - Math.max(m.x, c.x));
+  const oy = Math.max(0, Math.min(m.y + m.h, c.y + c.h) - Math.max(m.y, c.y));
+  return (ox * oy) / markerArea;
 }
 
 function rectOf(n: LintNode): Rect | null {
@@ -262,6 +292,8 @@ export function annotationMarkerGapRule(
   const markerAlias = config.markerAlias || 'marker';
   const maxGap = typeof config.maxGap === 'number' ? config.maxGap : 12;
   const orphanRadius = typeof config.orphanRadius === 'number' ? config.orphanRadius : 240;
+  const bgRatio = typeof config.backgroundAreaRatio === 'number' ? config.backgroundAreaRatio : 30;
+  const minCoverRatio = typeof config.minCoverRatio === 'number' ? config.minCoverRatio : 0.5;
 
   const layerIds = new Set(nodes.filter((n) => n.isAnnotationLayer).map((n) => n.id));
   if (layerIds.size === 0) return [];
@@ -295,11 +327,27 @@ export function annotationMarkerGapRule(
   const out: Violation[] = [];
   for (const m of markers) {
     const near = grid.near(m.rect, orphanRadius);
+    const markerArea = m.rect.w * m.rect.h;
+    const bgArea = markerArea * bgRatio;
     let best: { node: LintNode; gap: number } | null = null;
+    let covered: { node: LintNode; ratio: number } | null = null;
     for (const c of near) {
       const gap = gapBetween(m.rect, c.rect);
       if (best === null || gap < best.gap) best = { node: c.node, gap };
-      if (gap === 0) break;
+      if (gap > 0) continue;
+      // 배경판은 덮어도 가려지는 정보가 없다 — 그 위의 작은 요소를 덮었으면 그쪽이 잡힌다.
+      if (c.rect.w * c.rect.h > bgArea) continue;
+      const ratio = overlapRatio(m.rect, c.rect, markerArea);
+      if (covered === null || ratio > covered.ratio) covered = { node: c.node, ratio };
+    }
+
+    if (covered !== null && covered.ratio >= minCoverRatio) {
+      out.push({
+        rule: 'annotation_marker_gap', source: 'builtin',
+        message: `마커 "${m.node.name}" (${m.node.id}) 가 "${covered.node.name}" 을(를) 덮고 있다 — 가리키려는 것을 가리면 안 된다. 대상 경계 바깥 4~10px 로 옮겨라(여백이 없으면 그 영역만 담은 구조 프레임으로 분리).`,
+        nodes: [m.node.id, covered.node.id],
+      });
+      continue;
     }
 
     if (best === null) {
@@ -307,14 +355,6 @@ export function annotationMarkerGapRule(
         rule: 'annotation_marker_gap', source: 'builtin',
         message: `마커 "${m.node.name}" (${m.node.id}) 주변 ${orphanRadius}px 안에 가리킬 만한 요소가 없다 — 대상 없이 떠 있는 번호는 읽는 사람에게 아무것도 알려 주지 않는다(대상을 그렸는지 확인하라).`,
         nodes: [m.node.id],
-      });
-      continue;
-    }
-    if (best.gap === 0) {
-      out.push({
-        rule: 'annotation_marker_gap', source: 'builtin',
-        message: `마커 "${m.node.name}" (${m.node.id}) 가 "${best.node.name}" 을(를) 덮고 있다 — 가리키려는 것을 가리면 안 된다. 대상 경계 바깥 4~10px 로 옮겨라(여백이 없으면 그 영역만 담은 구조 프레임으로 분리).`,
-        nodes: [m.node.id, best.node.id],
       });
       continue;
     }
