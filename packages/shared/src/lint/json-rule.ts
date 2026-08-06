@@ -36,6 +36,24 @@ export class QueryShapeError extends Error {}
  * 틀렸을 때 0건이 아니라 **전건**이 나오는 방향으로 실패하므로 조용한 무시가 특히 위험하다.
  */
 export function assertQueryShape(query: NodeQuery, where = 'where'): void {
+  // ⚠️ `where` **자신의** 키부터 본다. 사고를 낸 호출 모양이 정확히 이것이었다 —
+  // `select` 로 감싸지 않고 `where:{nameContains:"…"}` 처럼 평탄한 키를 바로 준 것.
+  // select 안쪽만 검사하면 이 모양은 "조건이 하나도 없음"이 되어 전건 매칭으로 조용히 통과한다.
+  for (const k of Object.keys(query || {})) {
+    if (k !== 'select' && k !== 'checks') {
+      throw new QueryShapeError(
+        `${where} 에 모르는 키 "${k}" 가 있습니다. ${where} 의 키는 select·checks 뿐입니다` +
+        (SELECT_KEYS.has(k) || k === 'name' || k === 'nameContains'
+          ? ` — 노드를 고르는 조건은 ${where}.select 안에 넣으세요(예: ${where}: { select: { namePattern: "^tbl_" } }).`
+          : '.')
+      );
+    }
+  }
+  if (!query.select && !(query.checks && query.checks.length > 0)) {
+    throw new QueryShapeError(
+      `${where} 에 조건이 하나도 없습니다 — 이대로면 **전건**이 매칭됩니다. select 나 checks 를 주세요(정말 전건을 원하면 조건 없이 부르지 말고 목록 조회 도구를 쓰세요).`
+    );
+  }
   if (query.select) {
     for (const k of Object.keys(query.select)) {
       if (!SELECT_KEYS.has(k)) {

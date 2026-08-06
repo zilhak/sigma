@@ -490,10 +490,12 @@ export const componentSpecHandlers: Record<
     const deleteNode = args.deleteNode === true;
     let nodeDeleted: boolean | undefined;
     let nodeError: string | undefined;
+    let nodeNote: string | undefined;
     if (deleteNode && spec.componentNodeId) {
       try {
         const res = await context.wsServer.deleteFrame(spec.componentNodeId);
         nodeDeleted = res.deleted;
+        nodeNote = res.note;
       } catch (e) {
         nodeError = e instanceof Error ? e.message : String(e);
       }
@@ -503,7 +505,7 @@ export const componentSpecHandlers: Record<
     return jsonResponse({
       success: true,
       componentNodeId: spec.componentNodeId,
-      ...(deleteNode ? { nodeDeleted: nodeDeleted === true, ...(nodeError ? { nodeError } : {}) } : {}),
+      ...(deleteNode ? { nodeDeleted: nodeDeleted === true, ...(nodeError ? { nodeError } : {}), ...(nodeNote ? { nodeNote } : {}) } : {}),
       message: deleteNode
         ? (nodeDeleted
           ? `레지스트리와 Figma 마스터 노드(${spec.componentNodeId})를 모두 삭제했습니다: "${spec.namespace}/${spec.alias}"`

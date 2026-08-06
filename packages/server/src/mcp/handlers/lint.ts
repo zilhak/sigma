@@ -116,6 +116,7 @@ async function collectAnnotationLayerIds(
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
   alsoForCustom = false,
+  scopeRoot?: TreeNode,
 ): Promise<Set<string>> {
   const empty = new Set<string>();
   // 빌트인 annotation_layer 가 꺼져 있어도 커스텀 규칙이 있으면 수집한다 — 커스텀이
@@ -137,6 +138,13 @@ async function collectAnnotationLayerIds(
     }
   };
   walk(roots);
+  // ⚠️ nodeId 스코프로 **섹션 하나**를 검사하면 그 섹션은 roots 가 아니라 scopeRoot 로 오고,
+  // roots 는 그 자식이다 → 위 walk 가 SECTION 을 못 만나 후보가 0이 되고, 기획 레이어 면제가
+  // 통째로 사라져 주석 레이어가 card_overlap 오탐으로 잡혔다(같은 섹션이 page 스코프 0건 ↔
+  // nodeId 스코프 7건). 스코프 시작점이 섹션이면 그 직속 FRAME(=roots)도 후보에 넣는다.
+  if (scopeRoot?.type === 'SECTION') {
+    for (const r of roots) if (r.type === 'FRAME') candidates.push(r.id);
+  }
   if (candidates.length === 0) return empty;
 
   let data: Record<string, string> = {};
@@ -261,7 +269,7 @@ async function runLintOnRoots(
   scopeRoot?: TreeNode,
 ): Promise<Violation[]> {
   const hasCustom = (config.custom || []).length > 0;
-  const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom);
+  const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom, scopeRoot);
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
   const defaultFontFamily = await resolveDefaultFontFamily(config.builtins, wsServer, pluginId);

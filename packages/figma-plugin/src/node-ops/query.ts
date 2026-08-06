@@ -3,6 +3,8 @@
  * cursor-talk-to-figma의 get_node_info, get_document_info, get_styles 참고
  */
 
+import { isReachable } from './removal';
+
 /**
  * Figma는 혼합값(cornerRadius/fontSize/fontName 등 다수 필드)을 `figma.mixed` 심볼로 반환한다.
  * 심볼은 postMessage(구조화 복제)로 직렬화가 안 돼 "Cannot unwrap symbol" 에러로 통신 자체가
@@ -99,7 +101,9 @@ const SPEC_STAMP_KEY = 'sigma-spec';
 
 export function getNodeInfo(nodeId: string): NodeDetailInfo {
   const node = figma.getNodeById(nodeId);
-  if (!node) throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
+  // 지워진 메인 COMPONENT 는 id 로 계속 조회되지만 어느 페이지에도 없다. 그걸 살아 있다고 답하면
+  // "지웠다" 는 응답과 서로 모순된다 — 문서에서 도달 불가면 없는 것으로 답한다.
+  if (!node || !isReachable(node)) throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
 
   if (node.type === 'DOCUMENT' || node.type === 'PAGE') {
     return {

@@ -403,8 +403,9 @@ export class FigmaWebSocketServer {
     // DELETE_RESULT는 성공 시 변환된 형태로 반환
     if (message.type === 'DELETE_RESULT') {
       if (message.success) {
-        const result = message.result as { nodeId: string; name: string } | undefined;
-        pending.resolve({ deleted: true, name: result?.name });
+        // 플러그인이 remove() 뒤 되읽어 확인한다 — 못 지웠으면 success:false 로 온다.
+        const result = message.result as { nodeId: string; name: string; removed?: boolean; note?: string } | undefined;
+        pending.resolve({ deleted: result?.removed !== false, name: result?.name, ...(result?.note ? { note: result.note } : {}) });
       } else {
         pending.reject(new Error(message.error as string || 'Delete failed'));
       }
@@ -567,7 +568,7 @@ export class FigmaWebSocketServer {
   // Delete a frame in Figma
   // pluginId: 특정 플러그인 지정 (미지정 시 첫 번째 플러그인)
   // pageId: 특정 페이지 지정 (미지정 시 현재 페이지)
-  async deleteFrame(nodeId: string, pluginId?: string, pageId?: string): Promise<{ deleted: boolean; name?: string }> {
+  async deleteFrame(nodeId: string, pluginId?: string, pageId?: string): Promise<{ deleted: boolean; name?: string; note?: string }> {
     return this.sendCommand('DELETE_FRAME', { nodeId, pageId }, {
       pluginId,
       logSuffix: pageId ? ` (page: ${pageId})` : '',

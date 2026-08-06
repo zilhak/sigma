@@ -23,8 +23,18 @@ function isHangulCodePoint(hex: string): boolean {
   return (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0x1100 && cp <= 0x11ff) || (cp >= 0x3130 && cp <= 0x318f);
 }
 
-/** 요청 원문에 한글 이스케이프가 있으면 그 표기들을 돌려준다(최대 5개). */
+/**
+ * 요청 원문에 한글 이스케이프가 있으면 그 표기들을 돌려준다(최대 5개).
+ *
+ * ⚠️ **클라이언트가 non-ASCII 를 전부 이스케이프해 직렬화하면 판정하지 않는다**(원문에 ASCII 밖
+ * 문자가 하나도 없는 경우). Python `json.dumps` 는 기본이 `ensure_ascii=True` 라 한글을 그대로
+ * 입력해도 전송 원문은 `\uXXXX` 가 되고, 그러면 이 경고가 **상시** 뜬다. 상시 오탐이면 경고를
+ * 습관적으로 무시하게 되고 장치가 죽는다 — 신호가 없을 때는 아무 말도 하지 않는 편이 낫다.
+ * 원문에 한글이 그대로 섞여 있는데도 일부를 이스케이프했다면 그건 손조립이므로 그대로 잡는다.
+ */
 export function findHangulEscapes(rawBody: string): string[] {
+  // eslint-disable-next-line no-control-regex
+  if (!/[^\x00-\x7F]/.test(rawBody)) return [];
   const out: string[] = [];
   const seen = new Set<string>();
   let m: RegExpExecArray | null;

@@ -805,9 +805,16 @@ describe('json-rule.ts — queryNodes (조건 검색, lint 와 같은 부품 재
     expect(found.map((n) => n.id)).toEqual(['d']);
   });
 
-  test('조건이 비면 전체 반환 (필터 없음)', () => {
-    expect(queryNodes(nodes, {})).toHaveLength(nodes.length);
-    expect(queryNodes(nodes, { checks: [] })).toHaveLength(nodes.length);
+  // 빈 조건은 "전건 매칭"이라 안전 점검(인스턴스 0건 확인 후 삭제)이 조용히 거짓 통과한다.
+  test('조건이 비면 거부 (전건 매칭이 그대로 통과하면 안 된다)', () => {
+    expect(() => queryNodes(nodes, {})).toThrow(/조건이 하나도 없습니다/);
+    expect(() => queryNodes(nodes, { checks: [] })).toThrow(/조건이 하나도 없습니다/);
+  });
+
+  // 실사고 모양 — select 로 감싸지 않고 평탄한 키를 where 에 바로 준 것.
+  test('where 자신의 모르는 키도 거부 (select 로 감싸라고 알려 준다)', () => {
+    expect(() => queryNodes(nodes, { nameContains: 'Card' } as unknown as NodeQuery)).toThrow(/select 안에 넣으세요/);
+    expect(() => queryNodes(nodes, { type: 'FRAME' } as unknown as NodeQuery)).toThrow(/모르는 키 "type"/);
   });
 
   // 조건이 사라지면 0건이 아니라 **전건**이 나오는 방향으로 실패하므로, 모르는 키를

@@ -12,12 +12,12 @@ describe('findHangulEscapes', () => {
   test('음절 범위 네 자리(a·b·c·d)를 모두 잡는다', () => {
     // 테(D14C) · 방(BC29) · 직(C9C1) · 가(AC00)
     for (const esc of ['\\ud14c', '\\ubc29', '\\uc9c1', '\\uac00']) {
-      expect(findHangulEscapes(`{"text":"${esc}"}`).length).toBe(1);
+      expect(findHangulEscapes(`{"note":"직접","text":"${esc}"}`).length).toBe(1);
     }
   });
 
   test('실제 요청 원문 형태에서 여러 음절을 모아 준다', () => {
-    const raw = '{"method":"tools/call","params":{"arguments":{"characters":"\\uc9c1\\uc811 \\uc785\\ub825"}}}';
+    const raw = '{"method":"tools/call","params":{"name":"섞임","arguments":{"characters":"\\uc9c1\\uc811 \\uc785\\ub825"}}}';
     const found = findHangulEscapes(raw);
     expect(found.length).toBe(4);
     expect(found[0]).toContain('직');
@@ -33,13 +33,19 @@ describe('findHangulEscapes', () => {
   });
 
   test('같은 음절이 여러 번 나와도 한 번만, 최대 5개까지', () => {
-    expect(findHangulEscapes('"\\ud14c\\ud14c\\ud14c"')).toHaveLength(1);
-    const many = '"' + ['\\uac00', '\\uac01', '\\uac02', '\\uac03', '\\uac04', '\\uac05', '\\uac06'].join('') + '"';
+    expect(findHangulEscapes('"섞임\\ud14c\\ud14c\\ud14c"')).toHaveLength(1);
+    const many = '"섞임' + ['\\uac00', '\\uac01', '\\uac02', '\\uac03', '\\uac04', '\\uac05', '\\uac06'].join('') + '"';
     expect(findHangulEscapes(many)).toHaveLength(5);
   });
 
+  // 클라이언트가 non-ASCII 를 전부 이스케이프하면(Python json.dumps 기본값) 한글을 직접 입력해도
+  // 원문은 \uXXXX 가 된다. 그 경우 판정 근거가 없으므로 경고하지 않는다 — 상시 오탐이면 무시하게 된다.
+  test('원문이 전부 ASCII 면 판정하지 않는다 (클라이언트 ensure_ascii)', () => {
+    expect(findHangulEscapes('{"characters":"\\uc9c1\\uc811 \\uc785\\ub825"}')).toEqual([]);
+  });
+
   test('전역 정규식의 lastIndex 가 호출 간에 새지 않는다', () => {
-    const raw = '"\\ud14c\\uc9c1"';
+    const raw = '"섞임\\ud14c\\uc9c1"';
     expect(findHangulEscapes(raw)).toHaveLength(2);
     expect(findHangulEscapes(raw)).toHaveLength(2);
   });

@@ -5,6 +5,7 @@
  */
 
 import { executeModifyNode } from './modify';
+import { removeAndVerify } from './removal';
 
 // --- Text Node Scan ---
 
@@ -235,6 +236,8 @@ export interface BatchDeleteResult {
     success: boolean;
     name?: string;
     error?: string;
+    /** 지워졌지만 id 로는 계속 조회되는 경우(메인 COMPONENT) 사실대로 알린다. */
+    note?: string;
   }>;
 }
 
@@ -253,8 +256,13 @@ export function batchDelete(nodeIds: string[]): BatchDeleteResult {
     }
     const name = node.name;
     try {
-      (node as SceneNode).remove();
-      results.push({ nodeId, success: true, name });
+      // remove() 만으로는 지워졌는지 알 수 없다 — COMPONENT 는 그대로 살아 있는데도 예외를 안 던진다.
+      const outcome = removeAndVerify(node);
+      if (!outcome.removed) {
+        results.push({ nodeId, success: false, name, error: outcome.note });
+        continue;
+      }
+      results.push({ nodeId, success: true, name, ...(outcome.note ? { note: outcome.note } : {}) });
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
       results.push({ nodeId, success: false, name, error: errMsg });

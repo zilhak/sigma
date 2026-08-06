@@ -77,7 +77,8 @@ interface FigmaAccessResult {
  */
 export function validateFigmaAccess(
   token: string,
-  wsServer: FigmaWebSocketServer
+  wsServer: FigmaWebSocketServer,
+  options: { allowUnbound?: boolean } = {}
 ): FigmaAccessResult {
   // 토큰 검증
   const validation = validateToken(token);
@@ -88,6 +89,19 @@ export function validateFigmaAccess(
   // Figma 연결 확인
   if (!wsServer.isFigmaConnected()) {
     return { error: jsonResponse({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) };
+  }
+
+  // ⚠️ 바인딩이 **없으면** 대상이 "첫 번째 플러그인 + 현재 열린 페이지"로 정해진다.
+  // 그건 sigma 의 원칙("열려 있는 페이지·선택 상태는 어떤 도구에도 영향을 주지 않는다")을 깨고,
+  // 남이 열어 둔 페이지에 노드를 만든다. 플러그인 재연결마다 pluginId 가 바뀌어 **바인딩 실패는
+  // 드문 사고가 아니라 자주 있는 상태**이므로 기본값은 거부다. 바인딩 전에 쓰는 조회 도구만
+  // allowUnbound 로 연다(빠뜨리면 "바인딩하라"는 오류가 날 뿐, 남의 페이지를 건드리지는 않는다).
+  if (!validation.binding && !options.allowUnbound) {
+    return {
+      error: jsonResponse({
+        error: '토큰이 바인딩되어 있지 않습니다. sigma_bind(token, pluginId, pageId) 로 대상 플러그인·페이지를 먼저 정하세요 — 바인딩 없이 실행하면 대상이 "현재 열려 있는 페이지"가 되어 다른 작업의 페이지를 건드릴 수 있습니다.',
+      }),
+    };
   }
 
   // 바인딩에서 대상 추출
