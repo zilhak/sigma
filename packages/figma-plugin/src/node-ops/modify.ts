@@ -1,3 +1,5 @@
+import { isReachable } from './removal';
+
 // ============================================================
 // 타입 안전 유틸리티 — Agent가 보낼 수 있는 모든 형태를 정규화
 // ============================================================
@@ -1188,7 +1190,9 @@ export async function executeModifyNode(
   args: Record<string, unknown>
 ): Promise<unknown> {
   const node = figma.getNodeById(nodeId);
-  if (!node) {
+  // 지워진 메인 COMPONENT 는 id 로 계속 조회된다 — 그걸 그냥 고치면 **성공 응답이 오고 화면엔
+  // 아무 일도 일어나지 않는다**(조용한 no-op, 이 도구에서 가장 자주 낸 사고 유형).
+  if (!node || !isReachable(node)) {
     throw new Error(`노드를 찾을 수 없습니다: ${nodeId}`);
   }
 

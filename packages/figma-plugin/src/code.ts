@@ -6,6 +6,7 @@ import { getTargetPage, getPageById, getAllPages, sendFileInfo, saveFileKey, cre
 import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
 import { deleteFrame } from './node-ops';
+import { isReachable } from './node-ops/removal';
 import { createSection } from './node-ops';
 import { groupNodes, ungroupNodes, flattenNodes, moveNode, cloneNode } from './node-ops';
 import { exportImage } from './node-ops';
@@ -311,7 +312,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       if (!snNodeId) { sendError('set-node-data-result', 'nodeId가 필요합니다'); break; }
       if (!snKey) { sendError('set-node-data-result', 'key가 필요합니다'); break; }
       const snNode = figma.getNodeById(snNodeId);
-      if (!snNode) { sendError('set-node-data-result', `노드를 찾을 수 없습니다: ${snNodeId}`); break; }
+      // 지워진 COMPONENT 는 id 로 계속 조회된다 — 거기에 써 봐야 아무 데도 영향이 없다(조용한 no-op).
+      if (!snNode || !isReachable(snNode)) { sendError('set-node-data-result', `노드를 찾을 수 없습니다: ${snNodeId}`); break; }
       try {
         snNode.setSharedPluginData('sigma', snKey, snValue);
         sendResult('set-node-data-result', { nodeId: snNode.id, nodeType: snNode.type, nodeName: snNode.name, key: snKey });
@@ -326,7 +328,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const gnNodeId = msg.nodeId as string;
       if (!gnNodeId) { sendError('get-node-data-result', 'nodeId가 필요합니다'); break; }
       const gnNode = figma.getNodeById(gnNodeId);
-      if (!gnNode) { sendError('get-node-data-result', `노드를 찾을 수 없습니다: ${gnNodeId}`); break; }
+      if (!gnNode || !isReachable(gnNode)) { sendError('get-node-data-result', `노드를 찾을 수 없습니다: ${gnNodeId}`); break; }
       try {
         if (gnKey) {
           const raw = gnNode.getSharedPluginData('sigma', gnKey);
