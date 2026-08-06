@@ -429,6 +429,12 @@ describe('simple-rules.ts (신규 빌트인 4종)', () => {
     expect(strayPixelRule(roots)).toHaveLength(1);
   });
 
+  test("SVG 임포트 산물 VECTOR \"Vector\" 는 기본 제외 (사람이 안 지은 게 아니라 지을 이름이 없다)", () => {
+    const roots = [node('v', 'Vector', 'VECTOR', [0, 0, 10, 10])];
+    expect(defaultNameRule(roots)).toHaveLength(0);
+    expect(defaultNameRule(roots, { includeVectors: true })).toHaveLength(1);
+  });
+
   test('default_name — Figma 기본 이름 패턴 검출', () => {
     const roots = [
       node('a', 'Rectangle 123', 'RECTANGLE', [0, 0, 10, 10]),

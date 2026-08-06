@@ -112,7 +112,7 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
     includeInsideInstances: (builtins[id] as { includeInsideInstances?: boolean } | undefined)?.includeInsideInstances === true,
   });
   if (isEnabled(builtins, 'stray_pixel')) out.push(...strayPixelRule(roots, instScope('stray_pixel')));
-  if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots, instScope('default_name')));
+  if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots, { ...instScope('default_name'), includeVectors: (builtins.default_name as { includeVectors?: boolean } | undefined)?.includeVectors === true }));
   if (isEnabled(builtins, 'empty_container')) out.push(...emptyContainerRule(roots, instScope('empty_container')));
   if (isEnabled(builtins, 'hidden_leaf')) out.push(...hiddenLeafRule(roots));
   if (isEnabled(builtins, 'fill_sizing_orphan')) out.push(...fillSizingOrphanRule(roots));

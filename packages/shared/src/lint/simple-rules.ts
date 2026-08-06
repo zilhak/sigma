@@ -66,9 +66,16 @@ export function strayPixelRule(roots: TreeNode[], opts: InstanceScopeOption = {}
   return out;
 }
 
-export function defaultNameRule(roots: TreeNode[], opts: InstanceScopeOption = {}): Violation[] {
+export function defaultNameRule(
+  roots: TreeNode[],
+  opts: InstanceScopeOption & { includeVectors?: boolean } = {},
+): Violation[] {
   const out: Violation[] = [];
   walkOutsideInstances(roots, opts.includeInsideInstances === true, (n) => {
+    // SVG 를 임포트하면 path 마다 VECTOR 노드가 "Vector" 라는 이름으로 생긴다. 사람이 안 지은
+    // 이름이 아니라 **줄 이름이 없는 것**이라(경로 하나하나에 뜻이 없다) 위반으로 셀 게 아니다.
+    // 실측: L2-1 의 default_name 20건이 전부 이것이었다.
+    if (n.type === 'VECTOR' && opts.includeVectors !== true) return;
     if (DEFAULT_NAME_RE.test(n.name)) {
       out.push({ rule: 'default_name', source: 'builtin', message: `"${n.name}" (${n.id}) 기본 이름 방치`, nodes: [n.id] });
     }
