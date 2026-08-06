@@ -669,6 +669,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           limit: msg.limit as number | undefined,
           pageId: msg.pageId as string | undefined,
           fields: msg.fields as 'all' | 'geometry' | undefined,
+          includeAbsolute: msg.includeAbsolute as boolean | undefined,
         });
         figma.ui.postMessage({
           type: 'tree-result',

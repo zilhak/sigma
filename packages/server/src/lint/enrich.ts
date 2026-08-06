@@ -68,6 +68,8 @@ export function buildLintNodes(
       // 기획 레이어 본체(pluginData role 판정). 하위 노드는 false — 조상으로 거슬러
       // 판정하려면 ctx.getAncestors 를 쓴다.
       isAnnotationLayer: layerIds.has(node.id),
+      // 절대좌표(요청했을 때만 실림) — 서로 다른 컨테이너에 있는 노드끼리 거리를 재려면 이게 필요하다.
+      ...(node.absolute ? { absoluteX: node.absolute.x, absoluteY: node.absolute.y } : {}),
     };
     if (info) {
       base.opacity = info.opacity;

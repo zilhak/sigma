@@ -727,6 +727,9 @@ export class FigmaWebSocketServer {
       timeoutMs?: number;
       /** 'geometry' 면 좌표 전용 축약 응답(fullPath·meta 생략, absolute 추가). 기본 'all' */
       fields?: 'all' | 'geometry';
+      /** 'all' 모드에서도 absolute(절대좌표)를 함께 싣는다 — 컨테이너를 넘나드는 거리 계산용.
+       *  payload 가 커지므로 필요한 호출만 켠다. */
+      includeAbsolute?: boolean;
     },
     pluginId?: string
   ): Promise<{
@@ -747,6 +750,7 @@ export class FigmaWebSocketServer {
       limit: options.limit,
       pageId: options.pageId,
       fields: options.fields,
+      includeAbsolute: options.includeAbsolute,
     }, {
       pluginId,
       timeoutMs: options.timeoutMs ?? 60000,  // 60초 기본 (트리가 클 수 있음). 호출자가 override 가능.

@@ -39,6 +39,10 @@ export interface LintNode {
   componentWidth?: number;
   componentHeight?: number;
   specAlias?: string;
+  /** 절대좌표(get_tree 를 includeAbsolute 로 불렀을 때만). x/y 는 부모 로컬이라
+   *  컨테이너가 다른 노드끼리 비교하려면 이 값이 있어야 한다. */
+  absoluteX?: number;
+  absoluteY?: number;
   /** 이 노드가 기획 레이어 본체인지(pluginData role="annotation-layer"). 빌트인은 주입받은
    *  layerIds 로 쓰는 것과 같은 판정. 커스텀 규칙이 이름으로 짐작하지 않게 실어 준다. */
   isAnnotationLayer?: boolean;
@@ -65,7 +69,7 @@ export type BuiltinRuleId =
   | 'fill_sizing_orphan' | 'component_description_empty' | 'fully_occluded_sibling'
   | 'raw_node' | 'annotation_layer' | 'instance_default_name'
   | 'origin_anchor' | 'content_spread' | 'instance_resized_from_spec'
-  | 'annotation_marker_pair' | 'font_not_default';
+  | 'annotation_marker_pair' | 'annotation_marker_gap' | 'font_not_default';
 
 export interface BuiltinRuleConfig {
   /** 생략하면 기본 ON (opt-out 모델 — 8개 기하 규칙의 기존 동작을 그대로 유지하기 위함) */

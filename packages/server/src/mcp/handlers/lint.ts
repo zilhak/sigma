@@ -1,7 +1,7 @@
 import {
   runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule, isEnabled,
-  fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule, fontNotDefaultRule,
-  type InstanceResizedConfig, type AnnotationMarkerPairConfig, type FontNotDefaultConfig,
+  fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule, annotationMarkerGapRule, fontNotDefaultRule,
+  type InstanceResizedConfig, type AnnotationMarkerPairConfig, type AnnotationMarkerGapConfig, type FontNotDefaultConfig,
   type TreeNode, type Violation, type LintConfig, type LayoutFix,
 } from '@sigma/shared';
 import { validateFigmaAccess, jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
@@ -80,7 +80,8 @@ async function enrichIfNeeded(
   const needsSpecSize = config.builtins?.instance_resized_from_spec?.enabled === true;
   const needsMarkerPair = config.builtins?.annotation_marker_pair?.enabled === true;
   const needsFont = config.builtins?.font_not_default?.enabled === true;
-  if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont) return null;
+  const needsMarkerGap = config.builtins?.annotation_marker_gap?.enabled === true;
+  if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont && !needsMarkerGap) return null;
 
   const nodeIds = collectNodeIds(roots);
   const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
@@ -243,6 +244,9 @@ async function runLintOnRoots(
     ...(enriched && config.builtins?.annotation_marker_pair?.enabled === true
       ? annotationMarkerPairRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_pair as AnnotationMarkerPairConfig)
       : []),
+    ...(enriched && config.builtins?.annotation_marker_gap?.enabled === true
+      ? annotationMarkerGapRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_gap as AnnotationMarkerGapConfig)
+      : []),
     ...(enriched && config.builtins?.font_not_default?.enabled === true
       ? fontNotDefaultRule(enriched.nodes, {
           ...(config.builtins.font_not_default as FontNotDefaultConfig),
@@ -373,7 +377,9 @@ async function runPageLint(
   // nodeId/path 로 좁히면 roots 가 부모 로컬좌표 서브트리 → 페이지 절대좌표 전제 규칙은 실행 안 함.
   const isPageRoot = !nodeId && !path;
 
-  const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
+  // annotation_marker_gap 은 컨테이너를 넘나드는 거리를 재야 해서 절대좌표가 필요하다(켰을 때만 payload 를 치른다).
+  const includeAbsolute = config.builtins?.annotation_marker_gap?.enabled === true;
+  const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout, includeAbsolute }, pluginId);
   const roots = tree.children as TreeNode[];
   const scopeRoot = tree.rootNode as TreeNode | undefined;
   const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot, scopeRoot);
@@ -420,7 +426,7 @@ async function runPageLint(
     ? await wsServer.batchModifyNodes(ops, pluginId)
     : { skipped: true, reason: '자동수정 대상 없음' };
 
-  const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
+  const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout, includeAbsolute }, pluginId);
   const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot, after.rootNode as TreeNode | undefined);
   const afterViolations = (await suppressViolations(afterRaw, wsServer, pluginId)).violations;
 
@@ -459,7 +465,10 @@ async function runFileLint(
       continue;
     }
     try {
-      const tree = await wsServer.getTree({ depth: 'full', pageId: p.pageId, limit: treeLimit, timeoutMs: treeTimeout }, pluginId);
+      const tree = await wsServer.getTree({
+        depth: 'full', pageId: p.pageId, limit: treeLimit, timeoutMs: treeTimeout,
+        includeAbsolute: resolved.config.builtins?.annotation_marker_gap?.enabled === true,
+      }, pluginId);
       // scope=file 은 언제나 페이지 루트 전체를 뜬다 → 페이지 절대좌표 전제 규칙 실행 가능.
       const rawViolations = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId, true);
       const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);

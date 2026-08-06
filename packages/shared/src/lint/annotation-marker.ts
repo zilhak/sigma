@@ -179,3 +179,148 @@ export function annotationMarkerPairRule(
 
   return out;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// annotation_marker_gap — 마커가 대상을 덮거나, 너무 멀리 떠 있거나, 가리키는 게 아예 없는 것
+//
+// 규약은 "마커는 대상 경계에서 4~10px, 12px 초과 금지, 겹침 금지" 인데 지금까지 기계 백스톱이
+// 없었다. 실제로 한 화면에서 **마커 14개가 전부 대상 위에 얹혀 있었고**(규약 신설 이전 산물),
+// 반대로 그리지도 않은 위젯을 가리키는 마커가 빈 공간에 찍혀 있던 적도 있다.
+//
+// 판정에는 **절대좌표**가 필요하다 — 마커는 기획 레이어 안에 있고 대상은 상태 프레임 깊숙한 곳에
+// 있어서, 부모 로컬좌표로는 애초에 비교가 불가능하다(get_tree 를 includeAbsolute 로 부른다).
+//
+// 대상 후보는 **원자적인 노드만** 본다(자식 없는 leaf + INSTANCE). 상태 프레임 같은 큰 컨테이너를
+// 후보에 넣으면 마커는 언제나 그 위에 얹혀 있으므로 전부 "덮음" 으로 잡힌다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AnnotationMarkerGapConfig {
+  markerAlias?: string;
+  /** 이 거리를 넘으면 "떠 있음". 기본 12(규약: 4~10px 권장, 12 초과 금지) */
+  maxGap?: number;
+  /** 이 거리 안에 후보가 하나도 없으면 "가리키는 대상이 없음". 기본 240 */
+  orphanRadius?: number;
+}
+
+interface Rect { x: number; y: number; w: number; h: number }
+
+/** 두 사각형의 축별 간격 — 둘 다 0이면 겹침. 대각선은 큰 쪽을 취한다(경계에서 Npx 라는 감각과 맞다). */
+function gapBetween(a: Rect, b: Rect): number {
+  const dx = Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)));
+  const dy = Math.max(0, Math.max(a.y - (b.y + b.h), b.y - (a.y + a.h)));
+  return Math.max(dx, dy);
+}
+
+function rectOf(n: LintNode): Rect | null {
+  if (typeof n.absoluteX !== 'number' || typeof n.absoluteY !== 'number') return null;
+  return { x: n.absoluteX, y: n.absoluteY, w: n.width, h: n.height };
+}
+
+/** 후보를 격자에 담아 마커 주변만 훑는다 — 페이지 전체(수만 노드) × 마커 수의 전수 비교를 피한다. */
+class Grid {
+  private cells = new Map<string, Array<{ node: LintNode; rect: Rect }>>();
+  constructor(private size: number) {}
+  add(node: LintNode, rect: Rect) {
+    const x0 = Math.floor(rect.x / this.size), x1 = Math.floor((rect.x + rect.w) / this.size);
+    const y0 = Math.floor(rect.y / this.size), y1 = Math.floor((rect.y + rect.h) / this.size);
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const key = `${x}:${y}`;
+        const arr = this.cells.get(key);
+        if (arr) arr.push({ node, rect }); else this.cells.set(key, [{ node, rect }]);
+      }
+    }
+  }
+  near(rect: Rect, radius: number): Array<{ node: LintNode; rect: Rect }> {
+    const out: Array<{ node: LintNode; rect: Rect }> = [];
+    const seen = new Set<string>();
+    const x0 = Math.floor((rect.x - radius) / this.size), x1 = Math.floor((rect.x + rect.w + radius) / this.size);
+    const y0 = Math.floor((rect.y - radius) / this.size), y1 = Math.floor((rect.y + rect.h + radius) / this.size);
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        for (const item of this.cells.get(`${x}:${y}`) || []) {
+          if (seen.has(item.node.id)) continue;
+          seen.add(item.node.id);
+          out.push(item);
+        }
+      }
+    }
+    return out;
+  }
+}
+
+export function annotationMarkerGapRule(
+  nodes: LintNode[],
+  relations: MarkerPairRelations,
+  config: AnnotationMarkerGapConfig = {},
+): Violation[] {
+  const markerAlias = config.markerAlias || 'marker';
+  const maxGap = typeof config.maxGap === 'number' ? config.maxGap : 12;
+  const orphanRadius = typeof config.orphanRadius === 'number' ? config.orphanRadius : 240;
+
+  const layerIds = new Set(nodes.filter((n) => n.isAnnotationLayer).map((n) => n.id));
+  if (layerIds.size === 0) return [];
+
+  const inLayer = (n: LintNode) => (relations.ancestors[n.id] || []).some((a) => layerIds.has(a));
+
+  const markers: Array<{ node: LintNode; rect: Rect }> = [];
+  const grid = new Grid(256);
+  let hasAbsolute = false;
+
+  for (const n of nodes) {
+    const rect = rectOf(n);
+    if (rect) hasAbsolute = true;
+    if (n.type === 'INSTANCE' && n.specAlias === markerAlias && inLayer(n)) {
+      if (rect) markers.push({ node: n, rect });
+      continue;
+    }
+    // 후보 = 주석 밖의 **원자적** 노드. 큰 컨테이너를 넣으면 마커가 항상 그 위에 있어 전부 겹침이 된다.
+    if (!rect) continue;
+    if (n.isAnnotationLayer || inLayer(n)) continue;
+    if (n.type === 'SECTION' || n.type === 'PAGE') continue;
+    const atomic = n.childCount === 0 || n.type === 'INSTANCE';
+    if (!atomic) continue;
+    if (rect.w <= 0 || rect.h <= 0) continue;
+    grid.add(n, rect);
+  }
+
+  // 절대좌표가 전혀 없으면(호출이 includeAbsolute 없이 왔으면) 판정하지 않는다 — 좌표계가 섞이면 전부 오답이다.
+  if (!hasAbsolute || markers.length === 0) return [];
+
+  const out: Violation[] = [];
+  for (const m of markers) {
+    const near = grid.near(m.rect, orphanRadius);
+    let best: { node: LintNode; gap: number } | null = null;
+    for (const c of near) {
+      const gap = gapBetween(m.rect, c.rect);
+      if (best === null || gap < best.gap) best = { node: c.node, gap };
+      if (gap === 0) break;
+    }
+
+    if (best === null) {
+      out.push({
+        rule: 'annotation_marker_gap', source: 'builtin',
+        message: `마커 "${m.node.name}" (${m.node.id}) 주변 ${orphanRadius}px 안에 가리킬 만한 요소가 없다 — 대상 없이 떠 있는 번호는 읽는 사람에게 아무것도 알려 주지 않는다(대상을 그렸는지 확인하라).`,
+        nodes: [m.node.id],
+      });
+      continue;
+    }
+    if (best.gap === 0) {
+      out.push({
+        rule: 'annotation_marker_gap', source: 'builtin',
+        message: `마커 "${m.node.name}" (${m.node.id}) 가 "${best.node.name}" 을(를) 덮고 있다 — 가리키려는 것을 가리면 안 된다. 대상 경계 바깥 4~10px 로 옮겨라(여백이 없으면 그 영역만 담은 구조 프레임으로 분리).`,
+        nodes: [m.node.id, best.node.id],
+      });
+      continue;
+    }
+    if (best.gap > maxGap) {
+      out.push({
+        rule: 'annotation_marker_gap', source: 'builtin',
+        message: `마커 "${m.node.name}" (${m.node.id}) 와 가장 가까운 요소 "${best.node.name}" 사이가 ${Math.round(best.gap)}px 다(허용 ${maxGap}px) — 멀리 떨어진 번호는 무엇을 가리키는지 알 수 없다.`,
+        nodes: [m.node.id, best.node.id],
+      });
+    }
+  }
+
+  return out;
+}

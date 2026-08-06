@@ -48,6 +48,9 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   // annotation_marker_pair 도 **opt-in(기본 OFF)** — 기획 레이어 안의 마커 ↔ 범례 짝·왕복 링크 검사.
   // 관계(children/ancestors)와 하이퍼링크가 필요해 enrich 한 LintNode 로 판정한다(annotation-marker.ts).
   'annotation_marker_pair',
+  // annotation_marker_gap 도 **opt-in(기본 OFF)** — 마커가 대상을 덮거나 떠 있는지. 절대좌표가
+  // 필요해 서버가 get_tree 를 includeAbsolute 로 부른다(규칙이 켜졌을 때만 payload 를 치른다).
+  'annotation_marker_gap',
   // font_not_default 도 **opt-in(기본 OFF)** — 파일 기본 폰트(문서 fonts.default)와 다른 TEXT 검출.
   // 기대 패밀리는 서버가 문서 노드에서 읽어 넣는다(config.family 로 override 가능). font.ts 참고.
   'font_not_default',

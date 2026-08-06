@@ -70,6 +70,15 @@ export interface SerializeContext {
   parentPath: string;
   /** 'geometry' 면 좌표에 필요한 것만 싣는다(fullPath·meta 생략, absolute 추가). 기본 'all' */
   fields?: TreeFields;
+  includeAbsolute?: boolean;
+  /**
+   * 'all' 모드에서도 absolute(절대좌표)를 함께 싣는다.
+   *
+   * boundingBox 는 **직속 부모 로컬좌표**라, 서로 다른 컨테이너에 있는 노드끼리는 비교가 안 된다
+   * (예: 기획 레이어 안의 마커와 상태 프레임 깊숙한 곳의 버튼 사이 거리). 그렇다고 'all' 에
+   * 항상 실으면 큰 페이지에서 payload 만 커지므로, **필요한 호출만** 켜서 값을 치른다.
+   */
+  includeAbsolute?: boolean;
 }
 
 /**
@@ -188,6 +197,12 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     meta,
   };
 
+  // 요청한 경우에만 절대좌표를 함께 싣는다(컨테이너를 넘나드는 거리 계산용).
+  if (ctx.includeAbsolute) {
+    const abs = 'absoluteBoundingBox' in node ? node.absoluteBoundingBox : null;
+    if (abs) treeNode.absolute = { x: abs.x, y: abs.y };
+  }
+
   attachChildren(node, treeNode, ctx, fullPath, hasChildren);
 
   return treeNode;
@@ -291,6 +306,8 @@ export function getTreeWithFilter(options: {
   limit?: number;
   pageId?: string;
   fields?: TreeFields;
+  /** 'all' 모드에서도 절대좌표를 싣는다(컨테이너를 넘나드는 거리 계산용). */
+  includeAbsolute?: boolean;
 }): GetTreeResult {
   // maxDepth 결정 (-1 또는 "full"은 무한, 기본값 1)
   let maxDepth = 1;
@@ -351,6 +368,7 @@ export function getTreeWithFilter(options: {
       nodeCount,
       parentPath: rootPath || '',
       fields: options.fields,
+      includeAbsolute: options.includeAbsolute,
     });
 
     if (serialized) {
