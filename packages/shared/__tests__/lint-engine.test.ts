@@ -274,6 +274,36 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     expect(v[0].nodes).toContain('i');
   });
 
+  // Figma 의 GROUP 은 자체 좌표계를 만들지 않는다(자식이 그룹의 부모 공간 좌표를 쓴다).
+  // 그룹을 (0,0,W,H) 컨테이너로 보면 그룹 안 그룹이 항상 위반으로 잡혔다.
+  test('GROUP 은 child_overflow 컨테이너로 보지 않는다', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'icon', 'FRAME', [0, 0, 24, 24], [
+          node('g1', 'outer', 'GROUP', [4.47, 0, 15.05, 24], [
+            node('g2', 'inner', 'GROUP', [4.47, 0, 15.05, 24]),
+          ]),
+        ]),
+      ]),
+    ];
+    expect(lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow')).toHaveLength(0);
+  });
+
+  test('GROUP 안에 있는 프레임은 여전히 검사한다 (재귀는 계속)', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('g', 'wrap', 'GROUP', [0, 0, 400, 300], [
+          node('f', 'screen', 'FRAME', [0, 0, 400, 300], [
+            node('i', 'card', 'INSTANCE', [300, 250, 200, 100]),
+          ]),
+        ]),
+      ]),
+    ];
+    const v = lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow');
+    expect(v).toHaveLength(1);
+    expect(v[0].nodes).toContain('i');
+  });
+
   test('리프(TEXT)는 프레임 밖으로 살짝 나가도 검사 제외 (baseline 노이즈 방지)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [

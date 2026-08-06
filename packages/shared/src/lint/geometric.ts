@@ -234,10 +234,15 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
       }
     }
 
-    if (kind === 'frame' && container) {
+    if (kind === 'frame' && container && container.type !== 'GROUP') {
       // R5(프레임): 프레임/컴포넌트/인스턴스의 배치형 자식은 그 내부 좌표(0,0~W,H) 안에 있어야 함.
       // ⚠️ 좌표계: 프레임/컴포넌트 자식은 "부모 로컬 좌표" → (0,0,W,H) 기준. (섹션도 동일하게 로컬박스로 봄)
       // ⚠️ TEXT/RECT/VECTOR 리프는 폰트 baseline 등으로 1px 삐져나오는 게 정상 → 배치형(PLACED)만 검사.
+      //
+      // ⚠️ **GROUP 은 검사 대상이 아니다**(위 조건에서 제외). Figma 의 그룹은 자체 좌표계를
+      // 만들지 않고 자식이 그룹의 부모 공간 좌표를 그대로 쓴다(그룹 크기 자체가 자식 합집합이라
+      // "넘침"이 정의되지도 않는다). 그룹을 (0,0,W,H) 컨테이너로 보면 **그룹 안 그룹이 항상
+      // 위반**으로 잡혔다. 하위로의 재귀는 그대로 계속한다 — 그룹 안 프레임은 검사 대상이다.
       const local = { x: 0, y: 0, width: container.boundingBox.width, height: container.boundingBox.height };
       for (const c of children) {
         if (isExempt(c)) continue; // 기획 프리셋/레이어 예외
