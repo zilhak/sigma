@@ -39,6 +39,19 @@ function asNodesInfoArray(raw: unknown): NodeInfoLike[] {
 const QUERY_DEFAULT_LIMIT = 200;
 
 /**
+ * where 조건 검색이 뜨는 트리의 노드 상한·타임아웃.
+ *
+ * ⚠️ getTree 기본 상한(1000)은 인터랙티브 탐색용이라 조건 검색에 그대로 쓰면 **큰 페이지에서
+ * 뒤쪽 노드가 아예 후보에 들어오지 않는다.** 검색은 틀렸을 때 에러가 아니라 "조건에 맞는 게
+ * 없다"로 보이므로 조용한 누락이 특히 위험하다 — 실사고: 스펙을 지우기 전 인스턴스가 0인지
+ * 세려고 where 로 훑었는데 앞쪽 1000노드만 검사돼 0건이 나왔고, 잔존 인스턴스를 나중에 발견했다.
+ * lint 가 같은 이유로 이미 상한을 크게 잡아 뒀다(LINT_TREE_NODE_LIMIT) — 검색도 같은 값을 쓴다.
+ * 상한에 실제로 걸리면 응답에 truncated/scannedNodes 로 명시해 "못 본 곳이 있다"를 드러낸다.
+ */
+const QUERY_TREE_NODE_LIMIT = 200000;
+const QUERY_TREE_TIMEOUT_MS = 60000;
+
+/**
  * Figma 작업 관련 핸들러 (토큰 필수)
  */
 export const figmaHandlers: Record<string, (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>> = {
@@ -237,10 +250,12 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
       try {
         const tree = await wsServer.getTree(
-          { nodeId: startNodeId, depth: 'full', pageId },
+          { nodeId: startNodeId, depth: 'full', pageId, limit: QUERY_TREE_NODE_LIMIT, timeoutMs: QUERY_TREE_TIMEOUT_MS },
           pluginId
         );
         const roots = (tree as { children?: unknown }).children as TreeNode[];
+        const scanTruncated = (tree as { truncated?: boolean }).truncated === true;
+        const scannedNodes = (tree as { totalCount?: number }).totalCount;
 
         // 기본 필드만 쓰는 조건이면 트리 하나로 끝난다(왕복 없음).
         const nodesInfo = queryNeedsNodeInfo(where)
@@ -255,6 +270,13 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
           matchCount: matched.length,
           returned: truncated ? limit : matched.length,
           truncated,
+          ...(scanTruncated
+            ? {
+                scanTruncated: true,
+                scannedNodes,
+                scanWarning: `트리가 ${QUERY_TREE_NODE_LIMIT} 노드에서 잘렸습니다 — 검사되지 않은 노드가 있어 이 결과를 "전부"로 볼 수 없습니다. nodeId 로 범위를 좁혀 나눠 검색하세요.`,
+              }
+            : {}),
           ...(truncated
             ? { note: `조건에 맞는 노드가 ${matched.length}개입니다. 앞 ${limit}개만 반환했습니다 — limit 을 올리거나 조건을 좁히세요.` }
             : {}),

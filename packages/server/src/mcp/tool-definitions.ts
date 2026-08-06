@@ -421,6 +421,9 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
 
 **범위**: 바인딩된 페이지 전체가 기본이며, \`nodeId\`로 특정 노드 하위로 좁힐 수 있습니다.
 결과가 \`limit\`(기본 200)을 넘으면 \`truncated: true\`와 함께 앞부분만 반환합니다.
+**검사 범위는 페이지 전체**입니다 — 트리를 20만 노드까지 뜨므로 "앞부분만 보고 0건"은 나지 않습니다.
+그래도 상한에 걸리면 \`scanTruncated: true\`·\`scannedNodes\`·\`scanWarning\`이 실립니다. **이 필드가 있으면
+결과를 "전부"로 읽지 말고** \`nodeId\`로 범위를 나눠 다시 검색하세요(예: 스펙 삭제 전 인스턴스 0 확인).
 
 **반환**: \`{ matchCount, returned, truncated, enriched, nodes: [{ nodeId, name, type, x, y, width, height }] }\`
 찾은 \`nodeId\` 들을 sigma_batch_modify / sigma_batch_delete 에 그대로 넘겨 일괄 처리할 수 있습니다.`,
