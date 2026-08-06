@@ -460,3 +460,57 @@ describe('checkSpecNamingPolicy — 파일 등록 정책(alias 이름 패턴 경
     expect(out[0]).toContain('올바른 정규식이 아니라');
   });
 });
+
+describe('checkSpecNamingPolicy — HTML/description 조건 (아이콘 창작 금지 같은 규약 집행)', () => {
+  // alias 로는 못 잡는다 — 위반은 대부분 "다른 컴포넌트 HTML 안에 inline <svg> 로 묻힌" 형태다.
+  const svgRule = {
+    warn: [{
+      htmlPattern: '<svg',
+      unlessDescription: '출처',
+      message: '아이콘을 새로 그리지 말고 등록된 icon 세트에서 가져오세요. 부득이하면 description 에 출처를 적으세요.',
+    }],
+  };
+
+  test('HTML 에 svg 가 있으면 경고한다', () => {
+    const w = checkSpecNamingPolicy(svgRule, {
+      alias: 'tmplcard', namespace: 'ccp',
+      html: '<div style="display: flex;"><svg viewBox="0 0 24 24"><path d="M1 1"/></svg></div>',
+      description: '템플릿 카드',
+    });
+    expect(w.length).toBe(1);
+    expect(w[0]).toContain('아이콘');
+  });
+
+  test('description 에 출처를 적어 뒀으면 면제', () => {
+    const w = checkSpecNamingPolicy(svgRule, {
+      alias: 'tmplcard', namespace: 'ccp',
+      html: '<div style="display: flex;"><svg viewBox="0 0 24 24"><path d="M1 1"/></svg></div>',
+      description: '템플릿 카드 (아이콘 출처: 제품 소스 images/ico/ico_helm.png)',
+    });
+    expect(w).toEqual([]);
+  });
+
+  test('svg 가 없으면 걸리지 않는다', () => {
+    const w = checkSpecNamingPolicy(svgRule, {
+      alias: 'tmplcard', namespace: 'ccp', html: '<div style="display: flex;">x</div>', description: '카드',
+    });
+    expect(w).toEqual([]);
+  });
+
+  test('html 을 넘기지 않은 호출에서는 html 조건 규칙을 적용하지 않는다', () => {
+    expect(checkSpecNamingPolicy(svgRule, { alias: 'tmplcard', namespace: 'ccp' })).toEqual([]);
+  });
+
+  test('alias 와 html 을 함께 걸면 둘 다 만족해야 경고', () => {
+    const both = { warn: [{ aliasPattern: '^icon_', htmlPattern: '<svg', message: 'x' }] };
+    expect(checkSpecNamingPolicy(both, { alias: 'icon_a', namespace: 'n', html: '<div><svg/></div>' }).length).toBe(1);
+    expect(checkSpecNamingPolicy(both, { alias: 'btn_a', namespace: 'n', html: '<div><svg/></div>' })).toEqual([]);
+    expect(checkSpecNamingPolicy(both, { alias: 'icon_a', namespace: 'n', html: '<div>x</div>' })).toEqual([]);
+  });
+
+  test('조건이 하나도 없는 규칙은 전부 매칭되므로 규칙 실수로 알려 준다', () => {
+    const w = checkSpecNamingPolicy({ warn: [{ message: 'x' } as never] }, { alias: 'a', namespace: 'n' });
+    expect(w.length).toBe(1);
+    expect(w[0]).toContain('조건 없는 규칙');
+  });
+});

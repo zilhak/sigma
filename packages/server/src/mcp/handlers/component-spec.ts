@@ -35,7 +35,7 @@ import { SPEC_PRESETS, SPEC_PRESET_NAMES } from '../spec-presets.js';
 async function collectSpecPolicyWarnings(
   wsServer: ToolContext['wsServer'],
   pluginId: string | undefined,
-  target: { alias: string; namespace: string },
+  target: { alias: string; namespace: string; html?: string; description?: string },
 ): Promise<string[]> {
   const stored = await readStoredConfig(wsServer, 'document', pluginId);
   if (!stored.config) return [];
@@ -204,7 +204,9 @@ export const componentSpecHandlers: Record<
       await saveComponentSpec(record);
 
       // 파일 등록 정책(문서 저장 config.componentSpec) — 경고만, 등록은 이미 완료된 상태다.
-      const policyWarnings = await collectSpecPolicyWarnings(wsServer, pluginId, { alias, namespace });
+      const policyWarnings = await collectSpecPolicyWarnings(wsServer, pluginId, {
+        alias, namespace, html, description: description.trim(),
+      });
 
       return jsonResponse({
         success: true,

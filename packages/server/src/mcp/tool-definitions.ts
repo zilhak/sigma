@@ -2562,7 +2562,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
       '[본문이 큰 스펙] html 대신 htmlPath로 파일에서 읽을 수 있습니다. <img>에 base64 data URI를 넣는 스펙은 본문이 수십 KB라 ' +
       '호출 인자로 옮겨 적는 과정에서 깨지기 쉽고, 깨져도 등록은 통과하고 렌더만 실패하므로(이미지 디코드 예외 → 회색 플레이스홀더) 파일로 넘기세요. ' +
-      '[파일 등록 정책] 이 Figma 파일의 문서 노드에 저장된 lint config 의 `componentSpec.warn`(aliasPattern/message)에 alias 가 걸리면 ' +
+      '[파일 등록 정책] 이 Figma 파일의 문서 노드에 저장된 lint config 의 `componentSpec.warn` 에 걸리면 ' +
+      '조건은 `aliasPattern`(이름) · `htmlPattern`(스펙 HTML 내용, 함께 쓰면 AND) · `unlessDescription`(걸리면 면제). ' +
+      'htmlPattern 은 이름으로 못 잡는 규약을 위한 것이다 — 예를 들어 아이콘 창작은 대부분 **다른 컴포넌트 HTML 안에 묻힌 inline `<svg>`** 로 들어와서 alias 로는 보이지 않는다. ' +
       '응답에 policyWarnings 가 실립니다 — **경고일 뿐 등록은 그대로 진행**됩니다(거부 아님). ' +
       '정책 설정: sigma_set_page_data({ pageId: "document", key: "lint", value: JSON }). validateOnly 경로에선 파일을 특정할 수 없어 검사하지 않습니다. ' +
       '등록 후 sigma_create_component_spec_instance로 삽입, 카탈로그는 sigma_list_component_specs.',
@@ -3112,10 +3114,14 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       "code": "export default function(node, ctx) {\\n  if (node.type !== 'FRAME' || !node.name.startsWith('Modal/')) return null;\\n  if (!ctx.getSiblings(node.id).some(s => s.name === 'Overlay')) return { message: node.name + ' 옆에 Overlay 형제가 없음' };\\n  return null;\\n}" }
   ],
   // 문서(document) 저장 config 에서만 의미 있음 — lint 검사가 아니라 **컴포넌트 스펙 등록 정책**이다.
-  // sigma_create_component_spec 의 등록/overwrite 시 alias 가 걸리면 응답에 policyWarnings(경고만, 거부 아님).
+  // sigma_create_component_spec 의 등록/overwrite 시 걸리면 응답에 policyWarnings(경고만, 거부 아님).
+  // 조건: aliasPattern(이름) · htmlPattern(스펙 HTML 내용) — 함께 쓰면 AND. unlessDescription 에 걸리면 면제.
   "componentSpec": { "warn": [
     { "aliasPattern": "^table$", "message": "테이블은 wire/table 프리셋을 쓰세요" },
-    { "aliasPattern": "^btn_", "message": "버튼은 ui_button 권장", "namespace": "design" }
+    { "aliasPattern": "^btn_", "message": "버튼은 ui_button 권장", "namespace": "design" },
+    // 이름으로는 못 잡는 규약 — 아이콘 창작은 대부분 "다른 컴포넌트 HTML 안에 묻힌 inline <svg>" 로 들어온다.
+    { "htmlPattern": "<svg", "unlessDescription": "출처",
+      "message": "아이콘을 새로 그리지 말고 등록된 세트에서 가져오세요 — 부득이하면 description 에 출처를 적으세요" }
   ] }
 }
 \`\`\`
