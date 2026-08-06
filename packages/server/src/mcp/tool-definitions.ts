@@ -2557,6 +2557,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       'sigma_create_component(빈 COMPONENT) → 그 안에 sigma_create_component_spec_instance(parentId=그 컴포넌트) 또는 sigma_create_component_instance로 실제 인스턴스를 자식으로 삽입 → ' +
       '인스턴스를 찍은 뒤 per-instance로 바꿀 부분은 중첩 노드 id(I<instance>;<child>)에 sigma_modify_node(setCharacters) / sigma_set_component_spec_instance_props로 override. ' +
       '(Figma 네이티브 컴포넌트는 인스턴스를 자식으로 품지만, 스펙 HTML은 못 품습니다. 표·차트 등 등록 컴포넌트에 없는 조각만 스펙으로 만들어 이 조합에 끼워넣으세요.) ' +
+      '[박스모델 경고] 루트에 width/height 와 border-width·padding 을 같이 주면 **내용상자는 그만큼 작습니다**. 직계 자식이 내용상자보다 크면 등록은 되지만 응답에 `warnings` 가 실립니다 — 이대로 두면 **인스턴스마다 child_overflow** 가 납니다(표 셀 스펙 하나로 한 번에 250건 난 적이 있고, 사후에는 이미 찍힌 인스턴스를 전부 손봐야 합니다). 경고는 양쪽 고칠 값(자식을 줄이거나 루트를 키우거나)을 함께 알려 줍니다. validateOnly 에서도 같이 나옵니다. ' +
       '[동작] overwrite 시 기존 컴포넌트가 in-place 갱신되어 기존 인스턴스에 전파. 규칙 위반 시 위반 전체 목록과 함께 거부. ' +
       'validateOnly: true면 Figma/토큰 없이 규칙 검증만 수행(사전 점검용). ' +
       '[본문이 큰 스펙] html 대신 htmlPath로 파일에서 읽을 수 있습니다. <img>에 base64 data URI를 넣는 스펙은 본문이 수십 KB라 ' +

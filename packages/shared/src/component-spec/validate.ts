@@ -235,6 +235,8 @@ interface OpenElement {
   hasText: boolean;
   /** style에 선언된 속성 집합 */
   styleProps: Set<string>;
+  /** style 선언 원본(prop → value). 박스모델 검사에 값이 필요하다. */
+  styleDecls: Map<string, string>;
   /** display: flex 선언 여부 (컨테이너 필수 규칙용) */
   hasFlexDisplay: boolean;
   /** flex 누락 에러를 이미 냈는지 (자식마다 중복 방지) */
@@ -249,6 +251,9 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
   const errors: string[] = [];
   const params: ComponentParam[] = [];
   const seenSlotNames = new Set<string>();
+  /** 박스모델 검사용 — 루트 선언과 루트의 직계 자식들 */
+  let rootDecls: Map<string, string> | null = null;
+  const directChildren: Array<{ tagName: string; decls: Map<string, string>; order: number }> = [];
   // 루트 스타일에서 유도하는 축별 크기 동작 (width/height 명시 → fixed, 아니면 hug)
   const sizing: ComponentSizing = { horizontal: 'hug', vertical: 'hug' };
 
@@ -319,7 +324,15 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     errors.push(`루트 요소는 1개여야 합니다 (현재 ${rootCount}개)`);
   }
 
-  return { ok: errors.length === 0, errors, params, sizing };
+  const warnings = rootDecls ? checkBoxModel(rootDecls, directChildren) : [];
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    params,
+    sizing,
+    ...(warnings.length > 0 ? { warnings } : {}),
+  };
 
   function handleText(raw: string) {
     const trimmed = raw.trim();
@@ -474,11 +487,17 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
     const styleProps = attrs['style'] !== undefined
       ? validateStyle(attrs['style'], tagName, slotName !== null)
       : new Set<string>();
+    const styleDecls = parseStyleDecls(attrs['style']);
 
     // 첫 루트 요소의 width/height 명시 여부 → 컴포넌트 크기 동작(sizing)
     if (stack.length === 0 && rootCount === 1) {
       sizing.horizontal = styleProps.has('width') ? 'fixed' : 'hug';
       sizing.vertical = styleProps.has('height') ? 'fixed' : 'hug';
+      rootDecls = styleDecls;
+    }
+    // 루트의 직계 자식 — 박스모델 비교 대상
+    if (stack.length === 1 && rootCount === 1) {
+      directChildren.push({ tagName, decls: styleDecls, order: directChildren.length + 1 });
     }
 
     if (slotDesc !== null && slotName === null) {
@@ -534,6 +553,7 @@ export function validateComponentSpecHtml(html: string): SpecValidationResult {
       hasChildElement: false,
       hasText: false,
       styleProps,
+      styleDecls,
       hasFlexDisplay: styleProps.has('display'),
       flexWarned: false,
     });
@@ -652,4 +672,111 @@ function parseAttrs(attrsString: string): { attrs: Record<string, string>; bareA
 
 function truncate(s: string): string {
   return s.length > 40 ? s.slice(0, 40) + '…' : s;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 박스모델 검사 (경고 — 거부하지 않는다)
+//
+// 스펙 루트에 height 와 border-width 를 같이 주면 **내용상자는 height − 위아래 border** 다.
+// 그런데 자식을 height 그대로 잡는 실수가 잦고, 그 결과는 등록 시점엔 안 보이다가
+// 인스턴스마다 child_overflow 로 돌아온다 — 표 셀 스펙 하나로 **한 번에 250건**이 난 적이 있다.
+// 사후에는 이미 찍힌 인스턴스를 전부 손봐야 하므로, 등록 때 1건으로 말해 주는 편이 압도적으로 싸다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** style 속성 원문을 prop → value 로. 값 검증은 validateStyle 이 따로 한다. */
+function parseStyleDecls(style: string | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!style) return out;
+  for (const decl of style.split(';')) {
+    const i = decl.indexOf(':');
+    if (i < 0) continue;
+    const prop = decl.slice(0, i).trim().toLowerCase();
+    const value = decl.slice(i + 1).trim();
+    if (prop) out.set(prop, value);
+  }
+  return out;
+}
+
+/** "12px" → 12, "0" → 0, 그 밖(%, calc, auto…) → null(판정 보류) */
+function pxValue(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const t = value.trim();
+  if (t === '0') return 0;
+  const m = /^(-?\d+(?:\.\d+)?)px$/.exec(t);
+  return m ? parseFloat(m[1]) : null;
+}
+
+/** 1~4개 길이 shorthand → [top, right, bottom, left]. 하나라도 px 가 아니면 null. */
+function shorthandSides(value: string | undefined): [number, number, number, number] | null {
+  if (value === undefined) return null;
+  const parts = value.trim().split(/\s+/);
+  const nums = parts.map(pxValue);
+  if (nums.some((n) => n === null)) return null;
+  const [a, b, c, d] = nums as number[];
+  if (parts.length === 1) return [a, a, a, a];
+  if (parts.length === 2) return [a, b, a, b];
+  if (parts.length === 3) return [a, b, c, b];
+  if (parts.length === 4) return [a, b, c, d];
+  return null;
+}
+
+/** shorthand + per-side 를 합쳐 네 변 값을 낸다(per-side 가 이긴다). 값이 없으면 0. */
+function edges(
+  decls: Map<string, string>,
+  shorthand: string,
+  perSide: [string, string, string, string],
+): [number, number, number, number] {
+  const base = shorthandSides(decls.get(shorthand)) || [0, 0, 0, 0];
+  const out: [number, number, number, number] = [base[0], base[1], base[2], base[3]];
+  perSide.forEach((prop, i) => {
+    const v = pxValue(decls.get(prop));
+    if (v !== null) out[i] = v;
+  });
+  return out;
+}
+
+const BOX_TOLERANCE = 0.5;
+
+/**
+ * 루트의 내용상자보다 큰 **직계 자식**을 경고로 낸다.
+ * 판정은 둘 다 px 로 명시됐을 때만 — 하나라도 hug(미지정)면 넘침을 단정할 수 없어 건너뛴다.
+ */
+function checkBoxModel(
+  rootDecls: Map<string, string>,
+  children: Array<{ tagName: string; decls: Map<string, string>; order: number }>,
+): string[] {
+  const out: string[] = [];
+  const rootW = pxValue(rootDecls.get('width'));
+  const rootH = pxValue(rootDecls.get('height'));
+  if (rootW === null && rootH === null) return out;
+
+  const pad = edges(rootDecls, 'padding', ['padding-top', 'padding-right', 'padding-bottom', 'padding-left']);
+  const bor = edges(rootDecls, 'border-width', ['border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width']);
+
+  const insetX = pad[1] + pad[3] + bor[1] + bor[3];
+  const insetY = pad[0] + pad[2] + bor[0] + bor[2];
+  const contentW = rootW === null ? null : rootW - insetX;
+  const contentH = rootH === null ? null : rootH - insetY;
+
+  const why = (axis: 'width' | 'height', root: number, content: number, inset: number) =>
+    `루트 ${axis} ${root}px 에서 border·padding ${inset}px 를 빼면 내용상자는 ${content}px 입니다`;
+
+  for (const child of children) {
+    const cw = pxValue(child.decls.get('width'));
+    const ch = pxValue(child.decls.get('height'));
+
+    if (contentW !== null && cw !== null && cw > contentW + BOX_TOLERANCE) {
+      out.push(
+        `${why('width', rootW as number, contentW, insetX)} — ${child.order}번째 자식 <${child.tagName}> 의 width 가 ${cw}px 라 넘칩니다. ` +
+        `등록은 되지만 **인스턴스마다 child_overflow 가 납니다**. 자식을 ${contentW}px 로 줄이거나 루트 width 를 ${cw + insetX}px 로 키우세요.`
+      );
+    }
+    if (contentH !== null && ch !== null && ch > contentH + BOX_TOLERANCE) {
+      out.push(
+        `${why('height', rootH as number, contentH, insetY)} — ${child.order}번째 자식 <${child.tagName}> 의 height 가 ${ch}px 라 넘칩니다. ` +
+        `등록은 되지만 **인스턴스마다 child_overflow 가 납니다**. 자식을 ${contentH}px 로 줄이거나 루트 height 를 ${ch + insetY}px 로 키우세요.`
+      );
+    }
+  }
+  return out;
 }

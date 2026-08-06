@@ -130,6 +130,7 @@ export const componentSpecHandlers: Record<
       return jsonResponse({
         validateOnly: true,
         ok: dryRun.ok,
+        ...(dryRun.warnings?.length ? { warnings: dryRun.warnings } : {}),
         ...(dryRun.ok
           ? { message: '스펙이 규칙을 통과했습니다 — validateOnly를 빼고 호출하면 등록됩니다', params: dryRun.params, sizing: dryRun.sizing }
           : { error: '스펙 HTML이 규칙을 위반했습니다', violations: dryRun.errors }),
@@ -207,6 +208,8 @@ export const componentSpecHandlers: Record<
 
       return jsonResponse({
         success: true,
+        // 박스모델 경고 — 등록은 됐지만 이대로 두면 인스턴스마다 child_overflow 가 난다.
+        ...(validation.warnings?.length ? { warnings: validation.warnings } : {}),
         ...(policyWarnings.length ? { policyWarnings } : {}),
         message: result.updated
           ? `컴포넌트 "${namespace}/${alias}"가 in-place 갱신되었습니다 — 기존 인스턴스에 반영됩니다`

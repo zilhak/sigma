@@ -76,6 +76,12 @@ export interface SpecValidationResult {
   params: ComponentParam[];
   /** 루트 스타일에서 유도한 축별 크기 동작 */
   sizing: ComponentSizing;
+  /**
+   * 거부까지는 아니지만 등록 후 문제가 되는 것들 — 지금은 박스모델(자식이 루트 내용상자보다 큼).
+   * 스펙은 인스턴스로 수십·수백 번 찍히므로, 등록 때 1건으로 말해 주지 않으면
+   * 나중에 인스턴스마다 child_overflow 로 돌아온다(실제로 한 번에 250건).
+   */
+  warnings?: string[];
 }
 
 /** Figma 컴포넌트 노드에 pluginData('sigma-spec')로 스탬프되는 계약 정보 */
