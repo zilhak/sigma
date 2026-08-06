@@ -25,11 +25,16 @@ export interface AnnotationMarkerPairConfig {
   legendAlias?: string;
   /** 왕복 하이퍼링크까지 요구할지. 기본 true. */
   requireHyperlink?: boolean;
-  /** 번호로 인정할 문자 패턴(정규식 문자열). 기본 = 원문자 숫자 한 글자(①~㊿). */
+  /**
+   * 번호로 인정할 패턴(정규식 문자열). 기본 = 원문자 숫자 한 글자(①~㊿) **또는 1~2자리 숫자**.
+   * 평문 숫자를 넣은 이유: 실제 파일에 원문자를 쓰는 섹션과 평문 숫자를 쓰는 섹션이 섞여 있었고,
+   * 원문자만 인정하면 후자에서 규칙이 통째로 무용지물이 된다(그 섹션 마커가 전부 "번호를 읽을 수
+   * 없다" 로만 나왔다). 어떤 기호를 쓸지는 파일의 규약이지 도구가 정할 일이 아니다.
+   */
   symbolPattern?: string;
 }
 
-const DEFAULT_SYMBOL_PATTERN = '^[\\u2460-\\u2473\\u3251-\\u325F\\u32B1-\\u32BF]$';
+const DEFAULT_SYMBOL_PATTERN = '^([\\u2460-\\u2473\\u3251-\\u325F\\u32B1-\\u32BF]|[0-9]{1,2})$';
 
 export interface MarkerPairRelations {
   /** 노드 id → 자식 id[] */

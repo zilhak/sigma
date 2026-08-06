@@ -130,6 +130,14 @@ describe('annotationMarkerPairRule', () => {
     expect(annotationMarkerPairRule(nodes, relations)).toEqual([]);
   });
 
+  test('평문 숫자도 번호로 읽는다 (원문자만 인정하면 그 섹션에서 규칙이 무용지물)', () => {
+    const { nodes, relations } = build([
+      { kind: 'marker', sym: '1', id: 'm1', linkTo: ['g1'] },
+      { kind: 'legend', sym: '1', id: 'g1', linkTo: ['m1'] },
+    ]);
+    expect(annotationMarkerPairRule(nodes, relations)).toEqual([]);
+  });
+
   test('번호를 읽을 수 없는 인스턴스를 알려 준다', () => {
     const { nodes, relations } = build([{ kind: 'marker', sym: 'X', id: 'mx' }]);
     const v = annotationMarkerPairRule(nodes, relations);
