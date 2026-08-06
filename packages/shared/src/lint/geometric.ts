@@ -124,12 +124,24 @@ function edgeGap(a: Box, b: Box): number | null {
   return null;
 }
 
-/** inner 가 outer 안에 pad 여백을 두고 들어가는가 */
+/**
+ * 부동소수 반올림 허용 오차. Figma 는 클론 등에서 크기를 `123` → `123.000244` 로 흘리고,
+ * GROUP 은 resize 를 지원하지 않아 **고칠 방법이 없는 위반**이 영구히 남는다(실제로 세 섹션에서
+ * 사유를 적은 lint-ignore 로 손수 억제하고 있었다).
+ *
+ * ⚠️ **1px 을 봐 주면 안 된다.** 스펙 루트의 `border-width:1px` 때문에 내용상자가 1px 작아져
+ * 자식이 삐져나오는 것은 **진짜 결함**이고(한 번에 250건 발생), 그게 묻히면 원래 잡으려던 걸
+ * 못 잡는다. 그래서 소수점 오차만 봐 준다.
+ */
+const GEOM_EPSILON = 0.05;
+
+/** inner 가 outer 안에 pad 여백을 두고 들어가는가 (소수점 반올림 오차는 봐 준다) */
 function insetOk(outer: Box, inner: Box, pad: number): boolean {
-  return inner.x - outer.x >= pad &&
-    inner.y - outer.y >= pad &&
-    (outer.x + outer.width) - (inner.x + inner.width) >= pad &&
-    (outer.y + outer.height) - (inner.y + inner.height) >= pad;
+  const slack = pad - GEOM_EPSILON;
+  return inner.x - outer.x >= slack &&
+    inner.y - outer.y >= slack &&
+    (outer.x + outer.width) - (inner.x + inner.width) >= slack &&
+    (outer.y + outer.height) - (inner.y + inner.height) >= slack;
 }
 
 function kids(n: TreeNode): TreeNode[] {

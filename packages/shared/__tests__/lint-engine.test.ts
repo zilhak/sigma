@@ -246,6 +246,34 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     expect(v[0].fix).toBeUndefined();
   });
 
+  // Figma 가 클론에서 폭을 123 → 123.000244 로 흘리는데 GROUP 은 resize 가 없어
+  // 고칠 방법이 없는 위반이 영구히 남았다(사유 적은 lint-ignore 로 손수 억제했다).
+  test('소수점 반올림 오차는 child_overflow 로 보지 않는다', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'screen', 'FRAME', [100, 100, 123, 300], [
+          node('g', 'logo', 'GROUP', [0, 0, 123.000244, 100]),
+        ]),
+      ]),
+    ];
+    expect(lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow')).toHaveLength(0);
+  });
+
+  // ⚠️ 1px 은 봐 주면 안 된다 — 스펙 루트 border 1px 때문에 내용상자가 1px 작아져
+  // 자식이 삐져나오는 것은 진짜 결함이고(한 번에 250건 발생) 그게 묻히면 안 된다.
+  test('테두리 1px 만큼 넘치는 것은 여전히 child_overflow', () => {
+    const roots = [
+      node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+        node('f', 'cell', 'FRAME', [100, 100, 48, 39], [
+          node('i', 'inner', 'INSTANCE', [0, 0, 48, 40]),
+        ]),
+      ]),
+    ];
+    const v = lintLayout(roots).violations.filter((x) => x.rule === 'child_overflow');
+    expect(v).toHaveLength(1);
+    expect(v[0].nodes).toContain('i');
+  });
+
   test('리프(TEXT)는 프레임 밖으로 살짝 나가도 검사 제외 (baseline 노이즈 방지)', () => {
     const roots = [
       node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [

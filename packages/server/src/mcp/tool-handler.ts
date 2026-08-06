@@ -7,6 +7,7 @@ import { componentSpecHandlers } from './handlers/component-spec.js';
 import { lintHandlers } from './handlers/lint.js';
 import { jsonResponse, type ToolContext, type ToolResult } from './helpers.js';
 import { toolDefinitions } from './tool-definitions.js';
+import { getHangulEscapeFlag, TEXT_WRITING_TOOLS, HANGUL_ESCAPE_WARNING } from './hangul-escape.js';
 
 /**
  * 모든 핸들러를 하나의 Record로 통합
@@ -65,6 +66,29 @@ function rejectUnknownArgs(name: string, args: Record<string, unknown>): ToolRes
 }
 
 /**
+ * 텍스트를 만드는 도구의 응답에, 요청 원문에 한글 이스케이프가 있었다는 경고를 덧붙인다.
+ * 작업은 그대로 진행된다 — 이스케이프 자체가 틀린 건 아니고, 그 경로에서 오타가 나기 때문이다.
+ */
+function withHangulEscapeWarning(name: string, result: ToolResult): ToolResult {
+  if (!TEXT_WRITING_TOOLS.has(name)) return result;
+  const escapes = getHangulEscapeFlag();
+  if (!escapes) return result;
+  const text = result.content?.[0]?.text;
+  if (typeof text !== 'string') return result;
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === 'object') {
+      (data as Record<string, unknown>).hangulEscapeWarning = HANGUL_ESCAPE_WARNING;
+      (data as Record<string, unknown>).hangulEscapesSeen = escapes;
+      return jsonResponse(data);
+    }
+  } catch {
+    // JSON 이 아니면 건드리지 않는다
+  }
+  return result;
+}
+
+/**
  * 도구 이름으로 핸들러를 찾아 실행. 에러 래핑 포함.
  */
 export async function handleTool(
@@ -79,7 +103,8 @@ export async function handleTool(
     }
     const rejected = rejectUnknownArgs(name, args);
     if (rejected) return rejected;
-    return await handler(args, context);
+    const result = await handler(args, context);
+    return withHangulEscapeWarning(name, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return jsonResponse({ error: message });

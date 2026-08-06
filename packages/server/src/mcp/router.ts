@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createMcpRequestHandler, getMcpSessionCount } from './server.js';
+import { findHangulEscapes, setHangulEscapeFlag } from './hangul-escape.js';
 import type { ToolContext } from './helpers.js';
 
 export interface McpRouter {
@@ -47,6 +48,9 @@ export function createMcpRouter(context: ToolContext): McpRouter {
               resolve();
               return;
             }
+            // 한글 이스케이프는 **파싱 전 원문**에서만 보인다 — 여기서 판정해 두고
+            // 텍스트를 만드는 도구의 응답에 경고를 싣는다(요청 하나 동안만 유효).
+            setHangulEscapeFlag(findHangulEscapes(body));
             try {
               await mcpHandler(req, res, parsedBody);
             } catch (handlerError) {
@@ -54,6 +58,7 @@ export function createMcpRouter(context: ToolContext): McpRouter {
               res.writeHead(500, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ error: 'MCP handler error', details: String(handlerError) }));
             }
+            setHangulEscapeFlag(null);
             resolve();
           });
         });
