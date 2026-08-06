@@ -76,7 +76,15 @@ function resolveTextNode(nodeId: string, slot: string): TextNode {
   );
 }
 
-/** 텍스트 전체 범위에 대상 노드로 향하는 링크를 걸거나(remove=false) 지운다. */
+/**
+ * 텍스트 전체 범위에 대상 노드로 향하는 링크를 걸거나(remove=false) 지운다.
+ *
+ * ⚠️ **쓴 뒤 반드시 되읽어 확인한다.** 예전엔 `setRangeHyperlink` 호출 성공을 곧 배선 완료로
+ * 세어 `appliedCount` 를 올렸는데, 실제로는 일부 쌍만 걸리고도 응답이 성공으로 왔다(11쌍을
+ * 한 콜에 넘겨 5쌍만 걸린 사례). 응답이 거짓말을 하면 "배선했다"고 기록만 남고 실제 파일엔
+ * 빠져 있어, 한참 뒤 전수 감사에서야 드러난다. 되읽기 실패는 여기서 예외로 만들어
+ * 그 쌍이 failed 로 집계되게 한다.
+ */
 async function applyLink(textNode: TextNode, targetNodeId: string | null): Promise<void> {
   const length = textNode.characters.length;
   if (length === 0) {
@@ -85,9 +93,27 @@ async function applyLink(textNode: TextNode, targetNodeId: string | null): Promi
   await loadAllFonts(textNode);
   if (targetNodeId === null) {
     textNode.setRangeHyperlink(0, length, null);
+  } else {
+    textNode.setRangeHyperlink(0, length, { type: 'NODE', value: targetNodeId });
+  }
+
+  // 되읽기 검증 — 구간이 섞여 있으면(figma.mixed) 전 범위에 걸리지 않은 것이다.
+  const readBack = textNode.getRangeHyperlink(0, length) as HyperlinkTarget | null | symbol;
+  if (typeof readBack === 'symbol') {
+    throw new Error(`${textNode.id}: 링크가 텍스트 전 범위에 걸리지 않았습니다(구간이 섞여 있음)`);
+  }
+  if (targetNodeId === null) {
+    if (readBack !== null) {
+      throw new Error(`${textNode.id}: 링크 제거가 반영되지 않았습니다`);
+    }
     return;
   }
-  textNode.setRangeHyperlink(0, length, { type: 'NODE', value: targetNodeId });
+  const actual = readBack as HyperlinkTarget | null;
+  if (!actual || actual.type !== 'NODE' || actual.value !== targetNodeId) {
+    throw new Error(
+      `${textNode.id}: 링크가 반영되지 않았습니다(기대 NODE ${targetNodeId}, 실제 ${actual ? `${actual.type} ${actual.value}` : 'none'})`
+    );
+  }
 }
 
 /**
@@ -124,11 +150,12 @@ export async function setHyperlink(params: SetHyperlinkParams): Promise<SetHyper
         await applyLink(bText, remove ? null : link.a);
         result.applied.push('b_to_a');
       }
-      appliedCount += result.applied.length;
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
       failedCount++;
     }
+    // 절반만 걸린 쌍도 정확히 세도록 성공/실패와 무관하게 실제 배선 수를 더한다.
+    appliedCount += result.applied.length;
     results.push(result);
   }
 

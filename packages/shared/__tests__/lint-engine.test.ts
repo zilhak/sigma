@@ -752,6 +752,19 @@ describe('json-rule.ts — queryNodes (조건 검색, lint 와 같은 부품 재
     expect(queryNodes(nodes, { checks: [] })).toHaveLength(nodes.length);
   });
 
+  // 조건이 사라지면 0건이 아니라 **전건**이 나오는 방향으로 실패하므로, 모르는 키를
+  // 조용히 무시하면 "필터가 동작하지 않는다"로 오진하게 된다.
+  test('select 에 모르는 키가 오면 거부 (전건 매칭으로 새지 않게)', () => {
+    expect(() => queryNodes(nodes, { select: { nameContains: 'Card' } } as unknown as NodeQuery)).toThrow(/nameContains/);
+    expect(() => queryNodes(nodes, { select: { name: 'Card' } } as unknown as NodeQuery)).toThrow(/namePattern/);
+  });
+
+  test('checks 의 없는 연산자·모르는 키도 거부', () => {
+    expect(() => queryNodes(nodes, { checks: [{ op: 'contains', field: 'name', value: 'x' }] } as unknown as NodeQuery)).toThrow(/contains/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'equals', field: 'name', valeu: 'x' }] } as unknown as NodeQuery)).toThrow(/valeu/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'equals', value: 'x' }] } as unknown as NodeQuery)).toThrow(/field/);
+  });
+
   test('없는 필드는 매칭 실패로 처리 (range/equals)', () => {
     expect(queryNodes(nodes, { checks: [{ op: 'range', field: 'opacity', min: 0.5 }] })).toHaveLength(0);
     expect(queryNodes(nodes, { checks: [{ op: 'equals', field: 'layoutMode', value: 'NONE' }] }).map((n) => n.id))

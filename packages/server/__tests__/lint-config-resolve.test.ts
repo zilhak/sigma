@@ -29,11 +29,22 @@ describe('mergeConfigs', () => {
     expect(merged.builtins).toEqual({ section_gap: { gap: 80 }, raw_node: { enabled: true } });
   });
 
-  test('custom 은 override 에 있으면 교체, 없으면 base 유지', () => {
+  test('custom 도 rule id 단위로 override — base 에만 있는 규칙은 살아남는다', () => {
     const base = { custom: [{ id: 'a', select: {}, check: {} }] } as never;
     expect(mergeConfigs(base, {}).custom).toEqual([{ id: 'a', select: {}, check: {} }]);
+    // 페이지가 규칙 하나만 얹어도 base 의 나머지 규칙이 사라지면 안 된다
+    // (그래서 오타 블록리스트 규칙이 특정 페이지에서 통째로 무효였다).
     const over = { custom: [{ id: 'b', select: {}, check: {} }] } as never;
-    expect(mergeConfigs(base, over).custom).toEqual([{ id: 'b', select: {}, check: {} }]);
+    expect(mergeConfigs(base, over).custom).toEqual([
+      { id: 'a', select: {}, check: {} },
+      { id: 'b', select: {}, check: {} },
+    ]);
+  });
+
+  test('같은 id 는 페이지 쪽이 이긴다', () => {
+    const base = { custom: [{ id: 'a', select: {}, check: { field: 'x' } }] } as never;
+    const over = { custom: [{ id: 'a', select: {}, check: { field: 'y' } }] } as never;
+    expect(mergeConfigs(base, over).custom).toEqual([{ id: 'a', select: {}, check: { field: 'y' } }]);
   });
 
   test('null 인자 허용', () => {

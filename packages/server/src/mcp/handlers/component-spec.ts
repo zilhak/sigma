@@ -216,7 +216,10 @@ export const componentSpecHandlers: Record<
         params: validation.params,
         sizing: validation.sizing,
         ...result,
-        hint: `sigma_create_component_spec_instance(alias: "${alias}", props: {...})로 삽입하세요. 미리보기: sigma_screenshot(nodeId: "${result.nodeId}")`,
+        // 응답에 `key` 로만 있어 sigma_swap_component(newComponentKey) 를 부르려면 목록을
+        // 다시 조회해야 했다. 같은 값을 그 인자 이름으로도 실어 준다.
+        componentKey: result.key,
+        hint: `sigma_create_component_spec_instance(alias: "${alias}", props: {...})로 삽입하세요. 상태 교체는 sigma_swap_component(newComponentKey: "${result.key}"). 미리보기: sigma_screenshot(nodeId: "${result.nodeId}")`,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -468,7 +471,7 @@ export const componentSpecHandlers: Record<
     }
   },
 
-  async sigma_delete_component_spec(args, _context) {
+  async sigma_delete_component_spec(args, context) {
     const alias = args.alias as string;
     if (!alias) {
       return jsonResponse({ error: 'alias는 필수입니다' });
@@ -477,10 +480,30 @@ export const componentSpecHandlers: Record<
     if (error) return error;
     const spec = record as ComponentSpecRecord;
 
+    // 마스터 노드까지 지운다. 레지스트리만 지우면 마스터가 마스터 페이지에 남아
+    // "지웠는데 아직 보인다"가 되고, 두 번에 나눠 부르는 걸 잊기 쉽다.
+    const deleteNode = args.deleteNode === true;
+    let nodeDeleted: boolean | undefined;
+    let nodeError: string | undefined;
+    if (deleteNode && spec.componentNodeId) {
+      try {
+        const res = await context.wsServer.deleteFrame(spec.componentNodeId);
+        nodeDeleted = res.deleted;
+      } catch (e) {
+        nodeError = e instanceof Error ? e.message : String(e);
+      }
+    }
+
     await deleteComponentSpec(spec.namespace, spec.alias);
     return jsonResponse({
       success: true,
-      message: `레지스트리에서 "${spec.namespace}/${spec.alias}"를 삭제했습니다. Figma의 컴포넌트 노드(${spec.componentNodeId})는 유지됩니다 — 삭제하려면 sigma_delete_frame을 사용하세요`,
+      componentNodeId: spec.componentNodeId,
+      ...(deleteNode ? { nodeDeleted: nodeDeleted === true, ...(nodeError ? { nodeError } : {}) } : {}),
+      message: deleteNode
+        ? (nodeDeleted
+          ? `레지스트리와 Figma 마스터 노드(${spec.componentNodeId})를 모두 삭제했습니다: "${spec.namespace}/${spec.alias}"`
+          : `레지스트리에서 "${spec.namespace}/${spec.alias}"를 삭제했지만 마스터 노드(${spec.componentNodeId}) 삭제는 실패했습니다${nodeError ? `: ${nodeError}` : ''} — sigma_batch_delete 로 직접 지우세요`)
+        : `레지스트리에서 "${spec.namespace}/${spec.alias}"를 삭제했습니다. Figma의 컴포넌트 노드(${spec.componentNodeId})는 유지됩니다 — 함께 지우려면 deleteNode:true 를 주세요`,
     });
   },
 };

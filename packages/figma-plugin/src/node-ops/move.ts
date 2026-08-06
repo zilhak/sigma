@@ -295,7 +295,19 @@ export function cloneNode(
     throw new Error(`Document 또는 Page는 복제할 수 없습니다`);
   }
 
+  const sourceParent = sourceNode.parent;
   const cloned = (sourceNode as SceneNode).clone();
+
+  // ⚠️ Figma 의 clone() 은 최상위 노드를 **figma.currentPage**(=Figma 앱에서 열려 있는 페이지)
+  // 아래에 붙인다. Sigma 는 "열린 페이지가 아니라 바인딩된 페이지" 가 원칙이므로, parentId 를
+  // 따로 주지 않았으면 원본과 같은 부모로 되돌린다. 그러지 않으면 복제본이 엉뚱한 페이지에
+  // 생기고(응답은 성공) 나중에 그 페이지에서 발견하게 된다.
+  if (!parentId && sourceParent && cloned.parent !== sourceParent && 'appendChild' in sourceParent) {
+    const keep = { x: cloned.x, y: cloned.y };
+    (sourceParent as ChildrenMixin).appendChild(cloned);
+    cloned.x = keep.x;
+    cloned.y = keep.y;
+  }
 
   // 이름 변경
   if (name) {

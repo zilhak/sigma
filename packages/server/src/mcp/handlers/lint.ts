@@ -265,8 +265,13 @@ export const lintHandlers: Record<string, (args: Record<string, unknown>, contex
     const { pluginId, pageId } = access;
 
     const scope = (args.scope as string) === 'file' ? 'file' : 'page';
+    // 기본은 merge — base(inline/파일/문서) + 페이지 저장 config 를 rule id 단위로 병합.
+    // ⚠️ 예전 기본은 uniform 이라 **페이지 저장 config 를 통째로 무시**했다. 같은 페이지가
+    // 인자 하나 차이로 3217건 ↔ 0건이 되는데 응답에는 그 이유가 없어, 규칙을 껐다고 기록해 둔
+    // 페이지를 재검할 때 없던 결함이 무더기로 보였다. 페이지가 자기 config 를 갖고 있으면
+    // 그건 그 페이지의 뜻이므로 기본값이 존중하는 쪽이 맞다. uniform 은 이제 명시해야 한다.
     const configMode = (['uniform', 'per-page', 'merge'].includes(args.configMode as string)
-      ? args.configMode : 'uniform') as ConfigMode;
+      ? args.configMode : 'merge') as ConfigMode;
 
     const baseResolved = await resolveBaseConfig(args, wsServer, pluginId);
     // uniform 은 base 필수. per-page/merge 는 base 없어도 페이지 저장 config 로 동작 가능.

@@ -18,6 +18,51 @@ function getByPath(obj: unknown, path: string): unknown {
   return cur;
 }
 
+/** select 가 아는 키. 이 밖의 키는 조용히 무시하지 않고 거부한다(아래 assertQueryShape 참고). */
+const SELECT_KEYS = new Set(['type', 'namePattern']);
+/** check 가 아는 연산자와 키. */
+const CHECK_OPS = new Set(['equals', 'range', 'regex', 'oneOf', 'exists']);
+const CHECK_KEYS = new Set(['op', 'field', 'value', 'min', 'max', 'pattern', 'values']);
+
+/** 조건 스펙 오류. 호출자가 그대로 사용자에게 보여 준다. */
+export class QueryShapeError extends Error {}
+
+/**
+ * select/checks 의 키·연산자를 검사한다.
+ *
+ * ⚠️ 왜 있는가: 모르는 키를 무시하면 **조건이 통째로 사라진 채 "전부 매칭"이 된다.**
+ * 실사고 — `select:{nameContains:"tbl_"}` 로 노드를 세려다 페이지 전체를 받았고,
+ * 응답이 정상이라 "필터가 동작하지 않는다"고 도구 버그로 오진했다. 조건 검색은
+ * 틀렸을 때 0건이 아니라 **전건**이 나오는 방향으로 실패하므로 조용한 무시가 특히 위험하다.
+ */
+export function assertQueryShape(query: NodeQuery, where = 'where'): void {
+  if (query.select) {
+    for (const k of Object.keys(query.select)) {
+      if (!SELECT_KEYS.has(k)) {
+        throw new QueryShapeError(
+          `${where}.select 에 모르는 키 "${k}" 가 있습니다. 쓸 수 있는 키는 ${[...SELECT_KEYS].join('·')} 뿐입니다` +
+          (k === 'name' || k === 'nameContains'
+            ? ` — 이름으로 좁히려면 정규식 namePattern 을 쓰세요(예: namePattern: "^${'tbl_'}").`
+            : '.')
+        );
+      }
+    }
+  }
+  for (const check of query.checks || []) {
+    for (const k of Object.keys(check)) {
+      if (!CHECK_KEYS.has(k)) {
+        throw new QueryShapeError(`${where}.checks 에 모르는 키 "${k}" 가 있습니다. 쓸 수 있는 키는 ${[...CHECK_KEYS].join('·')} 뿐입니다.`);
+      }
+    }
+    if (!CHECK_OPS.has(check.op as string)) {
+      throw new QueryShapeError(`${where}.checks 의 op "${check.op}" 는 없는 연산자입니다. 쓸 수 있는 연산자는 ${[...CHECK_OPS].join('·')} 뿐입니다.`);
+    }
+    if (typeof check.field !== 'string' || check.field === '') {
+      throw new QueryShapeError(`${where}.checks 의 항목에 field 가 없습니다.`);
+    }
+  }
+}
+
 function evalCheck(check: JsonCheck, actual: unknown): boolean {
   switch (check.op) {
     case 'equals':
@@ -35,7 +80,9 @@ function evalCheck(check: JsonCheck, actual: unknown): boolean {
     case 'exists':
       return actual !== undefined && actual !== null;
     default:
-      return true;
+      // 여기 오면 스펙 검사(assertQueryShape)를 건너뛴 경로가 있다는 뜻이다.
+      // 조용히 통과시키면 조건이 사라진 채 전건 매칭이 되므로 터뜨린다.
+      throw new QueryShapeError(`없는 연산자 op "${(check as JsonCheck).op}" 입니다.`);
   }
 }
 
@@ -56,6 +103,7 @@ function formatMessage(template: string | undefined, rule: MatchRule, node: Lint
 export type CompiledMatchRule = (node: LintNode) => Violation | null;
 
 export function compileMatchRule(rule: MatchRule): CompiledMatchRule {
+  assertQueryShape({ select: rule.select, checks: [rule.check] }, `custom 규칙 "${rule.id}"`);
   return (node) => {
     if (!matchesSelect(node, rule.select)) return null;
     const actual = getByPath(node, rule.check.field);
@@ -102,5 +150,6 @@ export function matchesQuery(node: LintNode, query: NodeQuery): boolean {
 
 /** 평탄화된 노드 목록에서 조건에 맞는 노드를 고른다(입력 순서 유지). */
 export function queryNodes(nodes: LintNode[], query: NodeQuery): LintNode[] {
+  assertQueryShape(query);
   return nodes.filter((n) => matchesQuery(n, query));
 }

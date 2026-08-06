@@ -23,14 +23,24 @@ export interface ResolvedPageConfig {
 }
 
 /**
- * builtins 는 rule id 단위로 override(페이지가 base 를 덮음), custom 은 페이지가 있으면 페이지로 교체.
+ * builtins·custom 모두 **rule id 단위로** override 한다(페이지가 base 를 덮음).
+ *
+ * ⚠️ 예전엔 custom 을 통째로 교체했다. 그러면 페이지가 규칙 하나만 얹어도 **base 의 나머지
+ * 커스텀 규칙이 그 페이지에서 전부 사라진다** — 응답에 아무 표시가 없어 "규칙이 돌았는데 0건"
+ * 으로 읽힌다. 실사고: 오타 블록리스트를 담은 규칙이 파일 config 에만 있어, 자기 config 를 가진
+ * 페이지들에서 통째로 무효였고 오타 11건이 그대로 통과했다.
+ * id 가 같으면 페이지 쪽이 이기고, base 에만 있는 규칙은 살아남는다.
  */
 export function mergeConfigs(base: LintConfig | null, override: LintConfig | null): LintConfig {
   const b = base || {};
   const o = override || {};
+  const byId = new Map<string, NonNullable<LintConfig['custom']>[number]>();
+  for (const r of b.custom || []) byId.set(r.id, r);
+  for (const r of o.custom || []) byId.set(r.id, r);
+  const custom = [...byId.values()];
   return {
     builtins: { ...(b.builtins || {}), ...(o.builtins || {}) },
-    custom: o.custom !== undefined ? o.custom : b.custom,
+    custom: custom.length > 0 ? custom : undefined,
   };
 }
 

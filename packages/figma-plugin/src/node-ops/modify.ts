@@ -92,9 +92,11 @@ const METHOD_SUPPORT_MATRIX: Record<string, Set<string>> = {
     'setFills', 'setSolidFill', 'setEffects',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
-  // GROUP: 가장 제한적 (크기는 자식에 의해 결정, fills 미지원)
+  // GROUP: 가장 제한적 (크기는 자식에 의해 결정 → resize 불가, fills 미지원).
+  // move 는 된다 — x/y 대입이 자식을 함께 옮긴다. 예전엔 목록에 없어 거부됐고, 그래서
+  // 그룹을 옮기려면 해제(ungroup) 후 자식을 일괄 이동하는 우회를 매번 했다.
   GROUP: new Set([
-    'rename', 'setOpacity', 'setVisible', 'setLocked', 'remove',
+    'rename', 'move', 'setOpacity', 'setVisible', 'setLocked', 'remove',
     'setRotation', 'setLayoutAlign', 'setLayoutGrow', 'setLayoutPositioning', 'setMask',
     'setPluginData', 'getPluginData', 'getPluginDataKeys', 'setSharedPluginData', 'getSharedPluginData',
   ]),
@@ -238,10 +240,14 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
     },
   },
   resize: {
-    description: '노드 크기 변경. args: { width: number, height: number }',
+    description: '노드 크기 변경. args: { width?: number, height?: number } — 한쪽만 주면 나머지는 유지',
     handler: (node, args) => {
-      const w = toNum(args.width, 'width');
-      const h = toNum(args.height, 'height');
+      // 한쪽만 주면 나머지는 현재 값을 유지한다. 예전엔 둘 다 필수라 "높이만 줄이기" 가
+      // 에러로 거부됐는데, 응답을 확인하지 않으면 적용된 줄 알고 넘어가기 쉬웠다.
+      const curW = 'width' in node ? (node as unknown as { width: number }).width : undefined;
+      const curH = 'height' in node ? (node as unknown as { height: number }).height : undefined;
+      const w = args.width === undefined && curW !== undefined ? curW : toNum(args.width, 'width');
+      const h = args.height === undefined && curH !== undefined ? curH : toNum(args.height, 'height');
       const safeW = Math.max(w, 0.01);
       const safeH = Math.max(h, 0.01);
       // SectionNode는 resize() 메서드가 없고 width/height 직접 설정

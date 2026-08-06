@@ -2664,6 +2664,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
       properties: {
         alias: { type: 'string', description: '삭제할 컴포넌트 alias' },
         namespace: { type: 'string', description: '(선택) 네임스페이스 — alias가 여러 네임스페이스에 있으면 필수' },
+        deleteNode: { type: 'boolean', description: '(선택) true 면 Figma 마스터 컴포넌트 노드까지 함께 삭제. 기본 false(레지스트리만 — 마스터는 마스터 페이지에 남는다). ⚠️ 삭제 전 그 스펙의 인스턴스가 0인지 확인하세요' },
       },
       required: ['alias'],
     },
@@ -3135,9 +3136,9 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 **config 출처 (3순위):** inline \`config\` 객체 > \`configPath\` 파일 > 문서 노드에 저장된 \`lint\`(sigma_set_page_data, pageId:"document").
 
 **config 모드 (configMode):**
-- \`uniform\`(기본): 위 base config 하나로 전 대상 일괄. base 필수.
-- \`per-page\`: 각 페이지에 저장된 lint config(sigma_set_page_data, key:"lint")로 각각. 저장 없으면 base 폴백, base도 없으면 그 페이지 skip(명시).
-- \`merge\`: base + 페이지 저장 config 병합(페이지가 builtins 를 rule 단위로 override). 문서=base + 페이지=override 패턴.
+- \`merge\`(기본): base + 페이지 저장 config 병합. **builtins·custom 모두 rule id 단위로** 페이지가 override 하고, base 에만 있는 규칙은 살아남는다. 문서=base + 페이지=override 패턴.
+- \`per-page\`: 각 페이지에 저장된 lint config(sigma_set_page_data, key:"lint")로 각각(base 는 안 섞임). 저장 없으면 base 폴백, base도 없으면 그 페이지 skip(명시).
+- \`uniform\`: base config 하나로 전 대상 일괄. **페이지 저장 config 를 무시**한다 — 페이지가 끈 규칙까지 되살아나므로 의도할 때만 명시. base 필수.
 
 페이지 저장 config 는 sigma_set_page_data({ key:"lint", value }) 로, 문서 base 는 pageId:"document" 로 저장합니다.
 
@@ -3149,7 +3150,7 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         configPath: { type: 'string', description: '(선택) 검사 규칙 JSON 파일 경로. config/configPath/문서저장 중 하나로 base 제공(uniform은 base 필수)' },
         config: { type: 'object', description: '(선택) inline LintConfig 객체. configPath 대신 직접 전달(우선순위 최상)' },
         scope: { type: 'string', enum: ['page', 'file'], description: '(선택) page(기본, 바인딩 1페이지) | file(전 페이지 순회, md 리포트)' },
-        configMode: { type: 'string', enum: ['uniform', 'per-page', 'merge'], description: '(선택) uniform(기본) | per-page(페이지 저장 config) | merge(base+override)' },
+        configMode: { type: 'string', enum: ['uniform', 'per-page', 'merge'], description: '(선택) merge(기본, base+페이지 저장 config 를 rule id 단위 병합) | per-page(페이지 저장 config 만) | uniform(base 만 — 페이지 저장 config 무시)' },
         nodeId: { type: 'string', description: '(선택, scope=page) 검사 시작 노드. 미지정 시 페이지 전체' },
         path: { type: 'string', description: '(선택, scope=page) 검사 시작 경로 ("A/B/C")' },
         apply: { type: 'boolean', description: '(선택, scope=page) true 면 빌트인 안전수정 실제 적용. 기본 false(dry-run). file 범위에선 무시(read-only)' },
