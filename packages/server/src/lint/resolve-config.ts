@@ -3,7 +3,7 @@
  * scope=file / configMode(uniform|per-page|merge) 조합에서 각 페이지에 적용할
  * LintConfig 를 결정한다. 저장 config 는 페이지/문서 노드의 sharedPluginData("sigma","lint").
  */
-import type { LintConfig } from '@sigma/shared';
+import type { LintConfig } from '@sigma/shared/lint';
 import { validateLintConfigShape, LintConfigError } from './load-config.js';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
 

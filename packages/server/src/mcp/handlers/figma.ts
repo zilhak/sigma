@@ -1,5 +1,6 @@
 import type { ComponentSpecRecord, ExtractedNode } from '@sigma/shared';
-import { queryNodes, type NodeQuery, type TreeNode } from '@sigma/shared';
+import type { TreeNode } from '@sigma/shared';
+import { queryNodes, type NodeQuery } from '@sigma/shared/lint';
 import { resolveSpec } from '../spec-resolve.js';
 import { buildLintNodes, collectNodeIds, type NodeInfoLike } from '../../lint/enrich.js';
 import * as storage from '../../storage/index.js';

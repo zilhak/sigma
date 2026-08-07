@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./extractor": "./src/extractor/index.ts"
+    "./extractor": "./src/extractor/index.ts",
+    "./lint": "./src/lint/index.ts"
   },
   "scripts": {
     "build": "bun run build.ts",

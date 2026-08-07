@@ -679,7 +679,7 @@ packages/
     │   │   ├── visibility.ts  # 가시성 판정
     │   │   ├── utils.ts       # 공통 유틸
     │   │   └── index.ts
-    │   ├── lint/              # Lint 엔진 (순수 함수, 유닛테스트)
+    │   ├── lint/              # Lint 엔진 (순수 함수, 유닛테스트) — @sigma/shared/lint 서브패스로만 노출
     │   │   ├── engine.ts      # 규칙 실행/집계 + 자동수정 계획
     │   │   ├── types.ts       # LintConfig, BuiltinRuleId 등
     │   │   ├── geometric.ts   # 기하 8종 (좌표 기반)

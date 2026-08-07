@@ -5,7 +5,7 @@
  */
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
-import type { LintConfig } from '@sigma/shared';
+import type { LintConfig } from '@sigma/shared/lint';
 
 export class LintConfigError extends Error {}
 

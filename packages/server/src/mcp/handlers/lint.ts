@@ -1,9 +1,10 @@
+import type { TreeNode } from '@sigma/shared';
 import {
   runBuiltinRules, collectFixableViolations, mergeFixesBySection, runMatchRule, isEnabled,
   fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule, annotationMarkerGapRule, fontNotDefaultRule,
   type InstanceResizedConfig, type AnnotationMarkerPairConfig, type AnnotationMarkerGapConfig, type FontNotDefaultConfig,
-  type TreeNode, type Violation, type LintConfig, type LayoutFix,
-} from '@sigma/shared';
+  type Violation, type LintConfig, type LayoutFix,
+} from '@sigma/shared/lint';
 import { validateFigmaAccess, jsonResponse, type ToolContext, type ToolResult } from '../helpers.js';
 import { loadLintConfig, validateLintConfigShape, LintConfigError } from '../../lint/load-config.js';
 import { buildLintNodes, collectNodeIds, type BuildLintNodesResult, type NodeInfoLike } from '../../lint/enrich.js';

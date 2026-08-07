@@ -8,7 +8,7 @@
  *   { "rules": ["raw_node"], "reason": …}  → 지정 룰 + 의도(reason) 기록
  *   { "rules": "all", "reason": … }        → 모든 룰 + 의도
  */
-import type { Violation } from '@sigma/shared';
+import type { Violation } from '@sigma/shared/lint';
 
 export interface LintIgnore {
   all: boolean;

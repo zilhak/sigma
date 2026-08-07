@@ -9,7 +9,7 @@ import { describe, test, expect } from 'bun:test';
 import { mergeConfigs, resolvePageConfig, readStoredConfig } from '../src/lint/resolve-config';
 import { validateLintConfigShape, LintConfigError } from '../src/lint/load-config';
 import { renderReportMarkdown, type PageLintResult } from '../src/lint/report';
-import type { Violation } from '@sigma/shared';
+import type { Violation } from '@sigma/shared/lint';
 
 // wsServer.getPageData 만 쓰는 최소 스텁 (page → 저장 raw 매핑)
 function stubServer(store: Record<string, string | null>) {

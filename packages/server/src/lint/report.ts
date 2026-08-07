@@ -5,7 +5,7 @@
  */
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
-import type { Violation } from '@sigma/shared';
+import type { Violation } from '@sigma/shared/lint';
 import { toHostPath, REPORTS_DIR } from '../storage/index.js';
 import type { ConfigSource, ConfigMode } from './resolve-config.js';
 

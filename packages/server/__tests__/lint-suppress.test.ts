@@ -5,7 +5,7 @@
  */
 import { describe, test, expect } from 'bun:test';
 import { parseLintIgnore, isSuppressed, filterSuppressed, collectSubjectNodeIds } from '../src/lint/suppress';
-import type { Violation } from '@sigma/shared';
+import type { Violation } from '@sigma/shared/lint';
 
 const v = (rule: string, nodeId: string): Violation => ({ rule, source: 'builtin', message: `${rule} @ ${nodeId}`, nodes: [nodeId] });
 

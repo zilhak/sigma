@@ -10,7 +10,7 @@
  * 데이터**(LintNode) 위에서만 동작한다 — 문서를 직접 변형할 수 없다(§1 read-only 결정).
  */
 import { Worker } from 'node:worker_threads';
-import type { LintNode, PredicateRule, Violation } from '@sigma/shared';
+import type { LintNode, PredicateRule, Violation } from '@sigma/shared/lint';
 
 const DEFAULT_TIMEOUT_MS = 2000;
 

@@ -3,7 +3,8 @@
  * LintNode[] 와 관계 맵(ctx.getSiblings 등)을 만든다. 빌트인 규칙은 TreeNode만으로 충분하므로
  * 이 enrichment는 config.custom 이 있을 때만 호출한다(불필요한 왕복 방지).
  */
-import { flattenTree, buildRelationMaps, type TreeNode, type LintNode } from '@sigma/shared';
+import type { TreeNode } from '@sigma/shared';
+import { flattenTree, buildRelationMaps, type LintNode } from '@sigma/shared/lint';
 import type { CtxRelations } from './run-custom-rule';
 
 /** GET_NODES_INFO 명령이 WS 왕복으로 돌려주는 항목 — 플러그인의 NodeDetailInfo를
