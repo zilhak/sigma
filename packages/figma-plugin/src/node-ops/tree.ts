@@ -65,8 +65,18 @@ export interface SerializeContext {
   currentDepth: number;
   maxDepth: number;  // -1 means infinite
   filter?: TreeFilter;
+  /** 매칭 노드를 **서브트리째 제외**(블랙리스트 prune). SVG 산물 VECTOR 빼기 등 */
+  omit?: TreeFilter;
+  /** 매칭 노드를 남기고 조상은 뼈대만 유지. 매칭 없는 가지는 제거 */
+  keep?: TreeFilter;
   limit?: number;
   nodeCount: { value: number };  // mutable counter
+  /**
+   * keep 모드에서 "매칭은 아니지만 경로 유지를 위해 남긴" 뼈대 노드 수.
+   * ⚠️ 뼈대를 nodeCount 에 같이 세면 뼈대가 limit 을 먹고 truncated 가 거짓말을 한다 —
+   * limit/truncated 는 **매칭 노드 기준**이어야 의미가 있다.
+   */
+  skeletonCount?: { value: number };
   parentPath: string;
   /** 'geometry' 면 좌표에 필요한 것만 싣는다(fullPath·meta 생략, absolute 추가). 기본 'all' */
   fields?: TreeFields;
@@ -89,27 +99,17 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     return null;
   }
 
-  // 타입 필터 적용
-  if (ctx.filter?.types && ctx.filter.types.length > 0) {
-    if (!ctx.filter.types.includes(node.type)) {
-      return null;
-    }
-  }
+  // omit: 매칭하면 서브트리째 제외 (블랙리스트 prune)
+  if (ctx.omit && matchesSelector(node, ctx.omit)) return null;
 
-  // 이름 필터 적용 (정규식)
-  if (ctx.filter?.namePattern) {
-    try {
-      const regex = new RegExp(ctx.filter.namePattern);
-      if (!regex.test(node.name)) {
-        return null;
-      }
-    } catch {
-      // 정규식 오류 시 무시
-    }
-  }
+  // filter(레거시): 매칭하지 **않으면** 서브트리째 제외 (화이트리스트 prune)
+  if (ctx.filter && !matchesSelector(node, ctx.filter)) return null;
 
-  // 노드 카운트 증가
-  ctx.nodeCount.value++;
+  // keep: 매칭 노드만 결과에 센다. 비매칭 노드는 자식이 살아남을 때만 뼈대로 남는다(아래 후처리).
+  const keepMatched = ctx.keep ? matchesSelector(node, ctx.keep) : true;
+
+  // 노드 카운트 증가 — 뼈대는 세지 않는다(limit/truncated 는 매칭 노드 기준)
+  if (keepMatched) ctx.nodeCount.value++;
 
   // 전체 경로 계산
   const fullPath = ctx.parentPath
@@ -141,7 +141,7 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     };
     if (abs) geoNode.absolute = { x: abs.x, y: abs.y };
     attachChildren(node, geoNode, ctx, fullPath, hasChildren);
-    return geoNode;
+    return finalizeKeep(geoNode, keepMatched, ctx);
   }
 
   // meta 정보 구성
@@ -204,6 +204,31 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
 
   attachChildren(node, treeNode, ctx, fullPath, hasChildren);
 
+  return finalizeKeep(treeNode, keepMatched, ctx);
+}
+
+/** types(OR) + namePattern(AND) 매칭. 정규식 오류는 무시한다(종전 동작 유지). */
+function matchesSelector(node: SceneNode, sel: TreeFilter): boolean {
+  if (sel.types && sel.types.length > 0 && !sel.types.includes(node.type)) return false;
+  if (sel.namePattern) {
+    try {
+      if (!new RegExp(sel.namePattern).test(node.name)) return false;
+    } catch {
+      // 정규식 오류 시 이름 조건은 없는 것으로 본다
+    }
+  }
+  return true;
+}
+
+/**
+ * keep 모드 후처리 — **post-order**. 자식을 먼저 직렬화한 뒤,
+ * 자신이 매칭이거나 살아남은 자식이 있으면 유지하고 아니면 버린다.
+ * 매칭이 아닌데 남은 노드가 "뼈대" 다(경로를 보여주기 위한 것).
+ */
+function finalizeKeep(treeNode: TreeNode, keepMatched: boolean, ctx: SerializeContext): TreeNode | null {
+  if (!ctx.keep || keepMatched) return treeNode;
+  if (!treeNode.children || treeNode.children.length === 0) return null;
+  if (ctx.skeletonCount) ctx.skeletonCount.value++;
   return treeNode;
 }
 
@@ -302,12 +327,19 @@ export function getTreeWithFilter(options: {
   path?: string | string[];
   depth?: number | string;
   filter?: TreeFilter;
+  omit?: TreeFilter;
+  keep?: TreeFilter;
   limit?: number;
   pageId?: string;
   fields?: TreeFields;
   /** 'all' 모드에서도 절대좌표를 싣는다(컨테이너를 넘나드는 거리 계산용). */
   includeAbsolute?: boolean;
 }): GetTreeResult {
+  // filter(레거시 화이트리스트 prune)와 omit/keep 은 의미가 겹쳐 섞으면 결과를 예측할 수 없다.
+  // 조용히 한쪽을 무시하면 "인자를 줬는데 아무 일도 안 일어남" 계열이 되므로 거부한다.
+  if (options.filter && (options.omit || options.keep)) {
+    throw new Error('filter 는 omit/keep 과 함께 쓸 수 없습니다 — filter 는 "매칭하지 않는 노드를 서브트리째 제외"(화이트리스트 prune)라 의미가 겹칩니다. 자르려면 omit, 깊은 곳의 특정 노드만 보려면 keep 을 쓰세요');
+  }
   // maxDepth 결정 (-1 또는 "full"은 무한, 기본값 1)
   let maxDepth = 1;
   if (options.depth === 'full' || options.depth === -1) {
@@ -348,6 +380,7 @@ export function getTreeWithFilter(options: {
 
   // 탐색 및 직렬화
   const nodeCount = { value: 0 };
+  const skeletonCount = { value: 0 };
   const children: TreeNode[] = [];
   const effectiveLimit = options.limit !== undefined ? options.limit : 1000;  // 기본 limit 1000
 
@@ -363,8 +396,11 @@ export function getTreeWithFilter(options: {
       currentDepth: 0,
       maxDepth,
       filter: options.filter,
+      omit: options.omit,
+      keep: options.keep,
       limit: effectiveLimit,
       nodeCount,
+      skeletonCount,
       parentPath: rootPath || '',
       fields: options.fields,
       includeAbsolute: options.includeAbsolute,
@@ -397,5 +433,7 @@ export function getTreeWithFilter(options: {
     children,
     truncated: nodeCount.value >= effectiveLimit,
     totalCount: nodeCount.value,
+    // keep 을 쓴 호출만 — 매칭 노드(totalCount)와 경로 유지용 뼈대를 구분해 준다.
+    ...(options.keep ? { skeletonCount: skeletonCount.value } : {}),
   };
 }

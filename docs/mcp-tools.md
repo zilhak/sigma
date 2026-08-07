@@ -132,7 +132,7 @@ config 하나로 빌트인 규칙 24종(기본 ON 15종 = 기하 8 + 구조/이�
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_find_node` | 경로/이름 검색, 또는 `where`로 속성 조건 검색 | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
-| `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `filter`, `limit`, `fields` |
+| `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `omit`(자르기), `keep`(남기기), `filter`(레거시), `limit`, `fields` |
 | `sigma_get_node_info` | 노드 상세 정보 (TEXT 는 `hyperlinks` 포함 — 링크 배선 검증용) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 일괄 조회 | `token`, `nodeIds` | — |
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지) | `token` | — |
@@ -146,6 +146,27 @@ config 하나로 빌트인 규칙 24종(기본 ON 15종 = 기하 8 + 구조/이�
 | `sigma_scan_nodes_by_types` | 하위 특정 타입 노드 스캔 | `token`, `nodeId`, `types` | — |
 | `sigma_list_fonts` | 사용 가능 폰트 목록 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
+
+### sigma_get_tree 의 세 모드 — 전체 / 자르기(`omit`) / 남기기(`keep`)
+
+| 모드 | 인자 | 동작 | 쓰임 |
+|---|---|---|---|
+| 전체 | (없음) | 전부 | 기본 |
+| 자르기 | `omit.types` · `omit.namePattern` | 매칭 노드 + **그 서브트리** 제외 | SVG 산물 VECTOR 빼기, 인스턴스 내부 통째로 빼기 |
+| 남기기 | `keep.types` · `keep.namePattern` | 매칭 노드를 남기고 **조상은 뼈대만**. 매칭 없는 가지는 제거 | 깊은 곳의 TEXT·마커를 계층째 보기 |
+
+- 둘은 함께 쓸 수 있다 (`omit` 먼저 적용 → 남은 것에 `keep`).
+- **`filter` 는 레거시다.** 이름과 달리 "거르기"가 아니라 매칭하지 **않는** 노드를 서브트리째
+  잘라내는 화이트리스트 prune 이라, `filter.types:["TEXT"]` 가 오류 없이 0건이 된다
+  (TEXT 의 부모가 먼저 잘림). 동작은 호환을 위해 그대로 뒀다.
+- **`filter` 와 `omit`/`keep` 동시 지정은 거부**한다 — 조용히 한쪽을 무시하면
+  "인자를 줬는데 아무 일도 안 일어남" 이 된다.
+- `keep` 의 `totalCount` 는 **매칭 노드만** 세고, 뼈대는 `skeletonCount` 로 따로 온다.
+  뼈대를 같이 세면 뼈대가 `limit` 을 먹어 `truncated` 가 거짓말을 한다.
+- `keep` 은 **플러그인 순회 비용을 줄이지 않는다**(전부 돌아야 매칭을 안다). 줄어드는 것은
+  전송량과 호출자 컨텍스트다.
+
+배경: [`docs/history/008-get-tree-filter-was-a-prune.md`](history/008-get-tree-filter-was-a-prune.md)
 
 ### sigma_get_tree 의 `fields` — 좌표 전용 축약
 

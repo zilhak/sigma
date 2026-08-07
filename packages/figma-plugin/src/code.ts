@@ -638,6 +638,8 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           path: msg.path as string | string[] | undefined,
           depth: msg.depth as number | string | undefined,
           filter: msg.filter as TreeFilter | undefined,
+          omit: msg.omit as TreeFilter | undefined,
+          keep: msg.keep as TreeFilter | undefined,
           limit: msg.limit as number | undefined,
           pageId: msg.pageId as string | undefined,
           fields: msg.fields as 'all' | 'geometry' | undefined,

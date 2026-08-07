@@ -357,6 +357,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const path = args.path as string | string[] | undefined;
     const depth = args.depth as number | 'full' | undefined;
     const filter = args.filter as { types?: string[]; namePattern?: string } | undefined;
+    // omit = 매칭 노드를 서브트리째 자르기 / keep = 매칭 노드만 계층째 남기기.
+    // filter(레거시 화이트리스트 prune)와의 상호배타 검증은 플러그인에서 한다(내부 호출 경로도 덮으려고).
+    const omit = args.omit as { types?: string[]; namePattern?: string } | undefined;
+    const keep = args.keep as { types?: string[]; namePattern?: string } | undefined;
     const limit = args.limit as number | undefined;
     // 좌표 전용 축약 응답. 잘못된 값은 무시하고 기본('all')로 — 조용히 필드가 빠지는 것보다 안전하다.
     const fields = args.fields === 'geometry' ? 'geometry' as const : undefined;
@@ -388,7 +392,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     try {
       const result = await wsServer.getTree(
-        { nodeId, path, depth, filter, limit, pageId, fields, includeAbsolute },
+        { nodeId, path, depth, filter, omit, keep, limit, pageId, fields, includeAbsolute },
         pluginId
       );
       return jsonResponse(result);

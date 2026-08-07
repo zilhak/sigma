@@ -287,7 +287,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
 | `sigma_find_node` | 경로/이름으로 노드 검색, 또는 `where`로 속성 조건 검색 (예: width>1000 전부) | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
-| `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `filter`, `limit`, `fields` |
+| `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `omit`(자르기), `keep`(남기기), `filter`(레거시), `limit`, `fields` |
 | `sigma_get_node_info` | 노드 상세 정보 조회 (fills, strokes, text, layout — TEXT 는 `hyperlinks` 포함) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 정보 일괄 조회 | `token`, `nodeIds` | — |
 | `sigma_get_document_info` | 문서 정보 (파일명, 페이지 목록) | `token` | — |
@@ -302,6 +302,8 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_list_fonts` | 사용 가능한 폰트 목록 조회 | `token` | — |
 | `sigma_get_css` | 노드의 CSS 속성 추출 | `token`, `nodeId` | — |
 
+> **`sigma_get_tree` 의 세 모드 (전체 / `omit` / `keep`)**: `omit` = 매칭 노드를 **서브트리째 자르기**(SVG 산물 VECTOR 빼기 등) · `keep` = 매칭 노드를 남기고 **조상은 뼈대만** 유지(깊은 곳의 TEXT·마커를 계층째 보기). 둘은 함께 쓸 수 있다(`omit` 먼저). **`filter` 는 레거시** — 이름과 달리 "거르기"가 아니라 매칭하지 **않는** 노드를 서브트리째 자르는 화이트리스트 prune 이라, `filter.types:["TEXT"]` 가 오류 없이 0건이 된다(부모가 먼저 잘림). `filter` 와 `omit`/`keep` 동시 지정은 **거부**한다. `keep` 의 `totalCount` 는 **매칭 노드만** 세고 뼈대는 `skeletonCount` 로 따로 온다(뼈대가 limit 을 먹으면 `truncated` 가 거짓말을 한다). `keep` 은 순회 비용을 줄이지 않는다 — 줄어드는 것은 전송량과 호출자 컨텍스트다.
+>
 > **`sigma_get_tree` 의 `fields` (좌표 전용 축약)**: `all`(기본)은 노드마다 `fullPath` + `meta`(visible·locked·layoutMode·characters(≤100자)·layoutSizing·description)를 함께 싣는다. `fields:"geometry"` 는 이 둘을 빼고 `id·name·type·boundingBox·childCount·children` + **`absolute`**(페이지 절대좌표 좌상단)만 준다 — 위치 보정처럼 좌표만 필요한 작업에서 payload 를 줄이기 위함.
 > - **좌표계 분업**: `boundingBox` 는 **직속 부모 로컬좌표**(섹션도 자식 원점을 새로 잡는다) → 실제 수정(`modify_node` move/resize)은 이 값으로. `absolute` 는 페이지 절대좌표 → 다른 컨테이너에 든 노드끼리 겹침·거리 판단은 이 값으로. 로컬좌표끼리 비교하면 오판한다.
 >

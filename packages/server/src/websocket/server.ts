@@ -694,6 +694,10 @@ export class FigmaWebSocketServer {
       path?: string | string[];
       depth?: number | 'full';
       filter?: { types?: string[]; namePattern?: string };
+      /** 매칭 노드를 서브트리째 제외(블랙리스트 prune) */
+      omit?: { types?: string[]; namePattern?: string };
+      /** 매칭 노드를 남기고 조상은 뼈대만 유지 */
+      keep?: { types?: string[]; namePattern?: string };
       limit?: number;
       pageId?: string;
       timeoutMs?: number;
@@ -713,12 +717,15 @@ export class FigmaWebSocketServer {
     children: unknown[];
     truncated?: boolean;
     totalCount?: number;
+    skeletonCount?: number;
   }> {
     return this.sendCommand('GET_TREE', {
       nodeId: options.nodeId,
       path: options.path,
       depth: options.depth,
       filter: options.filter,
+      omit: options.omit,
+      keep: options.keep,
       limit: options.limit,
       pageId: options.pageId,
       fields: options.fields,

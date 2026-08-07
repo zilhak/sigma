@@ -204,6 +204,20 @@ export type WebSocketMessage =
  */
 export type TreeFields = 'all' | 'geometry';
 
+/**
+ * 노드 선택 조건. `filter`(레거시) / `omit` / `keep` 이 같은 모양을 쓴다 —
+ * **의미는 셋이 다르다**:
+ *
+ * | 인자 | 동작 |
+ * |---|---|
+ * | `filter` | 매칭하지 **않는** 노드를 서브트리째 제외 (화이트리스트 prune, 이름과 달리 "거르기"가 아니다) |
+ * | `omit` | 매칭하는 노드를 서브트리째 제외 (블랙리스트 prune) |
+ * | `keep` | 매칭 노드를 남기고 조상은 뼈대로 유지, 매칭 없는 가지는 제거 |
+ *
+ * `filter.types:['TEXT']` 가 오류 없이 0건을 돌려주던 것이 `keep` 을 만든 이유다 —
+ * TEXT 는 언제나 FRAME 밑에 있는데 그 부모가 먼저 잘렸다.
+ * 배경: docs/history/008-get-tree-filter-was-a-prune.md
+ */
 export interface TreeFilter {
   /** 허용할 노드 타입 (예: ['FRAME', 'SECTION']) */
   types?: string[];
@@ -281,6 +295,8 @@ export interface GetTreeResult {
   children: TreeNode[];
   /** limit에 의해 결과가 잘렸는지 */
   truncated?: boolean;
-  /** 총 탐색된 노드 수 */
+  /** 총 탐색된 노드 수 (keep 모드에선 **매칭 노드만** — 뼈대는 skeletonCount 로 따로 센다) */
   totalCount?: number;
+  /** keep 모드에서 경로를 보여주려고 남긴 비매칭 조상 수 */
+  skeletonCount?: number;
 }

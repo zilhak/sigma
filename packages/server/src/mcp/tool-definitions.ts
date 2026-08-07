@@ -553,22 +553,38 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
         },
         filter: {
           type: 'object',
-          description: '필터 조건',
+          description: '⚠️ 레거시 — 매칭하지 **않는** 노드를 서브트리째 제외합니다(화이트리스트 prune). 이름과 달리 "거르기"가 아닙니다: filter.types:["TEXT"] 는 TEXT 의 부모가 먼저 잘려 오류 없이 0건이 됩니다. 자르려면 omit, 깊은 곳의 특정 타입만 보려면 keep 을 쓰세요. omit/keep 과 함께 쓸 수 없습니다',
           properties: {
             types: {
               type: 'array',
               items: { type: 'string' },
-              description: '허용할 노드 타입 (예: ["FRAME", "SECTION"])',
+              description: '이 타입이 아니면 서브트리째 제외 (예: ["FRAME", "SECTION"])',
             },
             namePattern: {
               type: 'string',
-              description: '이름 정규식 패턴 (예: "Button.*")',
+              description: '이름 정규식. 매칭하지 않으면 서브트리째 제외 (예: "Button.*")',
             },
+          },
+        },
+        omit: {
+          type: 'object',
+          description: '**자르기** — 매칭하는 노드를 서브트리째 제외합니다. SVG 임포트 산물 VECTOR 빼기(omit:{types:["VECTOR"]}), 인스턴스 내부 통째로 빼기 등. 화이트리스트와 달리 남길 타입을 전부 열거할 필요가 없습니다',
+          properties: {
+            types: { type: 'array', items: { type: 'string' }, description: '제외할 노드 타입 (예: ["VECTOR"])' },
+            namePattern: { type: 'string', description: '제외할 이름 정규식' },
+          },
+        },
+        keep: {
+          type: 'object',
+          description: '**남기기** — 매칭 노드를 남기고 그 조상은 뼈대로 유지, 매칭 없는 가지는 제거합니다. "이 서브트리 어디에 있든 마커만 계층째로" 같은 조회용. 응답의 totalCount 는 매칭 노드만 세고, 뼈대는 skeletonCount 로 따로 옵니다. ⚠️ 플러그인 순회 비용은 줄지 않습니다(전부 돌아야 매칭을 압니다) — 줄어드는 것은 전송량과 호출자 컨텍스트입니다',
+          properties: {
+            types: { type: 'array', items: { type: 'string' }, description: '남길 노드 타입 (예: ["TEXT"])' },
+            namePattern: { type: 'string', description: '남길 이름 정규식 (예: "^marker$")' },
           },
         },
         limit: {
           type: 'number',
-          description: '최대 노드 수 (기본 1000)',
+          description: '최대 노드 수 (기본 1000). keep 모드에선 **매칭 노드** 기준으로 셉니다',
         },
         fields: {
           type: 'string',

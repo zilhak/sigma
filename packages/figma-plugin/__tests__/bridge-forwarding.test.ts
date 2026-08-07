@@ -74,7 +74,7 @@ describe('UI 브리지 인자 전달', () => {
 
   test('get-tree 가 옵션 필드를 전부 전달한다 (같은 버그의 첫 사례)', () => {
     const body = caseBody(readSource('code.ts'), 'get-tree');
-    for (const f of ['nodeId', 'path', 'depth', 'filter', 'limit', 'pageId', 'fields', 'includeAbsolute']) {
+    for (const f of ['nodeId', 'path', 'depth', 'filter', 'omit', 'keep', 'limit', 'pageId', 'fields', 'includeAbsolute']) {
       expect(body).toContain(`msg.${f}`);
     }
   });
