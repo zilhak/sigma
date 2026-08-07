@@ -1893,7 +1893,13 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     try {
       const cloneResult = await wsServer.cloneNode(
         cloneNodeId,
-        { parentId: cloneParentId, position: clonePosition, name: cloneName },
+        {
+          parentId: cloneParentId, position: clonePosition, name: cloneName,
+          includeChildIdMap: args.includeChildIdMap as boolean | undefined,
+          includeNames: args.includeNames as boolean | undefined,
+          childIdMapLimit: args.childIdMapLimit as number | undefined,
+          rewireInternalLinks: args.rewireInternalLinks as boolean | undefined,
+        },
         pluginId
       );
       return jsonResponse({

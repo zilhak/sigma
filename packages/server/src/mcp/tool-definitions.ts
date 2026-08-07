@@ -825,6 +825,12 @@ Section은 Figma의 조직화 컨테이너입니다. Frame과 달리 Auto Layout
 복제된 노드는 기본적으로 원본과 같은 부모에 생성됩니다.
 parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 좌표를 지정할 수 있습니다.
 
+**복제의 함정 (알고 부르세요):**
+- **자식 id 는 전부 새로 부여됩니다.** 복제본 내부를 고치려면 응답의 \`childIdMap\`(원본 자식 id → 복제 자식 id)을 쓰세요 — \`sigma_get_tree\` 재조회는 불필요하고, 서브트리가 크면 응답 한도를 넘깁니다.
+- **내부 하이퍼링크는 원본을 계속 가리킵니다.** 마커↔범례처럼 서로를 노드 id 로 가리키는 링크는 복제되면 **원본으로 튀는데 렌더 결과가 같아 육안으로 발견되지 않습니다.** 응답의 \`hyperlinks.internalPointingToSource\` 로 알리며, \`rewireInternalLinks:true\` 로 복제본 내부에 다시 연결할 수 있습니다.
+- 클론은 Figma 가 열린 페이지에 붙이므로, parentId 미지정 시 원본과 같은 부모로 되돌립니다(구현됨).
+- GROUP 은 \`sigma_modify_node\` 의 \`move\` 로 옮길 수 있지만 \`resize\` 는 지원하지 않습니다.
+
 **사용 예시:**
 - 같은 위치에 복제: sigma_clone_node({ nodeId: "1:234" })
 - 다른 부모로 복제: sigma_clone_node({ nodeId: "1:234", parentId: "5:678" })
@@ -857,6 +863,22 @@ parentId를 지정하면 다른 부모로 복제할 수 있고, position으로 �
         name: {
           type: 'string',
           description: '복제된 노드의 이름 (선택, 미지정 시 원본 이름 유지)',
+        },
+        includeChildIdMap: {
+          type: 'boolean',
+          description: '(선택, 기본 true) 응답에 `childIdMap`(원본 자식 id → 복제 자식 id)을 싣습니다. 이게 있으면 복제본 내부를 고치려고 sigma_get_tree 를 다시 부를 필요가 없습니다',
+        },
+        includeNames: {
+          type: 'boolean',
+          description: '(선택, 기본 false) `childIdMap` 값에 이름·타입까지 포함 — 어느 셀인지 이름으로 골라야 할 때',
+        },
+        childIdMapLimit: {
+          type: 'number',
+          description: '(선택, 기본 2000) 매핑 상한. 넘으면 `childIdMapTruncated: true` 를 명시합니다(조용히 자르지 않음)',
+        },
+        rewireInternalLinks: {
+          type: 'boolean',
+          description: '(선택, 기본 false) 복제본 안에서 원본을 가리키게 된 내부 하이퍼링크를 복제본 내부로 다시 연결. 기본은 경고만(`hyperlinks.internalPointingToSource`) — "원본을 참조하는 복제본"이 의도인 경우가 있어 판단을 남깁니다',
         },
       },
       required: ['token', 'nodeId'],

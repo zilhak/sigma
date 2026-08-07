@@ -78,6 +78,14 @@ describe('UI 브리지 인자 전달', () => {
       expect(body).toContain(`msg.${f}`);
     }
   });
+
+  test('clone-node 가 옵션 필드를 전부 전달한다', () => {
+    const optionFields = interfaceFields(readSource('node-ops/move.ts'), 'CloneNodeOptions');
+    const body = caseBody(readSource('code.ts'), 'clone-node');
+    const dropped = optionFields.filter((f) => !new RegExp(`msg\\.${f}\\b`).test(body));
+    expect(dropped).toEqual([]);
+    expect(optionFields).toContain('childIdMapLimit');
+  });
 });
 
 describe('브리지 명시 case 는 늘어나면 안 된다', () => {

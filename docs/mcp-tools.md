@@ -63,7 +63,7 @@ sigma_login → sigma_list_plugins → sigma_bind → [작업 도구들] → sig
 | `sigma_delete_frame` | 프레임 삭제 | `token`, `nodeId` | — |
 | `sigma_batch_delete` | 여러 노드 일괄 삭제 | `token`, `nodeIds` | — |
 | `sigma_move_node` | 다른 부모로 이동 (reparent). 원점 성격이 다른 부모(섹션↔프레임)로 옮겨 절대 위치가 튀면 응답에 `coordinateShift`(복원용 `restoreLocal` 좌표) 포함 | `token`, `nodeId`, `parentId` | `index` |
-| `sigma_clone_node` | 노드 복제 | `token`, `nodeId` | `parentId`, `position`, `name` |
+| `sigma_clone_node` | 노드 복제 (응답에 `childIdMap` = 원본자식id→복제자식id, 내부 하이퍼링크 경고) | `token`, `nodeId` | `parentId`, `position`, `name`, `includeChildIdMap`, `includeNames`, `childIdMapLimit`, `rewireInternalLinks` |
 | `sigma_set_multiple_text_contents` | 여러 텍스트 일괄 변경 | `token`, `items` | — |
 | `sigma_group_nodes` | 그룹으로 묶기 | `token`, `nodeIds` | `name` |
 | `sigma_ungroup` | 그룹 해제 | `token`, `nodeId` | — |

@@ -749,7 +749,13 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           msg.nodeId as string,
           msg.parentId as string | undefined,
           msg.position as { x: number; y: number } | undefined,
-          msg.name as string | undefined
+          msg.name as string | undefined,
+          {
+            includeChildIdMap: msg.includeChildIdMap as boolean | undefined,
+            includeNames: msg.includeNames as boolean | undefined,
+            childIdMapLimit: msg.childIdMapLimit as number | undefined,
+            rewireInternalLinks: msg.rewireInternalLinks as boolean | undefined,
+          }
         );
         sendResult('clone-node-result', result);
       } catch (error) {

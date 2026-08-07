@@ -900,14 +900,22 @@ export class FigmaWebSocketServer {
       parentId?: string;
       position?: { x: number; y: number };
       name?: string;
+      includeChildIdMap?: boolean;
+      includeNames?: boolean;
+      childIdMapLimit?: number;
+      rewireInternalLinks?: boolean;
     },
     pluginId?: string
-  ): Promise<{ nodeId: string; name: string; type: string; x: number; y: number; width: number; height: number; parentId: string | null; parentName: string | null; sourceNodeId: string }> {
+  ): Promise<Record<string, unknown>> {
     return this.sendCommand('CLONE_NODE', {
       nodeId,
       parentId: options?.parentId,
       position: options?.position,
       name: options?.name,
+      includeChildIdMap: options?.includeChildIdMap,
+      includeNames: options?.includeNames,
+      childIdMapLimit: options?.childIdMapLimit,
+      rewireInternalLinks: options?.rewireInternalLinks,
     }, {
       pluginId,
       logSuffix: ` (source: ${nodeId})`,
