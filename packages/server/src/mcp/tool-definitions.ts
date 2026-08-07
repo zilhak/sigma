@@ -3097,16 +3097,18 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   // === Lint (빌트인 카탈로그 + 커스텀 규칙) ===
   {
     name: 'sigma_lint',
-    description: `**config 파일에 정의된 규칙으로 문서를 검사**하고, 안전한 것만 자동수정합니다. **바인딩 필수**.
+    description: `**config 에 정의된 규칙으로 문서를 검사**하고, 안전한 것만 자동수정합니다. **바인딩 필수**.
 
-**base config 는 inline \`config\` / \`configPath\` / 문서 저장값 중 하나로 제공**합니다(아래 "config 출처" 참조). Figma 파일마다 다른 규칙을 쓸 수 있어, 서버는 config를 저장하지 않고 매 호출 시 지정된 것을 그대로 읽습니다. \`configPath\` 는 **서버 자신의 파일시스템 기준**이라, Docker로 배포했다면 컨테이너에 보이는 경로(보통 바인드 마운트된 \`~/.sigma\` 하위)여야 합니다 — 프로젝트 저장소 경로는 컨테이너 안에서 안 보입니다.
+배치/resize 후 회귀 검사하는 습관을 권장합니다 — 컨테이너를 키우면 형제를 덮기 쉽습니다.
+
+**base config 는 inline \`config\` / \`configPath\` / 문서 저장값 중 하나로 제공**합니다(우선순위 그대로). Figma 파일마다 다른 규칙을 쓸 수 있어, 서버는 config를 저장하지 않고 매 호출 시 지정된 것을 그대로 읽습니다. \`configPath\` 는 **서버 자신의 파일시스템 기준**이라, Docker로 배포했다면 컨테이너에 보이는 경로(보통 바인드 마운트된 \`~/.sigma\` 하위)여야 합니다 — 프로젝트 저장소 경로는 컨테이너 안에서 안 보입니다.
 
 **config 스키마**:
 \`\`\`jsonc
 {
   "builtins": {
-    // 아래 규칙 id. 대부분 생략하면 기본 ON(opt-out). 값은 { enabled?: boolean, ...파라미터 }
-    // 예외: raw_node 만 opt-in(기본 OFF) — { "enabled": true } 로 켜야 실행됨.
+    // 아래 규칙 id. 값은 { enabled?: boolean, ...파라미터 }
+    // 기본 ON(opt-out) 15종은 생략하면 켜짐. opt-in 9종은 { "enabled": true } 로 켜야 실행됨.
     "section_gap": { "gap": 80 },
     "frame_padding": { "enabled": false },
     "raw_node": { "enabled": true }
@@ -3115,13 +3117,13 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     // (a) JSON 선언적 — 필드 등가/범위/정규식/열거/존재 검사만. 이 이상은 (b)로.
     { "id": "card-radius-12", "select": { "type": "FRAME", "namePattern": "Card" },
       "check": { "op": "equals", "field": "cornerRadius", "value": 12 } },
-    // (b) JS 프레디케이트 — 관계형(형제/조상)·임의 로직. 서버 Worker에서 격리 실행(타임아웃 기본 2000ms).
-    { "id": "modal-needs-overlay", "kind": "predicate",
-      "code": "export default function(node, ctx) {\\n  if (node.type !== 'FRAME' || !node.name.startsWith('Modal/')) return null;\\n  if (!ctx.getSiblings(node.id).some(s => s.name === 'Overlay')) return { message: node.name + ' 옆에 Overlay 형제가 없음' };\\n  return null;\\n}" }
+    // (b) JS 프레디케이트 — 관계형(형제/조상)·임의 로직. 서버 Worker 격리 실행(타임아웃 기본 2000ms).
+    { "id": "modal-needs-overlay", "kind": "predicate", "code": "export default function(node, ctx) { ... }" }
   ],
   // 문서(document) 저장 config 에서만 의미 있음 — lint 검사가 아니라 **컴포넌트 스펙 등록 정책**이다.
   // sigma_create_component_spec 의 등록/overwrite 시 걸리면 응답에 policyWarnings(경고만, 거부 아님).
-  // 조건: aliasPattern(이름) · htmlPattern(스펙 HTML 내용) — 함께 쓰면 AND. unlessDescription 에 걸리면 면제.
+  // 조건: aliasPattern(이름) · htmlPattern(스펙 HTML 내용) — 최소 하나 필수, 함께 쓰면 AND.
+  // unlessDescription 에 걸리면 면제.
   "componentSpec": { "warn": [
     { "aliasPattern": "^table$", "message": "테이블은 wire/table 프리셋을 쓰세요" },
     { "aliasPattern": "^btn_", "message": "버튼은 ui_button 권장", "namespace": "design" },
@@ -3132,39 +3134,37 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 }
 \`\`\`
 
-**빌트인 규칙 24개**:
-- 기하 8종(좌표, sigma_layout_lint 시절과 동일): \`outside_section\`(섹션 밖 배치 노드) · \`section_overlap\`(형제 섹션 겹침) · \`section_gap\`(형제 섹션 간격 부족, 기본 80px — 섹션 라벨이 경계를 가림) · \`card_overlap\`(섹션 안 카드끼리 겹침) · \`frame_padding\`(섹션 안 프레임 여백 부족, 기본 20px) · \`instance_orphan\`(래퍼 없이 뜬 INSTANCE) · \`component_needs_frame\`(섹션 직속 COMPONENT/GROUP) · \`child_overflow\`(자식이 로컬좌표 기준 부모 밖).
-- 구조/이름/가시성 6종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 Figma 기본 이름 방치) · \`empty_container\`(자식 없는 FRAME/GROUP — 단 fill 로 내용을 그리는 이미지 프레임 등은 제외) · \`hidden_leaf\`(visible:false 로 트리에 잔존) · \`fill_sizing_orphan\`(layoutSizing이 FILL인데 부모가 오토레이아웃 아님 — 무효 상태) · \`component_description_empty\`(COMPONENT/COMPONENT_SET의 description 비어있음).
-- occlusion 1종: \`fully_occluded_sibling\`(같은 부모 안에서 나중에 그려지는 형제가 불투명 SOLID fill로 완전히 덮어 절대 안 보임 — 켜져 있으면 fills/opacity 조회를 위해 get_nodes_info 왕복이 추가됨).
-- 컴포넌트 강제 1종 **(opt-in, 기본 OFF)**: \`raw_node\`(화면 조립 레이어에서 등록 컴포넌트의 INSTANCE 가 아니라 raw 도형/프레임으로 그린 노드를 전수 검출 — "쓰는 건 전부 사전 정의" 정책 강제). 파라미터: \`types\`(대상 노드 타입, 기본 \`["FRAME","RECTANGLE","ELLIPSE","VECTOR","LINE","POLYGON","STAR"]\` — TEXT/GROUP/SECTION/INSTANCE/COMPONENT 비대상) · \`checkInsideComponent\`(COMPONENT 정의 내부의 raw 요소까지 검사, 기본 false) · \`exemptNamePattern\`(정규식 매칭 이름 제외, 기획 킷/주석 등). **INSTANCE 내부 노드는 항상 제외**(정의의 사본이라 독립 저작 대상 아님). strict 정책이라 켜는 파일만 적용하도록 opt-in.
-- 기획 레이어 강제 1종 **(opt-in, 기본 OFF)**: \`annotation_layer\`(섹션마다 pluginData \`role="annotation-layer"\` 로 태깅된 기획 레이어 프레임이 직속 자식으로 **반드시** 있어야 함 — 없으면 위반). 레이어는 \`sigma_create_annotation_layer\` 로 생성(투명 프레임, 이름이 아니라 pluginData 로 판정). **이 규칙을 켜면**(=계약 opt-in) 태깅된 레이어는 \`card_overlap\`/\`frame_padding\`/\`child_overflow\`/\`instance_orphan\` 에서 **자동 면제**된다(디자인 위에 겹쳐 덮는 투명 오버레이라 기하 검사 무의미). 즉 면제 혜택은 "모든 섹션에 레이어" 강제를 받아들이는 대가로 주어진다. 페이지 config 로 적용 범위를 조절.
-- 찾기 쉬움 2종 **(opt-in, 기본 OFF, 페이지 루트 전용)**: \`content_spread\`(최상위 노드를 \`maxGap\`(기본 3000px) 이내로 이어지는 덩어리로 묶어, 본진 밖에 홀로 떨어진 이상치를 검출 — 이런 노드 하나가 zoom-to-fit 범위를 삼켜 "페이지를 열었는데 내용을 못 찾는" 상태를 만든다. 숨김 노드 제외) · \`origin_anchor\`(최상위 SECTION 이 있는 페이지는 그 중 하나가 원점(0,0) \`tolerance\`(기본 100px) 이내에서 시작해야 함 — 좌표 규약 고정용, 위반은 페이지당 1건이고 주체는 원점에 가장 가까운 섹션). **둘 다 \`nodeId\`/\`path\` 로 서브트리를 검사할 땐 실행되지 않는다**(그 트리는 부모 로컬좌표라 원점·거리 판정이 무의미). 자동수정 없음.
-- 인스턴스 이름 강제 1종 **(opt-in, 기본 OFF)**: \`instance_default_name\`(\`default_name\` 의 인스턴스 판 — INSTANCE 이름이 **마스터 컴포넌트 이름 그대로**면 고유 이름 미부여로 보고 위반). 마스터명은 TreeNode 에 없어 서버가 \`get_nodes_info\` 의 \`componentName\` 을 resolve 해 판정(규칙 ON 일 때만 1왕복). **중첩 인스턴스(다른 INSTANCE 내부)는 제외**(정의의 사본). 실화면엔 마스터명 유지 인스턴스가 흔해 기본 ON 이면 폭주 → strict 네이밍 원하는 파일만 opt-in.
-- 스펙 인스턴스 크기 1종 **(opt-in, 기본 OFF)**: \`instance_resized_from_spec\`(**작은 스펙 인스턴스를 배 이상 늘려 컨테이너 대용으로 쓴 것**). 스펙 마스터는 HTML 을 고정 크기 자식 트리로 구운 것이라 상자만 커지고 **안쪽은 제자리에 남는다** — 16×16 체크박스를 48×42 표 칸으로 늘려 쓰다가 선택 상태로 바꾸는 순간 칸 전체가 색 덩어리가 된 사례. ⚠️ **크기 차이 자체는 잡지 않는다**(실측: 표는 열 너비 때문에 셀을 늘리고 줄이는 게 정상 사용이라 한 페이지에서만 2220건). 줄임의 실제 피해(자식 넘침)는 \`child_overflow\` 가 이미 잡으므로 기본 대상이 아니다(\`flagShrink\` 로 원인 이름까지 듣고 싶을 때만). 파라미터: \`growthRatio\`(기본 2) · \`smallMaster\`(기본 64px — 원래 큰 요소를 늘린 건 의도로 본다) · \`flagShrink\`(기본 false) · \`tolerance\`(기본 0.5px). 마스터 크기·스펙 alias 는 TreeNode 에 없어 서버가 \`get_nodes_info\` 로 resolve(규칙 ON 일 때만 1왕복).
-- 기획 주석 짝 검사 1종 **(opt-in, 기본 OFF)**: \`annotation_marker_pair\`(기획 레이어 안에서 **마커 ↔ 범례가 1:1 이고 서로 왕복 하이퍼링크가 걸려 있는지**). 결번(설명 없는 마커)·유령(가리키는 곳 없는 범례)·중복 번호·링크 누락을 잡는다 — 마커를 빼고 재번호하다 어긋나기 쉬운데 눈으로는 번호를 하나씩 세어야만 보이고, 링크는 화면에 표시가 없어 빠뜨려도 티가 안 난다. 짝은 **기획 레이어 단위**로 맞춘다(한 페이지에 섹션이 여럿이면 ① 번 마커도 여럿이라 페이지 전체로 묶으면 전부 중복이 된다). 판정은 이름이 아니라 **스펙 alias + 인스턴스 안 번호 글자 + 실제 하이퍼링크 데이터**다. 파라미터: \`markerAlias\`(기본 \`marker\`) · \`legendAlias\`(기본 \`legend\`) · \`requireHyperlink\`(기본 true) · \`symbolPattern\`(기본 원문자 숫자 한 글자 — ㉑(U+3251)은 ①(U+2460)과 연속이 아니라 범위를 나눠 넣었다).
-- 폰트 일관성 1종 **(opt-in, 기본 OFF)**: \`font_not_default\`(이 파일이 정한 기본 폰트와 **다른 폰트를 쓰는 TEXT**). 기대 패밀리는 문서 노드 \`fonts.default\` 에서 읽는다(\`family\` 로 override 가능) — **설정이 없으면 판정하지 않는다**(기준 없이 전부 위반으로 만들지 않는다). 파일 기본 폰트는 새로 만들 때만 적용되므로 설정 이전에 만든 텍스트는 그대로 남는다 — 스펙 마스터는 재등록으로 바뀌어도 화면에 직접 그린 raw TEXT 는 옛 폰트가 남는데, 그걸 찾는 일이 지금까지 사람이 섹션마다 훑는 것이었다(\`scope:"file"\` 한 번이면 된다). 한 텍스트 안에 폰트가 섞인 경우(figma.mixed)도 잡는다(\`flagMixed\`, 기본 true). 파라미터: \`family\` · \`allow\`(함께 허용할 패밀리, 예: 코드용 고정폭) · \`flagMixed\`. 의도한 예외는 노드 lint-ignore 로 사유와 함께 면제.
-- 기획 주석 거리 1종 **(opt-in, 기본 OFF)**: \`annotation_marker_gap\`(마커가 가리키려는 대상을 **덮고 있거나**, 너무 **멀리 떠 있거나**, 주변에 **가리킬 것이 아예 없는** 경우). 규약은 "대상 경계에서 4~10px, 12px 초과 금지, 겹침 금지" 인데 지금까지 기계 백스톱이 없었다 — 한 화면에서 마커 14개가 전부 대상 위에 얹혀 있던 적이 있고, 반대로 그리지도 않은 위젯을 가리키는 마커가 빈 공간에 찍혀 있던 적도 있다. **절대좌표가 필요하므로 이 규칙이 켜졌을 때만** 서버가 get_tree 를 \`includeAbsolute\` 로 부른다(payload 를 그때만 치른다) — 마커는 기획 레이어 안에 있고 대상은 상태 프레임 깊숙한 곳이라 부모 로컬좌표로는 애초에 비교가 안 된다. 대상 후보는 **원자적 노드만**(자식 없는 leaf + INSTANCE) — 상태 프레임 같은 큰 컨테이너를 후보에 넣으면 마커는 언제나 그 위에 있어 전부 겹침이 된다. 파라미터: \`maxGap\`(기본 12) · \`orphanRadius\`(기본 240) · \`markerAlias\`(기본 \`marker\`). 영역을 가리키는 마커처럼 일부러 먼 것은 노드 lint-ignore 로 면제.
+**빌트인 규칙 24개** — 각 룰의 검사 내용·파라미터·기본값·오탐 한계는 저장소 문서 \`docs/lint/rules/<id>.md\` 에 있습니다(인덱스: \`docs/lint/rules/README.md\`). 여기서는 id 와 한 줄 요약만 싣습니다.
+
+기본 ON (opt-out) 15종:
+- 기하 8종(좌표): \`outside_section\`(섹션 밖 배치 노드) · \`section_overlap\`(형제 섹션 겹침) · \`section_gap\`(형제 섹션 간격 부족) · \`card_overlap\`(섹션 안 카드끼리 겹침) · \`frame_padding\`(섹션 안 프레임 여백 부족, **자동수정 있음**) · \`instance_orphan\`(래퍼 없이 뜬 INSTANCE) · \`component_needs_frame\`(섹션 직속 COMPONENT/GROUP) · \`child_overflow\`(자식이 로컬좌표 기준 부모 밖, **자동수정 있음**).
+- 구조/이름/가시성 6종: \`stray_pixel\`(비정수 좌표/크기) · \`default_name\`("Rectangle 123" 류 기본 이름) · \`empty_container\`(자식 없는 FRAME/GROUP — fill 로 그리는 이미지 프레임은 제외) · \`hidden_leaf\`(visible:false 잔존) · \`fill_sizing_orphan\`(FILL 인데 부모가 오토레이아웃 아님) · \`component_description_empty\`(COMPONENT description 비어있음).
+- occlusion 1종: \`fully_occluded_sibling\`(불투명 형제에 완전히 덮여 절대 안 보임 — **켜져 있으면 get_nodes_info 왕복 1회 추가**).
+
+opt-in (기본 OFF, \`{ "enabled": true }\` 필요) 9종 — 파라미터는 룰 문서 참조:
+- \`raw_node\`(등록 컴포넌트 대신 raw 도형으로 그린 노드 — "쓰는 건 전부 사전 정의" 정책)
+- \`annotation_layer\`(섹션마다 기획 레이어 필수. **켜면 그 레이어가 겹침/여백/오버플로우/orphan 에서 자동 면제** — 면제는 강제를 받아들이는 대가다. 생성은 sigma_create_annotation_layer, 판정은 이름이 아니라 pluginData)
+- \`instance_default_name\`(INSTANCE 이름이 마스터명 그대로 — **get_nodes_info 왕복 1회**)
+- \`content_spread\`(본진에서 떨어진 이상치 — zoom-to-fit 을 삼켜 "내용을 못 찾는" 원인) · \`origin_anchor\`(최상위 섹션 중 하나는 원점 근처에서 시작). **둘 다 페이지 루트 전용** — nodeId/path 서브트리 검사에선 실행되지 않습니다(부모 로컬좌표라 원점·거리 판정이 무의미).
+- \`instance_resized_from_spec\`(작은 스펙 인스턴스를 배 이상 늘려 컨테이너 대용으로 쓴 것 — 상자만 커지고 안쪽은 제자리에 남는다. 크기 차이 자체는 안 잡음. **get_nodes_info 왕복 1회**)
+- \`annotation_marker_pair\`(기획 레이어 안 마커↔범례 1:1 + 왕복 하이퍼링크)
+- \`annotation_marker_gap\`(마커가 대상을 덮거나 멀리 떠 있거나 가리킬 게 없음. **켜졌을 때만 get_tree 를 includeAbsolute 로 호출**)
+- \`font_not_default\`(파일 기본 폰트와 다른 TEXT. 기대 패밀리는 문서 \`fonts.default\` 에서 읽고 **설정이 없으면 판정하지 않음**)
 
 **JSON \`check.op\`**: \`equals | range(min/max) | regex(pattern) | oneOf(values) | exists\` — 5개뿐이며 더 늘리지 않습니다(새 언어 발명 방지). 형제/조상 조회나 유도값 계산이 필요하면 \`kind:"predicate"\`를 쓰세요.
 
-**predicate 계약**: \`code\`는 \`export default function(node, ctx) { ... }\` 형태만 허용. \`node\`는 id/name/type/x/y/width/height/childCount + fills/strokes/cornerRadius/fontSize 등 상세 필드. \`ctx.getSiblings/getAncestors/getChildren(nodeId)\`로 관계 조회. 위반이면 \`{ message }\` 반환, 통과면 \`null\`. **read-only** — 커스텀 규칙은 fix를 가질 수 없습니다(문서를 직접 변형 못 함). 타임아웃/예외는 해당 규칙만 에러로 기록되고 나머지는 계속 진행됩니다.
+**predicate 계약**: \`code\`는 \`export default function(node, ctx) { ... }\` 형태만 허용. \`ctx.getSiblings/getAncestors/getChildren(nodeId)\`로 관계 조회. 위반이면 \`{ message }\`, 통과면 \`null\`. **read-only** — 커스텀 규칙은 fix 를 가질 수 없습니다. 타임아웃/예외는 해당 규칙만 에러로 기록되고 나머지는 계속 진행됩니다.
 
-**apply**: 기본 false(dry-run, 위반 목록 + 수정 계획만 반환). true 면 **빌트인 안전수정(섹션 확장, grow container)만** 실제 적용 — section_overlap/instance_orphan/outside_section 및 모든 커스텀 규칙은 재배치·수동 판단이 필요해 보고만 합니다. 적용 후 자동 회귀 검사 결과(after)를 반환합니다.
+**apply**: 기본 false(dry-run, 위반 목록 + 수정 계획만 반환). true 면 **빌트인 안전수정(섹션/컨테이너 확장)만** 실제 적용 — 겹침·orphan 등 재배치가 필요한 것과 모든 커스텀 규칙은 보고만 합니다. 적용 후 자동 회귀 검사 결과(after)를 반환합니다.
 
-배치/resize 후 이 도구로 회귀 검사하는 습관을 권장합니다.
+**검사 범위 (scope)**: \`page\`(기본, 바인딩된 페이지 1개, \`apply\` 지원) | \`file\`(전 페이지 순회, read-only). file 은 결과를 **markdown 리포트 파일**로 \`~/.sigma/lint-reports/\` 에 떨구고 응답엔 페이지별 요약 + \`reportPath\` 만 반환합니다(위반이 수백 건일 수 있어 인라인 금지). 서버 자동정리(7일/100MB) 대상.
 
-**검사 범위 (scope):**
-- \`page\`(기본): 바인딩된 페이지 1개. \`apply\` 자동수정 지원.
-- \`file\`: 파일의 전 페이지 순회(read-only). 결과를 **markdown 리포트 파일**로 떨구고 응답엔 페이지별 요약 + 리포트 경로만 반환(위반이 수백 건일 수 있어 인라인 금지). 리포트는 \`~/.sigma/lint-reports/\` 에 저장되고 서버 자동정리(7일/100MB) 대상.
+**config 모드 (configMode)**:
+- \`merge\`(기본): base + 페이지 저장 config 병합. **builtins·custom 모두 rule id 단위로** 페이지가 override 하고, base 에만 있는 규칙은 살아남습니다.
+- \`per-page\`: 각 페이지 저장 config 로 각각(base 안 섞임). 없으면 base 폴백, base 도 없으면 그 페이지 skip(명시).
+- \`uniform\`: base 하나로 일괄. **페이지 저장 config 를 무시**합니다 — 페이지가 끈 규칙까지 되살아나므로 의도할 때만 명시. base 필수.
 
-**config 출처 (3순위):** inline \`config\` 객체 > \`configPath\` 파일 > 문서 노드에 저장된 \`lint\`(sigma_set_page_data, pageId:"document").
-
-**config 모드 (configMode):**
-- \`merge\`(기본): base + 페이지 저장 config 병합. **builtins·custom 모두 rule id 단위로** 페이지가 override 하고, base 에만 있는 규칙은 살아남는다. 문서=base + 페이지=override 패턴.
-- \`per-page\`: 각 페이지에 저장된 lint config(sigma_set_page_data, key:"lint")로 각각(base 는 안 섞임). 저장 없으면 base 폴백, base도 없으면 그 페이지 skip(명시).
-- \`uniform\`: base config 하나로 전 대상 일괄. **페이지 저장 config 를 무시**한다 — 페이지가 끈 규칙까지 되살아나므로 의도할 때만 명시. base 필수.
-
-페이지 저장 config 는 sigma_set_page_data({ key:"lint", value }) 로, 문서 base 는 pageId:"document" 로 저장합니다.
+페이지 저장 config 는 sigma_set_page_data({ key:"lint", value }) 로, 문서 base 는 pageId:"document" 로 저장합니다. 노드 하나만 면제하려면 sigma_set_node_data 의 \`lint-ignore\`(응답에 suppressed 건수 표기).
 
 **완전성**: lint 는 트리를 \`treeNodeLimit\`(기본 200000) 노드까지 전수 순회합니다(get_tree 인터랙티브 기본 1000과 다름 — lint 는 부분 스캔을 clean 으로 오보하면 안 되므로). 상한에 걸리면 응답에 \`scanTruncated: true\` + \`scannedNodes\` + \`scanWarning\` 을 싣고 \`clean\` 을 false 로 강제합니다(그 페이지는 \`treeNodeLimit\` 을 올리거나 \`nodeId\` 스코프로 섹션별로 나눠 재검사).`,
     inputSchema: {
