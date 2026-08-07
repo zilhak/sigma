@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.20
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # 타입체크는 4패키지 전부. server 는 build 스크립트가 없어
+      # build 단계로는 검증되지 않으므로 이 스텝이 서버의 유일한 정적 검증이다.
+      - name: Typecheck
+        run: bun run typecheck
+
+      # docs-consistency.test.ts 가 여기서 돈다 — 룰/도구가 문서에서 빠진 채
+      # 병합되는 것을 막는 장치(커밋 158adcc). 그 커밋은 "CI 에서 잡는다"고 했지만
+      # 정작 CI 가 없어서 아무도 돌리지 않고 있었다.
+      - name: Test
+        run: bun test
+
+      # shared / figma-plugin / chrome-extension 번들. 빌드가 깨진 채 병합되는 것을 막는다.
+      - name: Build
+        run: bun run build
+
+      # Figma 샌드박스는 esbuild 가 lowering 하지 못한 문법을 실행하지 못한다.
+      # build.ts 안에도 같은 검사가 있지만(assertSandboxBundleIsLowered),
+      # 여기서 한 번 더 보는 것은 빌드 스크립트가 바뀌어도 계약이 남게 하기 위함이다.
+      - name: Assert plugin bundle has no un-lowered syntax
+        run: |
+          if grep -q '??' packages/figma-plugin/dist/code.js; then
+            echo "::error::dist/code.js 에 '??' 가 남아 있습니다 (Figma 샌드박스에서 깨질 수 있음)"
+            exit 1
+          fi
