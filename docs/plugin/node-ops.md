@@ -108,7 +108,7 @@ Agent가 보내는 값을 정규화하는 유틸리티 함수들:
 
 ### parentId 지원
 
-모든 생성 함수는 `parentId` 옵션을 받습니다. 지정하면 해당 노드의 자식으로 생성되고, 미지정이면 현재 페이지의 루트에 생성됩니다.
+모든 생성 함수는 `parentId` 옵션을 받습니다. 지정하면 해당 노드의 자식으로 생성되고, 미지정이면 **바인딩된 페이지**(`getTargetPage(pageId)`)의 루트에 생성됩니다 — `figma.currentPage`가 아닙니다. `figma.createX()`가 노드를 활성 page에 자동 append 하더라도 `placeNode()`가 대상 페이지로 다시 옮깁니다(`node-ops/create.ts:19-33`).
 
 ---
 

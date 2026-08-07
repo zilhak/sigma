@@ -42,8 +42,7 @@ createFrameFromJSON(node, name, position, pageId)
   │    ├── SVG → createNodeFromSvg
   │    ├── 이미지 → Rectangle + imageFill
   │    └── pseudo-element → 텍스트/이미지
-  ├── 레이아웃 적용 (Flexbox / Grid)
-  └── lastCreatedFrame 업데이트
+  └── 레이아웃 적용 (Flexbox / Grid)
 ```
 
 ### HTML → Figma
@@ -75,20 +74,24 @@ updateExistingFrame(nodeId, format, data, name)
 
 ## 자동 배치 (frame.ts)
 
-`position`이 지정되지 않으면 자동으로 위치를 계산합니다:
+`position`이 지정되지 않으면 `getAutoPosition()`이 **대상 페이지의 현재 내용만 보고** 위치를 계산합니다:
 
 ```
-1. 이전에 생성한 프레임이 있음?
-   → 오른쪽에 100px 간격으로 배치 (가로 나열)
+1. 페이지에 노드가 있음?
+   → x = 0, y = (기존 노드들의 최대 y+height) + 200
+     (항상 세로로 아래에 쌓인다 — 가로 나열은 하지 않는다)
 
-2. 페이지에 기존 프레임이 있음?
-   → 전체 bounding box 아래 200px에 배치
-
-3. 빈 페이지?
+2. 빈 페이지?
    → (0, 0)
 ```
 
-`lastCreatedFrame`은 마지막 생성 프레임의 `{ x, y, width, height }`를 추적하며, `reset-position` 메시지로 초기화할 수 있습니다.
+**전역 상태를 쓰지 않는 것이 의도된 설계입니다.** 과거에는 "마지막으로 생성한 프레임"을 전역
+(`lastCreatedFrame`)으로 기억해 그 오른쪽에 놓았지만, 여러 에이전트가 같은 파일에서 동시에
+작업하면 서로의 값을 덮어써 배치가 뒤엉킵니다. 그래서 제거하고 **매 호출마다 페이지를 스캔**하는
+방식으로 바꿨습니다 (`CLAUDE.md` §멀티에이전트 동시 작업의 "금지 패턴" 참조).
+
+그 결과 자동 배치는 **호출 시점의 페이지 내용에 의존**합니다 — 좌표를 확정해야 하면 `position`을
+명시하세요.
 
 ---
 

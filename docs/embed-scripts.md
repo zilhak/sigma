@@ -94,13 +94,24 @@ Storybook에서 story를 탐색하고, SPA 방식으로 전환하며, 추출+서
 | 메서드 | 실행 위치 | 설명 | 반환 |
 |--------|-----------|------|------|
 | `getStories(baseUrl?)` | 메인 프레임 | story 목록 조회 | `Story[]` |
-| `navigateToStory(storyId, options?)` | 메인 프레임 | SPA story 전환 + 렌더링 대기 | `void` |
-| `waitForStoryRendered(timeout?)` | 메인 프레임 | 렌더링 완료 대기 | `void` |
+| `navigateToStory(storyId, options?)` | 메인 프레임 | SPA story 전환 + 렌더링 대기 | `Promise<boolean>` |
+| `waitForStoryRendered(timeout?)` | 메인 프레임 | 렌더링 완료 대기 | `Promise<boolean>` |
 | `extractStory(selector?)` | iframe | ExtractedNode 추출 | `ExtractedNode` |
-| `extractAndSave(name, serverUrl?, selector?)` | iframe | 추출 + 서버 저장, ID 반환 | `string` |
+| `extractAndSave(name, serverUrl?, selector?)` | iframe | 추출 + 서버 저장 | `Promise<SaveResult>` |
 | `getStoryRoot()` | iframe | story 루트 요소 | `Element` |
 | `getCurrentStoryId()` | 메인 프레임 | 현재 story ID | `string` |
 | `getStoryIframeUrl(storyId, baseUrl?)` | 메인 프레임 | story iframe URL 생성 | `string` |
+
+> **`SaveResult`는 문자열이 아닙니다** (`src/storybook/core.ts:125-129`):
+> ```ts
+> { success: boolean; id?: string; error?: string }
+> ```
+> 저장 ID는 `result.id`로 꺼냅니다. `sigma_import_saved(token, id)`에 반환값을 통째로 넘기면
+> 객체가 전달돼 실패합니다. **`result.success === false`를 먼저 확인하고 `result.error`를 읽으세요** —
+> 이걸 건너뛰면 저장 실패가 조용히 넘어갑니다.
+>
+> `navigateToStory`/`waitForStoryRendered`의 `boolean`도 같은 성격입니다. `false`는 렌더링 대기가
+> 시간 안에 끝나지 않았다는 뜻이므로, 그 상태로 추출하면 빈 결과가 나옵니다.
 
 ### 사용 패턴 (SPA 방식 필수)
 
@@ -126,13 +137,16 @@ for (const story of stories) {
 
   // iframe에서 추출 + 서버 저장
   const iframe = page.frameLocator('#storybook-preview-iframe');
-  // iframe에 extractor inject 필요
-  const savedId = await iframe.evaluate(() =>
+  // iframe에는 storybook.standalone.js 만 inject 하면 된다 —
+  // 이 번들은 추출기(extractElement)를 안에 품고 있어 자기완결적이다 (core.ts:9).
+  // (대조: diff.standalone.js 는 extractor.standalone.js 선행 로드가 필요하다)
+  const saved = await iframe.evaluate(() =>
     window.__sigma_storybook__.extractAndSave('ComponentName')
   );
+  if (!saved.success) throw new Error(saved.error);
 
   // Figma에 임포트
-  // sigma_import_saved(token, savedId)
+  // sigma_import_saved(token, saved.id)
 }
 ```
 

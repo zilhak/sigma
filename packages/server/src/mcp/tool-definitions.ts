@@ -177,8 +177,8 @@ sigma_bind에서 사용할 pageId를 여기서 확인하세요.`,
 - html: 인라인 스타일 HTML. 스타일 손실 가능성 있음
 
 **position 안내:**
-position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
-특정 위치에 배치하고 싶으면 position을 명시하세요.`,
+position을 생략하면 자동 배치됩니다 (바인딩된 페이지의 기존 내용 맨 아래에서 200px 아래, x는 항상 0. 빈 페이지면 (0, 0)).
+가로로 나란히 놓거나 좌표를 확정해야 하면 position을 명시하세요 — 자동 배치는 호출 시점의 페이지 내용을 기준으로 계산하므로 동시 작업 중에는 값이 달라질 수 있습니다.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -230,8 +230,8 @@ position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100p
 바인딩된 페이지에 프레임이 생성됩니다.
 
 **position 안내:**
-position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
-특정 위치에 배치하고 싶으면 position을 명시하세요.`,
+position을 생략하면 자동 배치됩니다 (바인딩된 페이지의 기존 내용 맨 아래에서 200px 아래, x는 항상 0. 빈 페이지면 (0, 0)).
+가로로 나란히 놓거나 좌표를 확정해야 하면 position을 명시하세요 — 자동 배치는 호출 시점의 페이지 내용을 기준으로 계산하므로 동시 작업 중에는 값이 달라질 수 있습니다.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -1035,8 +1035,8 @@ Figma exportAsync → Crop(선택) → mode별 처리 → Save
 JSON은 저장 후 가져오기, HTML은 저장 없이 바로 가져오기.
 
 **position 안내:**
-position을 생략하면 자동 배치됩니다 (이전 프레임 오른쪽 100px 간격, 또는 기존 프레임 하단 200px 마진, 빈 페이지면 (0, 0)).
-특정 위치에 배치하고 싶으면 position을 명시하세요.`,
+position을 생략하면 자동 배치됩니다 (바인딩된 페이지의 기존 내용 맨 아래에서 200px 아래, x는 항상 0. 빈 페이지면 (0, 0)).
+가로로 나란히 놓거나 좌표를 확정해야 하면 position을 명시하세요 — 자동 배치는 호출 시점의 페이지 내용을 기준으로 계산하므로 동시 작업 중에는 값이 달라질 수 있습니다.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -1166,7 +1166,7 @@ category로 extracted/screenshots/reports/all 중 대상을 선택할 수 있습
         width: { type: 'number', description: '너비' },
         height: { type: 'number', description: '높이' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 현재 페이지)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fillColor: {
           type: 'object',
           description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -1201,7 +1201,7 @@ category로 extracted/screenshots/reports/all 중 대상을 선택할 수 있습
         y: { type: 'number', description: 'Y 좌표' },
         text: { type: 'string', description: '텍스트 내용' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fontSize: { type: 'number', description: '폰트 크기 (기본 14)' },
         fontFamily: { type: 'string', description: '폰트 패밀리 (기본: 파일 설정 fonts.default, 미설정 시 "Inter")' },
         fontWeight: { type: 'number', description: '폰트 굵기 (100~900, 기본 400). 폰트별 스타일 이름 차이(SemiBold/Semi Bold)는 자동 처리' },
@@ -1254,7 +1254,7 @@ Auto Layout, 패딩, 정렬 등 모든 프레임 옵션을 지원합니다.
         width: { type: 'number', description: '너비' },
         height: { type: 'number', description: '높이' },
         name: { type: 'string', description: '프레임 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fillColor: {
           type: 'object',
           description: '배경 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -1511,7 +1511,7 @@ arcData를 지정하면 반원, 부채꼴, 도넛 등의 호(arc) 형태를 만�
         width: { type: 'number', description: '너비' },
         height: { type: 'number', description: '높이' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fillColor: {
           type: 'object',
           description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -1555,7 +1555,7 @@ pointCount로 꼭짓점 수를 지정합니다 (3=삼각형, 5=오각형, 6=육�
         width: { type: 'number', description: '너비' },
         height: { type: 'number', description: '높이' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fillColor: {
           type: 'object',
           description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -1591,7 +1591,7 @@ pointCount로 꼭짓점 수, innerRadius로 내부 반지름 비율을 조절합
         width: { type: 'number', description: '너비' },
         height: { type: 'number', description: '높이' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fillColor: {
           type: 'object',
           description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -1628,7 +1628,7 @@ strokeColor 미지정 시 검은색(#000) 선이 생성됩니다.`,
         y: { type: 'number', description: 'Y 좌표' },
         length: { type: 'number', description: '선 길이' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         strokeColor: {
           type: 'object',
           description: '선 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 } (기본 검은색)',
@@ -1661,7 +1661,7 @@ data는 SVG path의 d 속성과 동일한 형식입니다.`,
         width: { type: 'number', description: '너비' },
         height: { type: 'number', description: '높이' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         fillColor: {
           type: 'object',
           description: '채우기 색상 { r: 0~1, g: 0~1, b: 0~1, a?: 0~1 }',
@@ -2029,7 +2029,7 @@ base64 인코딩된 이미지 데이터를 받아 Rectangle에 IMAGE fill로 적
         height: { type: 'number', description: '높이' },
         imageData: { type: 'string', description: 'base64 인코딩된 이미지 데이터' },
         name: { type: 'string', description: '노드 이름 (선택)' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
         scaleMode: {
           type: 'string',
           description: '이미지 스케일 모드 (기본 FILL)',
@@ -2103,7 +2103,7 @@ sigma_get_local_components에서 얻은 key를 사용하세요.`,
         componentKey: { type: 'string', description: '컴포넌트 key (sigma_get_local_components에서 확인)' },
         x: { type: 'number', description: 'X 좌표' },
         y: { type: 'number', description: 'Y 좌표' },
-        parentId: { type: 'string', description: '부모 노드 ID (선택)' },
+        parentId: { type: 'string', description: '부모 노드 ID (선택, 미지정 시 바인딩된 페이지의 루트)' },
       },
       required: ['token', 'componentKey', 'x', 'y'],
     },

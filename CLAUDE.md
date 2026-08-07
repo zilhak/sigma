@@ -471,7 +471,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 - `navigateToStory(storyId, options?)` — SPA story 전환 + 렌더링 대기 (메인 프레임)
 - `waitForStoryRendered(timeout?)` — 렌더링 완료 대기
 - `extractStory(selector?)` — ExtractedNode 추출 (iframe)
-- `extractAndSave(name, serverUrl?, selector?)` — 추출 + 서버 저장, ID 반환 (iframe)
+- `extractAndSave(name, serverUrl?, selector?)` — 추출 + 서버 저장, `{success, id?, error?}` 반환 (iframe)
 - `getStoryRoot()` — story 루트 요소 반환
 - `getCurrentStoryId()` — 현재 표시 중인 story ID
 - `getStoryIframeUrl(storyId, baseUrl?)` — story iframe URL 생성
@@ -522,8 +522,8 @@ const data = await page.evaluate(() => window.__sigma__.extract('...'));
 4. getStories() → story 목록 조회
 5. 각 story마다:
    a. navigateToStory(storyId) → SPA 전환
-   b. iframe에 스크립트 inject
-   c. extractAndSave(name) → 서버에 저장 (ID 반환)
+   b. iframe에 storybook 스크립트 inject (extractor 별도 주입 불필요 — 번들이 자기완결적)
+   c. extractAndSave(name) → 서버에 저장 (`{success, id}` 반환 — `success` 확인 후 `id` 사용)
    d. sigma_import_saved(token, id) → Figma에 생성
 ```
 
