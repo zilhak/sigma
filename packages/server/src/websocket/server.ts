@@ -18,6 +18,12 @@ export interface PageInfo {
  */
 interface FigmaFileInfo {
   fileKey: string | null;
+  /**
+   * 파일별 안정 ID (플러그인 root pluginData `sigma-file-id`).
+   * 컴포넌트 스펙 레코드의 `fileId` 와 대조해 "이 스펙이 지금 바인딩된 파일 것인가" 를 판정한다.
+   * 구버전 플러그인은 보내지 않으므로 optional — 없으면 검사를 건너뛴다(막지 않는다).
+   */
+  fileId?: string;
   fileName: string;
   pages: PageInfo[];          // 전체 페이지 목록
   currentPageId: string;      // 현재 열린 페이지
@@ -157,6 +163,7 @@ export class FigmaWebSocketServer {
           if (message.fileKey !== undefined) {
             plugin.fileInfo = {
               fileKey: message.fileKey as string | null,
+              fileId: message.fileId as string | undefined,
               fileName: message.fileName as string,
               pages: (message.pages as PageInfo[]) || [],
               currentPageId: message.pageId as string || message.currentPageId as string,
@@ -178,6 +185,7 @@ export class FigmaWebSocketServer {
         // 파일 정보 업데이트 (페이지 목록 포함)
         plugin.fileInfo = {
           fileKey: message.fileKey as string | null,
+          fileId: message.fileId as string | undefined,
           fileName: message.fileName as string,
           pages: (message.pages as PageInfo[]) || [],
           currentPageId: message.pageId as string || message.currentPageId as string,
@@ -228,6 +236,15 @@ export class FigmaWebSocketServer {
   // Get plugin by ID
   getPluginById(pluginId: string): Plugin | undefined {
     return this.pluginsById.get(pluginId);
+  }
+
+  /**
+   * 그 플러그인이 열고 있는 파일의 안정 ID.
+   * 구버전 플러그인이거나 아직 파일 정보를 못 받았으면 undefined — 호출자는
+   * "확인 불가" 로 다뤄야 한다(다른 파일이라고 단정하지 말 것).
+   */
+  getPluginFileId(pluginId: string): string | undefined {
+    return this.pluginsById.get(pluginId)?.fileInfo?.fileId;
   }
 
   // Get connected Figma plugins info (외부 노출용)

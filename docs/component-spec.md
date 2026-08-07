@@ -14,7 +14,7 @@
        → width/height: 생성 직후 resize (hug 축은 FIXED로 전환 — placeholder 용도)
 수정:  sigma_set_component_spec_instance_props(token, nodeId, props)
        → 기존 인스턴스의 param 재설정 (삭제 후 재생성 불필요, 넘침 시 warnings)
-삭제:  sigma_delete_component_spec(alias, namespace?) → 레지스트리만 삭제 (Figma 노드 유지)
+삭제:  sigma_delete_component_spec(token, alias, namespace?) → 레지스트리만 삭제 (Figma 노드 유지)
 ```
 
 ## 핵심 동작

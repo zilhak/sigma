@@ -172,6 +172,9 @@ export function sendFileInfo() {
   figma.ui.postMessage({
     type: 'file-info',
     fileKey,
+    // 파일 스코프 대조용 안정 ID. 서버는 이 값이 없으면 "어느 파일인지" 를 알 수 없어
+    // 스펙 소유 검사를 할 수 없다 — 배경: docs/history/002-spec-delete-hit-another-file.md
+    fileId: getOrCreateFileId(),
     fileKeySource: source,
     storedFileKey: getStoredFileKey(),
     fileName: figma.root.name,

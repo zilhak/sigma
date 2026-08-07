@@ -2672,15 +2672,17 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
   },
   {
     name: 'sigma_delete_component_spec',
-    description: '레지스트리에서 컴포넌트 스펙을 삭제합니다 (토큰 불필요). Figma의 컴포넌트 노드는 유지됩니다.',
+    description: '레지스트리에서 컴포넌트 스펙을 삭제합니다. Figma의 컴포넌트 노드는 유지됩니다(deleteNode 로 함께 삭제 가능). 레지스트리는 파일을 가로지르므로, 바인딩된 파일이 소유한 스펙만 지울 수 있습니다 — 다른 파일 것이면 거부되고 allowCrossFile 로만 통과합니다.',
     inputSchema: {
       type: 'object' as const,
       properties: {
+        token: { type: 'string', description: '인증 토큰 — 어느 파일에서 지우는지 판정하는 데 쓰입니다' },
         alias: { type: 'string', description: '삭제할 컴포넌트 alias' },
         namespace: { type: 'string', description: '(선택) 네임스페이스 — alias가 여러 네임스페이스에 있으면 필수' },
         deleteNode: { type: 'boolean', description: '(선택) true 면 Figma 마스터 컴포넌트 노드까지 함께 삭제. 기본 false(레지스트리만 — 마스터는 마스터 페이지에 남는다). ⚠️ 삭제 전 그 스펙의 인스턴스가 0인지 확인하세요' },
+        allowCrossFile: { type: 'boolean', description: '(선택) true 면 다른 파일이 소유한 스펙도 삭제. 기본 false(거부). deleteNode 와 함께 쓰면 남의 파일 마스터를 지우려 하므로 특히 주의' },
       },
-      required: ['alias'],
+      required: ['token', 'alias'],
     },
   },
 

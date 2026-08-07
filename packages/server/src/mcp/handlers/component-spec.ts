@@ -434,6 +434,20 @@ export const componentSpecHandlers: Record<
   },
 
   async sigma_delete_component_spec(args, context) {
+    const { wsServer } = context;
+    // 토큰이 필수인 이유는 인증이 아니라 **어느 파일에서 지우는지**를 알기 위해서다.
+    // 레지스트리는 파일을 가로지르므로, 바인딩이 없으면 서버는 대상 파일을 특정할 수 없고
+    // 삭제 명령이 "먼저 연결된 플러그인" 으로 흘러 남의 파일 마스터를 지운다.
+    // 배경: docs/history/002-spec-delete-hit-another-file.md
+    const access = validateFigmaAccess(args.token as string, wsServer);
+    if (access.error) return access.error;
+    const { pluginId } = access;
+    // 타입상 optional 이라 명시적으로 막는다. 여기서 undefined 로 흘려보내면 아래
+    // deleteFrame 이 "첫 번째 플러그인" 폴백을 타서 이 도구가 고치려던 사고가 그대로 재발한다.
+    if (!pluginId) {
+      return jsonResponse({ error: '바인딩된 플러그인을 찾을 수 없습니다 — sigma_bind 후 다시 시도하세요' });
+    }
+
     const alias = args.alias as string;
     if (!alias) {
       return jsonResponse({ error: 'alias는 필수입니다' });
@@ -441,6 +455,21 @@ export const componentSpecHandlers: Record<
     const { record, error } = await resolveSpec(alias, args.namespace as string | undefined);
     if (error) return error;
     const spec = record as ComponentSpecRecord;
+
+    // 소유 파일 대조. 어느 한쪽 fileId 가 없으면(구버전 플러그인 · fileId 이전에 등록된 스펙)
+    // 판정 불가이므로 막지 않는다 — 확인 불가를 위반으로 단정하면 정상 삭제까지 죽는다.
+    const currentFileId = wsServer.getPluginFileId(pluginId);
+    const allowCrossFile = args.allowCrossFile === true;
+    const crossFile = !!spec.fileId && !!currentFileId && spec.fileId !== currentFileId;
+    if (crossFile && !allowCrossFile) {
+      return jsonResponse({
+        error: `"${spec.namespace}/${spec.alias}" 는 ${spec.fileName ? `"${spec.fileName}"` : '다른'} 파일 소유입니다 — 현재 바인딩된 파일에서는 삭제할 수 없습니다`,
+        specFileName: spec.fileName,
+        specFileId: spec.fileId,
+        boundFileId: currentFileId,
+        hint: '그 파일에 바인딩한 뒤 삭제하거나, 의도한 것이면 allowCrossFile:true 를 주세요',
+      });
+    }
 
     // 마스터 노드까지 지운다. 레지스트리만 지우면 마스터가 마스터 페이지에 남아
     // "지웠는데 아직 보인다"가 되고, 두 번에 나눠 부르는 걸 잊기 쉽다.
@@ -450,7 +479,8 @@ export const componentSpecHandlers: Record<
     let nodeNote: string | undefined;
     if (deleteNode && spec.componentNodeId) {
       try {
-        const res = await context.wsServer.deleteFrame(spec.componentNodeId);
+        // pluginId 를 반드시 넘긴다. 빠뜨리면 "먼저 연결된 플러그인" 으로 폴백한다.
+        const res = await wsServer.deleteFrame(spec.componentNodeId, pluginId);
         nodeDeleted = res.deleted;
         nodeNote = res.note;
       } catch (e) {
@@ -462,6 +492,9 @@ export const componentSpecHandlers: Record<
     return jsonResponse({
       success: true,
       componentNodeId: spec.componentNodeId,
+      // 사후에라도 "어느 파일 것을 지웠는지" 가 응답에 남게 한다.
+      fileName: spec.fileName,
+      ...(crossFile ? { crossFile: true } : {}),
       ...(deleteNode ? { nodeDeleted: nodeDeleted === true, ...(nodeError ? { nodeError } : {}), ...(nodeNote ? { nodeNote } : {}) } : {}),
       message: deleteNode
         ? (nodeDeleted

@@ -562,6 +562,7 @@ function connectWebSocket() {
 
     if (fileInfo) {
       registerMsg.fileKey = fileInfo.fileKey;
+      registerMsg.fileId = fileInfo.fileId;
       registerMsg.fileName = fileInfo.fileName;
       registerMsg.pageId = fileInfo.pageId;
       registerMsg.pageName = fileInfo.pageName;

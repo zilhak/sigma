@@ -19,6 +19,8 @@ export interface PageInfo {
 
 export interface FileInfo {
   fileKey: string | null;
+  /** 파일별 안정 ID (root pluginData). 드래프트라 fileKey 가 없어도 존재한다 */
+  fileId: string;
   fileKeySource: 'api' | 'stored' | 'none';
   storedFileKey: string | null;
   fileName: string;

@@ -36,6 +36,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
     case PLUGIN_MSG.FILE_INFO: {
       const newFileInfo: FileInfo = {
         fileKey: msg.fileKey as string | null,
+        fileId: msg.fileId as string,
         fileKeySource: msg.fileKeySource as 'api' | 'stored' | 'none',
         storedFileKey: msg.storedFileKey as string | null,
         fileName: msg.fileName as string,
@@ -57,6 +58,7 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
         sendToServer({
           type: 'FILE_INFO',
           fileKey: newFileInfo.fileKey,
+          fileId: newFileInfo.fileId,
           fileName: newFileInfo.fileName,
           pageId: newFileInfo.pageId,
           pageName: newFileInfo.pageName,
