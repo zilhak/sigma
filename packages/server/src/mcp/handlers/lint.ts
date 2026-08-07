@@ -14,11 +14,11 @@ import { filterSuppressed, collectSubjectNodeIds } from '../../lint/suppress.js'
 import { listComponentSpecs } from '../../storage/component-specs.js';
 
 /**
- * sigma_lint — 빌트인 규칙 카탈로그(기하 8종 + 구조/이름/가시성 6종 + occlusion 1종 + opt-in 5종) + config.custom
+ * sigma_lint — 빌트인 규칙 카탈로그 24종(기본 ON 15종 = 기하 8 + 구조/이름/가시성 6 + occlusion 1, opt-in 9종) + config.custom
  * (JSON shorthand / JS predicate) 커스텀 규칙을 함께 실행한다.
  *
  * scope: 'page'(바인딩된 1페이지, 기본) | 'file'(전 페이지 순회)
- * configMode: 'uniform'(명시 config 하나, 기본) | 'per-page'(페이지 저장 config) | 'merge'(base+페이지 override)
+ * configMode: 'merge'(base+페이지 override, 기본) | 'per-page'(페이지 저장 config) | 'uniform'(명시 config 하나, 페이지 저장 무시)
  * config 출처: inline `config` 객체 > `configPath` 파일 > 문서 저장 'lint' (merge/per-page 의 base).
  * 파일 lint 결과는 md 리포트 파일로 떨구고 응답엔 요약+경로만 싣는다.
  */

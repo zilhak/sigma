@@ -195,7 +195,7 @@ src/
 │   └── index.ts
 ├── lint/                     # Lint 엔진 (순수 함수, 유닛테스트)
 │   ├── engine.ts             # 규칙 실행/집계 + 자동수정 계획
-│   ├── types.ts              # LintConfig, BuiltinRuleId(20종) 등
+│   ├── types.ts              # LintConfig, BuiltinRuleId(24종) 등
 │   ├── geometric.ts          # 기하 8종 (좌표 기반)
 │   ├── simple-rules.ts       # 구조/이름/가시성 6종 + raw_node
 │   ├── occlusion.ts          # fully_occluded_sibling

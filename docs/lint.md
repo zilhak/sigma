@@ -1,7 +1,8 @@
 # Lint (`sigma_lint`) — 빌트인 카탈로그 + 커스텀 규칙
 
-Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 20개(좌표 기반 8종 + 구조/이름/가시성 6종 +
-occlusion 1종 + opt-in 5종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을 함께 켜고 끌 수 있다.
+Figma 문서를 config 파일 하나로 검사하는 시스템. 빌트인 규칙 24개(기본 ON 15종 = 좌표 기반 8종 +
+구조/이름/가시성 6종 + occlusion 1종, opt-in 9종)와 프로젝트별 커스텀 규칙(JSON 선언적 / JS predicate)을
+함께 켜고 끌 수 있다.
 
 ```
 검사: sigma_lint(token, configPath, nodeId?, path?)
@@ -28,21 +29,27 @@ occlusion 1종 + opt-in 5종)와 프로젝트별 커스텀 규칙(JSON 선언적
 - **자동수정(`apply:true`)은 빌트인의 `frame_padding`/`child_overflow`(섹션 확장)만.**
   나머지(겹침·orphan 등 재배치가 필요한 것, 모든 커스텀 규칙)는 보고만 하고
   자동수정하지 않는다(check-first).
+- **완전성 — 부분 스캔을 clean으로 오보하지 않는다.** lint는 트리를 `treeNodeLimit`(기본
+  **200000**) 노드까지 전수 순회한다. `sigma_get_tree`의 인터랙티브 기본값(1000)과 다른 이유는,
+  잘린 트리로 검사하면 뒤쪽 노드가 아예 검사되지 않은 채 "clean"이 나오기 때문이다(silent
+  false-clean). 순회는 `treeTimeoutMs`(기본 **60000**)로도 끊긴다. 상한에 걸리면 응답에
+  `scanTruncated: true` · `scannedNodes` · `scanWarning`을 싣고 **`clean`을 false로 강제**한다.
+  이때는 `treeNodeLimit`을 올리거나 `nodeId` 스코프로 섹션별로 나눠 재검사한다.
 
 ## 검사 범위 · config 모드 (scope / configMode)
 
 `sigma_lint`는 두 개의 직교 축을 가진다.
 
 - **`scope`**: `page`(기본, 바인딩된 1페이지) | `file`(파일의 전 페이지 순회, read-only)
-- **`configMode`**: `uniform`(기본) | `per-page` | `merge`
+- **`configMode`**: `merge`(기본) | `per-page` | `uniform`
 
 **config 출처 3순위** (base config 결정): inline `config` 객체 > `configPath` 파일 > 문서 노드에 저장된 `lint`.
 
 | configMode | 각 페이지에 적용할 config |
 |---|---|
-| `uniform` | base config 하나로 일괄 (base 필수) |
+| `merge` **(기본)** | `deepMerge(base, 페이지 저장 config)` — **`builtins`·`custom` 모두 rule id 단위로** 페이지가 override 하고, base에만 있는 규칙은 살아남는다 |
 | `per-page` | 그 페이지에 저장된 config → 없으면 base 폴백 → base도 없으면 skip(명시) |
-| `merge` | `deepMerge(base, 페이지 저장 config)` — 페이지가 `builtins`를 rule 단위로 override |
+| `uniform` | base config 하나로 일괄 (base 필수). ⚠️ **페이지 저장 config를 무시**한다 — 그 페이지가 꺼 둔 규칙까지 되살아나므로 의도할 때만 명시한다 |
 
 `merge`는 "문서=공통 base + 페이지=override" 패턴에 쓴다(문서 base = `sigma_set_page_data({ pageId: "document", key: "lint", ... })`).
 
@@ -138,7 +145,7 @@ sigma_set_node_data({ token, nodeId:"1:24", key:"lint-ignore", value:'{"rules":"
 sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 ```
 
-## 빌트인 규칙 20종
+## 빌트인 규칙 24종
 
 | id | 검사 | 파라미터 | 기본값 |
 |----|------|----------|--------|
@@ -162,8 +169,12 @@ sigma_delete_node_data({ token, nodeId:"1:23", key:"lint-ignore" })
 | `content_spread` **(opt-in, 기본 OFF, 페이지 루트 전용)** | 최상위 노드를 `maxGap` 이내로 이어지는 덩어리로 묶고, **가장 큰 덩어리(본진) 밖에 홀로 떨어진 노드**를 검출. 이런 이상치가 하나만 있어도 zoom-to-fit(Shift+1)이 그것까지 품느라 실제 콘텐츠가 점으로 찍힌다 — "페이지를 열었는데 내용을 못 찾겠다"의 주범. 숨김(`visible:false`) 노드는 제외(렌더 안 되므로 fit 무관). 본진 = 노드 수 최대 → 동수면 면적 합 최대. 아래 §찾기 쉬움 참조 | `maxGap` | 3000px |
 | `origin_anchor` **(opt-in, 기본 OFF, 페이지 루트 전용)** | 페이지에 최상위 SECTION이 하나라도 있으면 그 중 하나는 좌상단이 원점(0,0)에서 `tolerance` 이내여야 함(음수는 절대값). 섹션이 없는 페이지는 검사 대상 아님(`outside_section` 담당). 위반은 페이지당 최대 1건이고 주체 노드로 **원점에서 가장 가까운 섹션**을 실어준다 | `tolerance` | 100px |
 | `instance_default_name` **(opt-in, 기본 OFF)** | `default_name`의 인스턴스 판 — INSTANCE 이름이 **마스터 컴포넌트 이름 그대로**면(=고유 이름 미부여) 위반. 마스터명은 TreeNode에 없어 서버가 `get_nodes_info`의 `componentName`을 resolve해 판정(규칙 ON일 때만 1왕복). **중첩 인스턴스(다른 INSTANCE 내부)는 제외**(정의의 사본). 실화면엔 마스터명 유지 인스턴스가 흔해 기본 ON이면 폭주 → strict 네이밍을 원하는 파일만 opt-in | — | — |
+| `instance_resized_from_spec` **(opt-in, 기본 OFF)** | 작은 스펙 인스턴스를 배 이상 늘려 **컨테이너 대용**으로 쓴 것. 스펙 마스터는 HTML을 고정 크기 자식 트리로 구운 것이라 **상자만 커지고 안쪽은 제자리에 남는다**(16×16 체크박스를 48×42 표 칸으로 늘려 쓰다 선택 상태로 바꾸는 순간 칸 전체가 색 덩어리가 된 사례). ⚠️ **크기 차이 자체는 잡지 않는다** — 표는 열 너비 때문에 셀을 늘리고 줄이는 게 정상 사용이라 한 페이지에서만 2220건이었다. 줄임의 실제 피해(자식 넘침)는 `child_overflow`가 이미 잡는다. **켰을 때만 `get_nodes_info` 1왕복**(마스터 크기·스펙 alias가 TreeNode에 없음) | `growthRatio`·`smallMaster`·`flagShrink`·`tolerance` | 2 · 64px · false · 0.5px |
+| `annotation_marker_pair` **(opt-in, 기본 OFF)** | 기획 레이어 안에서 **마커 ↔ 범례가 1:1이고 서로 왕복 하이퍼링크가 걸려 있는지**. 결번(설명 없는 마커)·유령(가리키는 곳 없는 범례)·중복 번호·링크 누락을 잡는다 — 번호는 눈으로 하나씩 세어야 보이고, 링크는 화면에 표시가 없어 빠뜨려도 티가 안 난다. 짝은 **기획 레이어 단위**로 맞춘다(페이지 전체로 묶으면 섹션마다 있는 ①이 전부 중복이 된다). 판정은 이름이 아니라 스펙 alias + 인스턴스 안 번호 글자 + 실제 하이퍼링크 데이터. **enrich 왕복 필요** | `markerAlias`·`legendAlias`·`requireHyperlink`·`symbolPattern` | `marker` · `legend` · true · 원문자 숫자 한 글자 |
+| `annotation_marker_gap` **(opt-in, 기본 OFF)** | 마커가 가리키려는 대상을 **덮고 있거나**, 너무 **멀리 떠 있거나**, 주변에 **가리킬 것이 아예 없는** 경우. 규약은 "대상 경계에서 4~10px, 12px 초과 금지, 겹침 금지"인데 기계 백스톱이 없어 한 화면에서 마커 14개가 전부 대상 위에 얹혀 있던 적이 있고, 반대로 그리지도 않은 위젯을 가리키는 마커가 빈 공간에 찍혀 있던 적도 있다. 대상 후보는 **원자적 노드만**(자식 없는 leaf + INSTANCE) — 큰 컨테이너를 후보에 넣으면 마커는 언제나 그 위라 전부 겹침이 된다. **켰을 때만 `get_tree`를 `includeAbsolute`로 호출**(마커는 기획 레이어, 대상은 상태 프레임 깊숙이라 부모 로컬좌표로는 비교 불가) | `maxGap`·`orphanRadius`·`markerAlias` | 12px · 240px · `marker` |
+| `font_not_default` **(opt-in, 기본 OFF)** | 이 파일이 정한 기본 폰트와 **다른 폰트를 쓰는 TEXT**. 기대 패밀리는 문서 노드 `fonts.default`에서 읽는다(`family`로 override) — **설정이 없으면 판정하지 않는다**(기준 없이 전부 위반으로 만들지 않는다). 파일 기본 폰트는 새로 만들 때만 적용되므로 설정 이전 텍스트는 옛 폰트로 남는다 — 스펙 마스터는 재등록으로 바뀌어도 화면에 직접 그린 raw TEXT는 안 바뀌고, 그걸 찾는 일이 지금까지 사람이 섹션마다 훑는 것이었다(`scope:"file"` 한 번이면 된다). 한 텍스트 안에 폰트가 섞인 경우(`figma.mixed`)도 잡는다 | `family`·`allow`·`flagMixed` | — · — · true |
 
-파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: `raw_node`·`annotation_layer`·`instance_default_name`·`content_spread`·`origin_anchor`는 opt-in** — `{ "enabled": true }`로 켜야 실행된다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
+파라미터가 없는 규칙은 `{ enabled: false }`로 끄는 것만 가능하다. **예외: 아래 9종은 opt-in** — `{ "enabled": true }`로 켜야 실행된다: `raw_node` · `annotation_layer` · `instance_default_name` · `content_spread` · `origin_anchor` · `instance_resized_from_spec` · `annotation_marker_pair` · `annotation_marker_gap` · `font_not_default`. 나머지 15종은 기본 ON(opt-out)이다. opt-in 판정의 정본은 `packages/shared/src/lint/engine.ts`의 `ALL_BUILTIN_RULE_IDS` 주변 주석이다. 좌표계·예외 규칙(anno/wire 프리셋 등)의 자세한 근거는 `packages/shared/src/lint/geometric.ts` 파일 상단 주석 참조.
 
 ## 찾기 쉬움 (findability) — `content_spread` · `origin_anchor`
 
