@@ -270,7 +270,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 > **공간 규약(빌트인 기하 8종)**: 계층은 Section → Frame → 콘텐츠로 균일. 형제 섹션/프레임 non-overlap · **이웃 섹션 간 ≥80px 간격**(section_gap — 라벨이 경계 가림 방지, `gap` 조절) · 섹션 안 프레임 ≥20px 여백(`padding` 조절) · 섹션 직속은 FRAME/SECTION 만(COMPONENT/GROUP·인스턴스는 프레임 안, anno/wire 예외) · **트리상 자식이면 좌표상으로도 부모 안**(모든 컨테이너가 자식 로컬좌표 → 부모 로컬박스 0,0~W,H 기준, 섹션도 동일, 배치형만·리프 제외). `resize`로 프레임/섹션을 키우면 형제를 덮을 수 있으니 변형 후 `sigma_lint`로 회귀 검사. **찾기 쉬움 2종(opt-in, 페이지 루트 전용)**: `content_spread`(본진에서 떨어진 이상치 — zoom-to-fit을 삼켜 "내용을 못 찾는" 원인, `maxGap` 기본 3000px) · `origin_anchor`(최상위 섹션 중 하나는 원점 `tolerance` 이내에서 시작, 기본 100px) — 둘 다 `nodeId`/`path` 서브트리 검사에선 실행 안 됨. 빌트인 24종 전체 목록·파라미터(opt-in 9종: `raw_node`·`annotation_layer`·`instance_default_name`·`content_spread`·`origin_anchor`·`instance_resized_from_spec`·`annotation_marker_pair`·`annotation_marker_gap`·`font_not_default`), 커스텀 규칙(JSON 선언적/JS predicate) 스키마, `scope`(`page`/`file`)·`configMode`(`merge` 기본/`per-page`/`uniform`)와 md 리포트, `configPath`의 Docker 배포 주의사항은 **[`docs/lint/`](docs/lint/README.md)**(룰별 상세는 `docs/lint/rules/<id>.md`) 참조. 엔진은 `packages/shared/src/lint/`(순수 함수, 유닛테스트), 서버측 config 해석/리포트는 `packages/server/src/lint/`.
 
-**`sigma_modify_node` 지원 메서드:**
+**`sigma_modify_node` 지원 메서드:** (메서드마다 받는 `args` 키가 정해져 있고 **모르는 키는 거부**된다 — 거부 응답에 `acceptedArgs`가 실린다. `params` 선언은 `ALLOWED_METHODS`에 있고 테스트가 핸들러 소스와 대조한다)
 - **Basic**: rename, resize, move, setOpacity, setVisible, setLocked, remove
 - **Visual**: setFills, setSolidFill, setStrokes, setStrokeWeight, setCornerRadius, setCornerRadii, setEffects, setBlendMode, setCornerSmoothing, setDashPattern, setMask, setGradientFill, setImageFill
 - **Stroke Advanced**: setStrokeAlign, setStrokeCap, setStrokeJoin, setIndividualStrokeWeights

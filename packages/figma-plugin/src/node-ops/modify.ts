@@ -227,6 +227,16 @@ export async function loadAllFonts(textNode: TextNode): Promise<void> {
  */
 interface AllowedMethod {
   description: string;
+  /**
+   * 이 메서드가 **실제로 읽는** args 키. 필수다 — 빠뜨리면 그 메서드는 모든 인자를 거부한다.
+   *
+   * 최상위 인자 가드(`tool-handler.ts` 의 `rejectUnknownArgs`)는 `inputSchema.properties` 를
+   * 보는데, `sigma_modify_node` 의 `args` 는 `{type:'object'}` 라 그 안이 무검사였다. 그래서
+   * `move {left:10}` 같은 오타가 **성공 응답 + 아무 일도 안 일어남**으로 통과했고,
+   * `sigma_batch_modify` 는 그걸 `succeeded` 로 세기까지 했다.
+   * 배경: docs/history/003-modify-node-nested-args-silent-noop.md
+   */
+  params: string[];
   handler: (node: SceneNode, args: Record<string, unknown>) => Promise<unknown> | unknown;
 }
 
@@ -234,6 +244,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Basic ===
   rename: {
     description: '노드 이름 변경. args: { name: string }',
+    params: ['name'],
     handler: (node, args) => {
       const name = args.name as string;
       if (!name) throw new Error('name이 필요합니다');
@@ -243,6 +254,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   resize: {
     description: '노드 크기 변경. args: { width?: number, height?: number } — 한쪽만 주면 나머지는 유지',
+    params: ['width', 'height'],
     handler: (node, args) => {
       // 한쪽만 주면 나머지는 현재 값을 유지한다. 예전엔 둘 다 필수라 "높이만 줄이기" 가
       // 에러로 거부됐는데, 응답을 확인하지 않으면 적용된 줄 알고 넘어가기 쉬웠다.
@@ -266,6 +278,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   move: {
     description: '노드 위치 변경. args: { x: number, y: number }',
+    params: ['x', 'y'],
     handler: (node, args) => {
       const x = toNumOpt(args.x, 'x');
       const y = toNumOpt(args.y, 'y');
@@ -276,6 +289,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setOpacity: {
     description: '불투명도 설정 (0~1). args: { opacity: number }',
+    params: ['opacity'],
     handler: (node, args) => {
       if (!('opacity' in node)) throw new Error('이 노드는 opacity를 지원하지 않습니다');
       const opacity = toNum(args.opacity, 'opacity');
@@ -285,6 +299,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setVisible: {
     description: '가시성 설정. args: { visible: boolean }',
+    params: ['visible'],
     handler: (node, args) => {
       if (args.visible === undefined) throw new Error('visible이 필요합니다');
       node.visible = toBool(args.visible);
@@ -293,6 +308,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setLocked: {
     description: '잠금 설정. args: { locked: boolean }',
+    params: ['locked'],
     handler: (node, args) => {
       if (args.locked === undefined) throw new Error('locked가 필요합니다');
       node.locked = toBool(args.locked);
@@ -301,6 +317,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   remove: {
     description: '노드 삭제. args: 없음',
+    params: [],
     handler: (node) => {
       const name = node.name;
       const id = node.id;
@@ -312,6 +329,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Visual ===
   setFills: {
     description: '채우기 설정. args: { fills: Paint[] } (Figma Paint 배열)',
+    params: ['fills'],
     handler: (node, args) => {
       if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
       const fills = args.fills;
@@ -322,6 +340,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setSolidFill: {
     description: '단색 채우기 설정 (편의 메서드). args: { r: 0~1, g: 0~1, b: 0~1, opacity?: 0~1 }',
+    params: ['r', 'g', 'b', 'opacity'],
     handler: (node, args) => {
       if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
       const r = toNum(args.r, 'r');
@@ -338,6 +357,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setStrokes: {
     description: '테두리(stroke) 설정. args: { strokes: Paint[] }',
+    params: ['strokes'],
     handler: (node, args) => {
       if (!('strokes' in node)) throw new Error('이 노드는 strokes를 지원하지 않습니다');
       const strokes = args.strokes;
@@ -348,6 +368,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setStrokeWeight: {
     description: '테두리 두께 설정. args: { weight: number }',
+    params: ['weight'],
     handler: (node, args) => {
       if (!('strokeWeight' in node)) throw new Error('이 노드는 strokeWeight를 지원하지 않습니다');
       const weight = toNum(args.weight, 'weight');
@@ -357,6 +378,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setCornerRadius: {
     description: '모서리 라운드 설정 (균일). args: { radius: number }',
+    params: ['radius'],
     handler: (node, args) => {
       if (!('cornerRadius' in node)) throw new Error('이 노드는 cornerRadius를 지원하지 않습니다');
       const radius = toNum(args.radius, 'radius');
@@ -366,6 +388,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setCornerRadii: {
     description: '모서리 라운드 개별 설정. args: { topLeft?: number, topRight?: number, bottomRight?: number, bottomLeft?: number }',
+    params: ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'],
     handler: (node, args) => {
       if (!('topLeftRadius' in node)) throw new Error('이 노드는 개별 cornerRadius를 지원하지 않습니다');
       const f = node as FrameNode;
@@ -387,6 +410,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setEffects: {
     description: '이펙트(그림자 등) 설정. args: { effects: Effect[] }',
+    params: ['effects'],
     handler: (node, args) => {
       if (!('effects' in node)) throw new Error('이 노드는 effects를 지원하지 않습니다');
       const effects = args.effects;
@@ -397,6 +421,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setBlendMode: {
     description: '블렌드 모드 설정. args: { blendMode: string } (NORMAL, MULTIPLY, SCREEN 등)',
+    params: ['blendMode'],
     handler: (node, args) => {
       if (!('blendMode' in node)) throw new Error('이 노드는 blendMode를 지원하지 않습니다');
       const blendMode = toEnum(args.blendMode, ['NORMAL','DARKEN','MULTIPLY','LINEAR_BURN','COLOR_BURN','LIGHTEN','SCREEN','LINEAR_DODGE','COLOR_DODGE','OVERLAY','SOFT_LIGHT','HARD_LIGHT','DIFFERENCE','EXCLUSION','HUE','SATURATION','COLOR','LUMINOSITY','PASS_THROUGH'] as const, 'blendMode');
@@ -408,6 +433,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Layout (Auto Layout) ===
   setLayoutMode: {
     description: 'Auto Layout 모드 설정. args: { layoutMode: "NONE" | "HORIZONTAL" | "VERTICAL" }. ⚠️ 오토레이아웃을 켜면 sizing 이 HUG 가 되어 프레임 크기가 자식에 맞춰 즉시 바뀔 수 있고, 이후 자식을 추가할 때도 계속 따라 줄어든다(넓은 자식은 클리핑되어 안 보임). 응답의 width/height·layoutSizing*·sizingWarning 을 확인할 것',
+    params: ['layoutMode'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const mode = toEnum(args.layoutMode, ['NONE','HORIZONTAL','VERTICAL'] as const, 'layoutMode');
@@ -448,6 +474,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setPadding: {
     description: '패딩 설정. args: { top?: number, right?: number, bottom?: number, left?: number }',
+    params: ['top', 'right', 'bottom', 'left'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const f = node as FrameNode;
@@ -469,6 +496,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setItemSpacing: {
     description: 'Auto Layout 아이템 간격 설정. args: { spacing: number }',
+    params: ['spacing'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const spacing = toNum(args.spacing, 'spacing');
@@ -478,6 +506,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setClipsContent: {
     description: '콘텐츠 클리핑(Clip content) 설정. args: { clips: boolean }',
+    params: ['clips'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       if (args.clips === undefined) throw new Error('clips가 필요합니다');
@@ -487,6 +516,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setPrimaryAxisSizingMode: {
     description: '주축 크기 모드 설정. args: { mode: "FIXED" | "AUTO" }',
+    params: ['mode'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const mode = toEnum(args.mode, ['FIXED','AUTO'] as const, 'mode');
@@ -496,6 +526,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setCounterAxisSizingMode: {
     description: '교차축 크기 모드 설정. args: { mode: "FIXED" | "AUTO" }',
+    params: ['mode'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const mode = toEnum(args.mode, ['FIXED','AUTO'] as const, 'mode');
@@ -505,6 +536,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setPrimaryAxisAlignItems: {
     description: '주축 정렬 설정. args: { align: "MIN" | "CENTER" | "MAX" | "SPACE_BETWEEN" }',
+    params: ['align'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const align = toEnum(args.align, ['MIN','CENTER','MAX','SPACE_BETWEEN'] as const, 'align');
@@ -514,6 +546,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setCounterAxisAlignItems: {
     description: '교차축 정렬 설정. args: { align: "MIN" | "CENTER" | "MAX" }',
+    params: ['align'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const align = toEnum(args.align, ['MIN','CENTER','MAX','BASELINE'] as const, 'align');
@@ -524,6 +557,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   setLayoutWrap: {
     description: 'Auto Layout 줄바꿈 모드 설정. args: { wrap: "NO_WRAP" | "WRAP" }',
+    params: ['wrap'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const wrap = toEnum(args.wrap, ['NO_WRAP','WRAP'] as const, 'wrap');
@@ -533,6 +567,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setCounterAxisSpacing: {
     description: '줄바꿈 시 행/열 간격 설정. args: { spacing: number }',
+    params: ['spacing'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const spacing = toNum(args.spacing, 'spacing');
@@ -542,6 +577,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setLayoutSizing: {
     description: '레이아웃 크기 모드 설정. args: { horizontal?: "FIXED" | "HUG" | "FILL", vertical?: "FIXED" | "HUG" | "FILL" }',
+    params: ['horizontal', 'vertical'],
     handler: (node, args) => {
       if (node.type !== 'FRAME' && node.type !== 'COMPONENT') throw new Error('FRAME 또는 COMPONENT만 지원합니다');
       const f = node as FrameNode;
@@ -559,6 +595,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Text ===
   setCharacters: {
     description: '텍스트 내용 변경. args: { characters: string }. 노드가 TextNode여야 합니다.',
+    params: ['characters'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       if (args.characters === undefined) throw new Error('characters가 필요합니다');
@@ -570,6 +607,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setFontSize: {
     description: '폰트 크기 변경. args: { size: number }. 노드가 TextNode여야 합니다.',
+    params: ['size'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const size = toNum(args.size, 'size');
@@ -580,6 +618,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setTextAlignHorizontal: {
     description: '텍스트 수평 정렬. args: { align: "LEFT" | "CENTER" | "RIGHT" | "JUSTIFIED" }',
+    params: ['align'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const align = toEnum(args.align, ['LEFT','CENTER','RIGHT','JUSTIFIED'] as const, 'align');
@@ -590,6 +629,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setTextAlignVertical: {
     description: '텍스트 수직 정렬. args: { align: "TOP" | "CENTER" | "BOTTOM" }',
+    params: ['align'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const align = toEnum(args.align, ['TOP','CENTER','BOTTOM'] as const, 'align');
@@ -600,6 +640,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setFontFamily: {
     description: '폰트 패밀리 변경. args: { family: string, style?: string }',
+    params: ['family', 'style'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const family = args.family as string;
@@ -612,6 +653,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setFontWeight: {
     description: '폰트 굵기 변경. args: { weight: number | string } (숫자: 100~900, 문자열: "Regular", "Bold" 등 스타일명). 해당 폰트에서 사용 가능한 스타일을 자동 탐색합니다.',
+    params: ['weight'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       let w = args.weight;
@@ -675,6 +717,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Transform ===
   setRotation: {
     description: '회전 각도 설정 (degree). args: { rotation: number }',
+    params: ['rotation'],
     handler: (node, args) => {
       if (!('rotation' in node)) throw new Error('이 노드는 rotation을 지원하지 않습니다');
       const rotation = toNum(args.rotation, 'rotation');
@@ -686,6 +729,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Layout Child Properties ===
   setLayoutAlign: {
     description: 'Auto Layout 자식의 교차축 정렬. args: { align: "INHERIT" | "STRETCH" }',
+    params: ['align'],
     handler: (node, args) => {
       if (!('layoutAlign' in node)) throw new Error('이 노드는 layoutAlign을 지원하지 않습니다');
       const align = toEnum(args.align, ['MIN','CENTER','MAX','STRETCH','INHERIT'] as const, 'align');
@@ -695,6 +739,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setLayoutGrow: {
     description: 'Auto Layout 자식의 주축 확장. args: { grow: number } (0=고정, 1=채우기)',
+    params: ['grow'],
     handler: (node, args) => {
       if (!('layoutGrow' in node)) throw new Error('이 노드는 layoutGrow를 지원하지 않습니다');
       const grow = toNum(args.grow, 'grow');
@@ -704,6 +749,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setLayoutPositioning: {
     description: 'Auto Layout 자식의 위치 모드. args: { positioning: "AUTO" | "ABSOLUTE" }',
+    params: ['positioning'],
     handler: (node, args) => {
       if (!('layoutPositioning' in node)) throw new Error('이 노드는 layoutPositioning을 지원하지 않습니다');
       const positioning = toEnum(args.positioning, ['AUTO','ABSOLUTE'] as const, 'positioning');
@@ -715,6 +761,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Constraints ===
   setConstraints: {
     description: '제약조건 설정. args: { horizontal?: "MIN"|"CENTER"|"MAX"|"STRETCH"|"SCALE", vertical?: "MIN"|"CENTER"|"MAX"|"STRETCH"|"SCALE" }',
+    params: ['horizontal', 'vertical'],
     handler: (node, args) => {
       if (!('constraints' in node)) throw new Error('이 노드는 constraints를 지원하지 않습니다');
       const h = toEnumOpt(args.horizontal, ['MIN','CENTER','MAX','STRETCH','SCALE'] as const, 'horizontal');
@@ -733,6 +780,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Min/Max Size ===
   setMinWidth: {
     description: '최소 너비 설정. args: { value: number | null } (null=제한 없음)',
+    params: ['value'],
     handler: (node, args) => {
       if (!('minWidth' in node)) throw new Error('이 노드는 minWidth를 지원하지 않습니다');
       (node as any).minWidth = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
@@ -741,6 +789,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setMaxWidth: {
     description: '최대 너비 설정. args: { value: number | null }',
+    params: ['value'],
     handler: (node, args) => {
       if (!('maxWidth' in node)) throw new Error('이 노드는 maxWidth를 지원하지 않습니다');
       (node as any).maxWidth = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
@@ -749,6 +798,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setMinHeight: {
     description: '최소 높이 설정. args: { value: number | null }',
+    params: ['value'],
     handler: (node, args) => {
       if (!('minHeight' in node)) throw new Error('이 노드는 minHeight를 지원하지 않습니다');
       (node as any).minHeight = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
@@ -757,6 +807,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setMaxHeight: {
     description: '최대 높이 설정. args: { value: number | null }',
+    params: ['value'],
     handler: (node, args) => {
       if (!('maxHeight' in node)) throw new Error('이 노드는 maxHeight를 지원하지 않습니다');
       (node as any).maxHeight = (args.value === null || args.value === 'null' || args.value === undefined) ? null : toNum(args.value, 'value');
@@ -767,6 +818,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Visual Extended ===
   setCornerSmoothing: {
     description: '코너 스무딩 (iOS 스타일 둥근 모서리). args: { smoothing: number } (0~1)',
+    params: ['smoothing'],
     handler: (node, args) => {
       if (!('cornerSmoothing' in node)) throw new Error('이 노드는 cornerSmoothing을 지원하지 않습니다');
       const smoothing = toNum(args.smoothing, 'smoothing');
@@ -776,6 +828,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setDashPattern: {
     description: '점선 패턴 설정. args: { pattern: number[] } (예: [5, 3] = 5px 선, 3px 간격)',
+    params: ['pattern'],
     handler: (node, args) => {
       if (!('dashPattern' in node)) throw new Error('이 노드는 dashPattern을 지원하지 않습니다');
       const pattern = args.pattern;
@@ -786,6 +839,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setMask: {
     description: '마스크 설정/해제. args: { isMask: boolean }',
+    params: ['isMask'],
     handler: (node, args) => {
       if (!('isMask' in node)) throw new Error('이 노드는 mask를 지원하지 않습니다');
       if (args.isMask === undefined) throw new Error('isMask가 필요합니다');
@@ -797,6 +851,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Text Extended ===
   setTextAutoResize: {
     description: '텍스트 자동 크기 조정. args: { mode: "NONE"|"WIDTH_AND_HEIGHT"|"HEIGHT"|"TRUNCATE" }',
+    params: ['mode'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const mode = toEnum(args.mode, ['NONE','WIDTH_AND_HEIGHT','HEIGHT','TRUNCATE'] as const, 'mode');
@@ -807,6 +862,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setLineHeight: {
     description: '행간 설정. args: { value: number, unit?: "PIXELS"|"PERCENT"|"AUTO" }. AUTO이면 value 무시.',
+    params: ['value', 'unit'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       await loadAllFonts(node as TextNode);
@@ -822,6 +878,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setLetterSpacing: {
     description: '자간 설정. args: { value: number, unit?: "PIXELS"|"PERCENT" }',
+    params: ['value', 'unit'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const value = toNum(args.value, 'value');
@@ -835,6 +892,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Rich Text (Range) ===
   setRangeFontSize: {
     description: '텍스트 일부의 폰트 크기 변경. args: { start: number, end: number, size: number }',
+    params: ['start', 'end', 'size'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -847,6 +905,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeFontName: {
     description: '텍스트 일부의 폰트 변경. args: { start: number, end: number, family: string, style?: string }',
+    params: ['start', 'end', 'family', 'style'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -862,6 +921,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeFills: {
     description: '텍스트 일부의 색상 변경. args: { start: number, end: number, r: 0~1, g: 0~1, b: 0~1, opacity?: 0~1 }',
+    params: ['start', 'end', 'r', 'g', 'b', 'opacity'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -877,6 +937,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeTextDecoration: {
     description: '텍스트 일부의 장식. args: { start: number, end: number, decoration: "NONE"|"UNDERLINE"|"STRIKETHROUGH" }',
+    params: ['start', 'end', 'decoration'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -889,6 +950,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeLineHeight: {
     description: '텍스트 일부의 행간 변경. args: { start: number, end: number, value: number, unit?: "PIXELS"|"PERCENT"|"AUTO" }',
+    params: ['start', 'end', 'value', 'unit'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -906,6 +968,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeLetterSpacing: {
     description: '텍스트 일부의 자간 변경. args: { start: number, end: number, value: number, unit?: "PIXELS"|"PERCENT" }',
+    params: ['start', 'end', 'value', 'unit'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -921,6 +984,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Plugin Data ===
   setPluginData: {
     description: '노드에 플러그인 데이터 저장. args: { key: string, value: string }',
+    params: ['key', 'value'],
     handler: (node, args) => {
       const key = args.key as string;
       const value = args.value as string;
@@ -932,6 +996,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   getPluginData: {
     description: '노드에서 플러그인 데이터 조회. args: { key: string }',
+    params: ['key'],
     handler: (node, args) => {
       const key = args.key as string;
       if (!key) throw new Error('key가 필요합니다');
@@ -941,6 +1006,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   getPluginDataKeys: {
     description: '노드의 모든 플러그인 데이터 키 조회. args: {}',
+    params: [],
     handler: (node) => {
       const keys = node.getPluginDataKeys();
       return { keys };
@@ -948,6 +1014,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setSharedPluginData: {
     description: '노드에 공유 플러그인 데이터 저장. args: { namespace: string, key: string, value: string }',
+    params: ['namespace', 'key', 'value'],
     handler: (node, args) => {
       const namespace = args.namespace as string;
       const key = args.key as string;
@@ -961,6 +1028,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   getSharedPluginData: {
     description: '노드에서 공유 플러그인 데이터 조회. args: { namespace: string, key: string }',
+    params: ['namespace', 'key'],
     handler: (node, args) => {
       const namespace = args.namespace as string;
       const key = args.key as string;
@@ -974,6 +1042,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   // === Text Advanced ===
   setRangeHyperlink: {
     description: '텍스트 일부에 하이퍼링크 추가/제거. args: { start: number, end: number, url?: string, nodeId?: string } — url=외부 링크, nodeId=같은 파일 내 노드로 이동(fileKey 불필요). 둘 다 미지정 시 링크 제거',
+    params: ['start', 'end', 'url', 'nodeId'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -1002,6 +1071,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeListOptions: {
     description: '텍스트 일부에 목록 형식 설정. args: { start: number, end: number, listType: "ORDERED"|"UNORDERED"|"NONE" }',
+    params: ['start', 'end', 'listType'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -1014,6 +1084,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setRangeIndentation: {
     description: '텍스트 일부에 들여쓰기 설정. args: { start: number, end: number, value: number }',
+    params: ['start', 'end', 'value'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const start = toNum(args.start, 'start');
@@ -1029,6 +1100,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   setStrokeAlign: {
     description: 'Stroke 정렬 설정. args: { align: "INSIDE"|"OUTSIDE"|"CENTER" }',
+    params: ['align'],
     handler: (node, args) => {
       if (!('strokeAlign' in node)) throw new Error('이 노드는 strokeAlign을 지원하지 않습니다');
       const align = toEnum(args.align, ['INSIDE','OUTSIDE','CENTER'] as const, 'align');
@@ -1038,6 +1110,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setStrokeCap: {
     description: 'Stroke 끝 모양 설정. args: { cap: "NONE"|"ROUND"|"SQUARE"|"ARROW_LINES"|"ARROW_EQUILATERAL" }',
+    params: ['cap'],
     handler: (node, args) => {
       if (!('strokeCap' in node)) throw new Error('이 노드는 strokeCap을 지원하지 않습니다');
       const cap = toEnum(args.cap, ['NONE','ROUND','SQUARE','ARROW_LINES','ARROW_EQUILATERAL'] as const, 'cap');
@@ -1047,6 +1120,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setStrokeJoin: {
     description: 'Stroke 연결 모양 설정. args: { join: "MITER"|"BEVEL"|"ROUND" }',
+    params: ['join'],
     handler: (node, args) => {
       if (!('strokeJoin' in node)) throw new Error('이 노드는 strokeJoin을 지원하지 않습니다');
       const join = toEnum(args.join, ['MITER','BEVEL','ROUND'] as const, 'join');
@@ -1056,6 +1130,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setIndividualStrokeWeights: {
     description: '모서리별 개별 stroke 두께 설정. args: { top: number, right: number, bottom: number, left: number }',
+    params: ['top', 'right', 'bottom', 'left'],
     handler: (node, args) => {
       if (!('strokeTopWeight' in node)) throw new Error('이 노드는 individualStrokeWeights를 지원하지 않습니다');
       const f = node as any;
@@ -1080,6 +1155,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   setParagraphSpacing: {
     description: '문단 간격 설정. args: { value: number }',
+    params: ['value'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const value = toNum(args.value, 'value');
@@ -1090,6 +1166,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setParagraphIndent: {
     description: '문단 들여쓰기 설정. args: { value: number }',
+    params: ['value'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const value = toNum(args.value, 'value');
@@ -1100,6 +1177,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setTextCase: {
     description: '텍스트 대소문자 변환 설정. args: { textCase: "ORIGINAL"|"UPPER"|"LOWER"|"TITLE"|"SMALL_CAPS"|"SMALL_CAPS_FORCED" }',
+    params: ['textCase'],
     handler: async (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const textCase = toEnum(args.textCase, ['ORIGINAL','UPPER','LOWER','TITLE','SMALL_CAPS','SMALL_CAPS_FORCED'] as const, 'textCase');
@@ -1110,6 +1188,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setTextTruncation: {
     description: '텍스트 말줄임 설정. args: { truncation: "DISABLED"|"ENDING" }',
+    params: ['truncation'],
     handler: (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const truncation = toEnum(args.truncation, ['DISABLED','ENDING'] as const, 'truncation');
@@ -1119,6 +1198,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setMaxLines: {
     description: '최대 줄 수 설정 (textTruncation과 함께 사용). args: { maxLines: number }',
+    params: ['maxLines'],
     handler: (node, args) => {
       if (node.type !== 'TEXT') throw new Error('TEXT 노드만 지원합니다');
       const maxLines = toNum(args.maxLines, 'maxLines');
@@ -1131,6 +1211,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   setOverflowDirection: {
     description: '스크롤/오버플로 방향 설정 (Auto Layout 프레임). args: { direction: "NONE"|"HORIZONTAL"|"VERTICAL"|"BOTH" }',
+    params: ['direction'],
     handler: (node, args) => {
       if (!('overflowDirection' in node)) throw new Error('이 노드는 overflowDirection을 지원하지 않습니다');
       const direction = toEnum(args.direction, ['NONE','HORIZONTAL_SCROLLING','VERTICAL_SCROLLING','HORIZONTAL_AND_VERTICAL_SCROLLING'] as const, 'direction');
@@ -1143,6 +1224,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
 
   setGradientFill: {
     description: '그라디언트 채우기 설정. args: { type: "GRADIENT_LINEAR"|"GRADIENT_RADIAL"|"GRADIENT_ANGULAR"|"GRADIENT_DIAMOND", gradientStops: [{position: 0~1, color: {r,g,b,a}}], gradientTransform?: [[number,number,number],[number,number,number]] }',
+    params: ['type', 'gradientStops', 'gradientTransform'],
     handler: (node, args) => {
       if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
       const type = toEnum(args.type, ['GRADIENT_LINEAR','GRADIENT_RADIAL','GRADIENT_ANGULAR','GRADIENT_DIAMOND'] as const, 'type');
@@ -1164,6 +1246,7 @@ export const ALLOWED_METHODS: Record<string, AllowedMethod> = {
   },
   setImageFill: {
     description: '이미지 채우기 설정. args: { imageData: string(base64), scaleMode?: "FILL"|"FIT"|"CROP"|"TILE" }',
+    params: ['imageData', 'scaleMode'],
     handler: (node, args) => {
       if (!('fills' in node)) throw new Error('이 노드는 fills를 지원하지 않습니다');
       const imageData = args.imageData as string;
@@ -1226,6 +1309,20 @@ export async function executeModifyNode(
       error: `'${method}' 메서드는 '${node.type}' 타입에서 지원되지 않습니다`,
       nodeType: node.type,
       supportedMethods: supportedWithDescriptions,
+    }));
+  }
+
+  // 3. args 키 검사. ①메서드 존재 ②타입 지원 과 같은 형태로 "틀린 값 + 받을 수 있는 값" 을 함께 준다.
+  //    여기가 유일한 관문인 이유: sigma_modify_node · sigma_batch_modify · 서버 내부 호출이
+  //    모두 executeModifyNode 한 곳으로 모인다.
+  const unknownArgs = Object.keys(args || {}).filter((k) => allowed.params.indexOf(k) === -1);
+  if (unknownArgs.length > 0) {
+    throw new Error(JSON.stringify({
+      error: `'${method}' 가 모르는 인자를 받았습니다: ${unknownArgs.map((k) => `"${k}"`).join(', ')}. `
+        + '조용히 무시하면 호출이 성공으로 보이면서 아무 일도 일어나지 않으므로 거부합니다.',
+      unknownArgs,
+      acceptedArgs: allowed.params,
+      methodDescription: allowed.description,
     }));
   }
 
