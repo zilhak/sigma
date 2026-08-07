@@ -65,6 +65,43 @@ export function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean 
   return !cfg || cfg.enabled !== false;
 }
 
+/**
+ * "무엇을 검사했는가" 기록. **위반 0건과 규칙이 안 돈 것을 가르는 유일한 신호**다.
+ * 배경: docs/history/004-lint-zero-violations-was-unreadable.md
+ *
+ * ⚠️ 24종 중 5종은 `runBuiltinRules` **밖**(server/src/lint/run.ts)에서 실행된다 — 상세 노드
+ * 정보(enrich)가 필요하기 때문이다. 그래서 이 객체는 엔진이 완성하지 않고, 서버가 이어서 채운다.
+ * 최종 조립 후 `ran ∪ disabled ∪ optInOff ∪ skipped === ALL_BUILTIN_RULE_IDS` 여야 한다
+ * (유닛테스트로 강제 — 안 그러면 규칙을 새로 추가한 사람이 등록을 빠뜨려도 아무도 모른다).
+ */
+export interface RuleCoverage {
+  /** 실제로 실행된 규칙 */
+  ran: BuiltinRuleId[];
+  /** config 로 꺼서(enabled:false) 실행되지 않은 규칙 */
+  disabled: BuiltinRuleId[];
+  /** opt-in 인데 켜지 않아 실행되지 않은 규칙 */
+  optInOff: BuiltinRuleId[];
+  /** 켰는데도 실행되지 못한 규칙 + 사유 (예: 서브트리 스코프라 좌표 전제가 깨짐) */
+  skipped: Array<{ rule: BuiltinRuleId; reason: string }>;
+}
+
+export function emptyCoverage(): RuleCoverage {
+  return { ran: [], disabled: [], optInOff: [], skipped: [] };
+}
+
+/**
+ * `runBuiltinRules` **밖**에서 실행되는 규칙 — 전부 enrich 된 LintNode(fills/opacity/관계 등)가
+ * 필요해 서버(`server/src/lint/run.ts`)가 직접 호출한다. 엔진의 커버리지에는 안 담기므로
+ * 서버가 이어서 채워야 한다. 규칙을 새로 그쪽에 추가하면 **이 목록에도 넣을 것.**
+ */
+export const ENGINE_EXTERNAL_RULE_IDS: BuiltinRuleId[] = [
+  'fully_occluded_sibling',
+  'instance_resized_from_spec',
+  'annotation_marker_pair',
+  'annotation_marker_gap',
+  'font_not_default',
+];
+
 /** runBuiltinRules 부가 입력 — 서버 핸들러가 pluginData 등에서 계산해 주입. */
 export interface BuiltinRuleContext {
   /** 기획 레이어로 판정된 노드 id (pluginData role). 겹침/여백/오버플로우 면제 + annotation_layer 규칙 판정에 사용. */
@@ -86,12 +123,35 @@ export interface BuiltinRuleContext {
   specMasterIds?: Iterable<string>;
 }
 
-/** 페이지 트리(roots)에 config.builtins 로 켜진 규칙만 실행해 Violation[] 를 반환. */
-export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}, ctx: BuiltinRuleContext = {}): Violation[] {
+/**
+ * 페이지 트리(roots)에 config.builtins 로 켜진 규칙만 실행해 Violation[] 를 반환.
+ * `coverage` 를 주면 어떤 규칙이 돌았는지 함께 채운다(안 주면 동작이 100% 종전과 같다).
+ */
+export function runBuiltinRules(
+  roots: TreeNode[],
+  builtins: BuiltinsConfig = {},
+  ctx: BuiltinRuleContext = {},
+  coverage?: RuleCoverage,
+): Violation[] {
   const out: Violation[] = [];
   const layerIds = new Set(ctx.annotationLayerIds || []);
+  /** opt-out 규칙: 켜졌으면 ran, 껐으면 disabled */
+  const markOptOut = (id: BuiltinRuleId, on: boolean) => {
+    if (coverage) (on ? coverage.ran : coverage.disabled).push(id);
+    return on;
+  };
+  /** opt-in 규칙: enabled===true 여야 ran, 아니면 optInOff */
+  const markOptIn = (id: BuiltinRuleId, on: boolean) => {
+    if (coverage) (on ? coverage.ran : coverage.optInOff).push(id);
+    return on;
+  };
 
   const anyGeometricEnabled = GEOMETRIC_RULES.some((id) => isEnabled(builtins, id));
+  // 기하 8종은 lintLayout 한 번으로 함께 도는데, 커버리지는 규칙 단위로 남긴다 —
+  // 하나도 안 켜졌으면 lintLayout 자체를 건너뛰므로 전부 disabled 다.
+  for (const id of GEOMETRIC_RULES) {
+    markOptOut(id, anyGeometricEnabled && isEnabled(builtins, id));
+  }
   if (anyGeometricEnabled) {
     const paddingCfg = builtins.frame_padding?.padding;
     const gapCfg = builtins.section_gap?.gap;
@@ -119,32 +179,39 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
     includeInsideInstances: (builtins[id] as { includeInsideInstances?: boolean } | undefined)?.includeInsideInstances === true,
     specMasterIds: specMasters,
   });
-  if (isEnabled(builtins, 'stray_pixel')) out.push(...strayPixelRule(roots, instScope('stray_pixel')));
-  if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots, { ...instScope('default_name'), includeVectors: (builtins.default_name as { includeVectors?: boolean } | undefined)?.includeVectors === true }));
-  if (isEnabled(builtins, 'empty_container')) out.push(...emptyContainerRule(roots, instScope('empty_container')));
-  if (isEnabled(builtins, 'hidden_leaf')) out.push(...hiddenLeafRule(roots));
-  if (isEnabled(builtins, 'fill_sizing_orphan')) out.push(...fillSizingOrphanRule(roots));
-  if (isEnabled(builtins, 'component_description_empty')) out.push(...componentDescriptionEmptyRule(roots));
+  if (markOptOut('stray_pixel', isEnabled(builtins, 'stray_pixel'))) out.push(...strayPixelRule(roots, instScope('stray_pixel')));
+  if (markOptOut('default_name', isEnabled(builtins, 'default_name'))) out.push(...defaultNameRule(roots, { ...instScope('default_name'), includeVectors: (builtins.default_name as { includeVectors?: boolean } | undefined)?.includeVectors === true }));
+  if (markOptOut('empty_container', isEnabled(builtins, 'empty_container'))) out.push(...emptyContainerRule(roots, instScope('empty_container')));
+  if (markOptOut('hidden_leaf', isEnabled(builtins, 'hidden_leaf'))) out.push(...hiddenLeafRule(roots));
+  if (markOptOut('fill_sizing_orphan', isEnabled(builtins, 'fill_sizing_orphan'))) out.push(...fillSizingOrphanRule(roots));
+  if (markOptOut('component_description_empty', isEnabled(builtins, 'component_description_empty'))) out.push(...componentDescriptionEmptyRule(roots));
 
   // raw_node 만 opt-in: 미기재/enabled≠true 면 실행 안 함(다른 빌트인의 opt-out 기본 ON 과 반대).
-  if (builtins.raw_node?.enabled === true) out.push(...rawNodeRule(roots, builtins.raw_node as RawNodeConfig));
+  if (markOptIn('raw_node', builtins.raw_node?.enabled === true)) out.push(...rawNodeRule(roots, builtins.raw_node as RawNodeConfig));
 
   // annotation_layer 도 opt-in: 켜진 페이지에서 모든 SECTION 은 기획 레이어를 직속 자식으로 가져야 한다.
-  if (builtins.annotation_layer?.enabled === true) out.push(...annotationLayerRule(roots, layerIds));
+  if (markOptIn('annotation_layer', builtins.annotation_layer?.enabled === true)) out.push(...annotationLayerRule(roots, layerIds));
 
   // instance_default_name 도 opt-in: 인스턴스 이름이 마스터 컴포넌트 이름 그대로면 위반.
-  if (builtins.instance_default_name?.enabled === true) {
+  if (markOptIn('instance_default_name', builtins.instance_default_name?.enabled === true)) {
     out.push(...instanceDefaultNameRule(roots, ctx.instanceComponentNames || new Map()));
   }
 
   // 페이지 루트 전용 2종(opt-in) — 서브트리 스코프에선 좌표 기준이 달라져 아예 실행하지 않는다.
-  if (ctx.isPageRoot) {
-    if (builtins.origin_anchor?.enabled === true) {
-      const tol = builtins.origin_anchor.tolerance;
-      out.push(...originAnchorRule(roots, typeof tol === 'number' ? tol : DEFAULT_ORIGIN_TOLERANCE));
+  // 켰는데 스코프 때문에 못 돈 경우는 optInOff 가 아니라 skipped 다("껐다"와 "못 돌았다"는 다르다).
+  for (const id of ['origin_anchor', 'content_spread'] as const) {
+    const on = builtins[id]?.enabled === true;
+    if (!on) { coverage?.optInOff.push(id); continue; }
+    if (!ctx.isPageRoot) {
+      coverage?.skipped.push({ rule: id, reason: 'nodeId/path 서브트리 스코프 — 페이지 절대좌표 전제라 실행되지 않음' });
+      continue;
     }
-    if (builtins.content_spread?.enabled === true) {
-      const gap = builtins.content_spread.maxGap;
+    coverage?.ran.push(id);
+    if (id === 'origin_anchor') {
+      const tol = builtins.origin_anchor!.tolerance;
+      out.push(...originAnchorRule(roots, typeof tol === 'number' ? tol : DEFAULT_ORIGIN_TOLERANCE));
+    } else {
+      const gap = builtins.content_spread!.maxGap;
       out.push(...contentSpreadRule(roots, typeof gap === 'number' ? gap : DEFAULT_MAX_GAP));
     }
   }

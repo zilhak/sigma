@@ -3104,6 +3104,8 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
 
 배치/resize 후 회귀 검사하는 습관을 권장합니다 — 컨테이너를 키우면 형제를 덮기 쉽습니다.
 
+⚠️ **위반 0건을 그냥 "깨끗함"으로 읽지 마세요.** 응답에 항상 실리는 \`coverage\`(무엇이 몇 개 노드에서 돌았나 — \`scannedNodes\`/\`builtinRan\`/\`builtinDisabled\`/\`builtinOptInOff\`/\`builtinSkipped\`/\`customFailed\`)와 \`byRule\`(규칙별 건수, **실행된 규칙은 0이어도 키가 있음**)을 함께 보세요. 규칙 하나만 볼 때는 총계가 아니라 \`byRule[id]\` 를 봅니다 — 기본 규칙을 안 끈 config 에서 총계를 읽고 오독하는 사고가 반복됐습니다.
+
 **base config 는 inline \`config\` / \`configPath\` / 문서 저장값 중 하나로 제공**합니다(우선순위 그대로). Figma 파일마다 다른 규칙을 쓸 수 있어, 서버는 config를 저장하지 않고 매 호출 시 지정된 것을 그대로 읽습니다. \`configPath\` 는 **서버 자신의 파일시스템 기준**이라, Docker로 배포했다면 컨테이너에 보이는 경로(보통 바인드 마운트된 \`~/.sigma\` 하위)여야 합니다 — 프로젝트 저장소 경로는 컨테이너 안에서 안 보입니다.
 
 **config 스키마**:

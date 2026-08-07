@@ -38,6 +38,9 @@ export {
   mergeFixesBySection,
   runBuiltinRules,
   isEnabled,
+  emptyCoverage,
+  ENGINE_EXTERNAL_RULE_IDS,
+  type RuleCoverage,
 } from './engine';
 export { compileMatchRule, runMatchRule, matchesQuery, queryNodes, assertQueryShape, QueryShapeError, type CompiledMatchRule, type NodeQuery } from './json-rule';
 export {

@@ -42,6 +42,24 @@ Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기
   false-clean). 순회는 `treeTimeoutMs`(기본 **60000**)로도 끊긴다. 상한에 걸리면 응답에
   `scanTruncated: true` · `scannedNodes` · `scanWarning`을 싣고 **`clean`을 false로 강제**한다.
   이때는 `treeNodeLimit`을 올리거나 `nodeId` 스코프로 섹션별로 나눠 재검사한다.
+- **0건은 그 자체로 해석되지 않는다 — `coverage`와 `byRule`을 함께 본다.** 응답은 항상
+  "무엇을 몇 개 노드에 대해 검사했는가"를 싣는다(옵션이 아니다). 규칙 하나만 궁금할 때
+  **총계(`violationCount`)가 아니라 `byRule[id]`를 본다** — inline config가 기본 규칙을 끄지
+  않아 총계가 다른 규칙 것으로 부풀어 보이는 오독이 실제로 반복됐다.
+
+  | 필드 | 뜻 |
+  |---|---|
+  | `coverage.scannedNodes` | 순회한 노드 수. **0이면 그 검사는 아무 의미가 없다** |
+  | `coverage.builtinRan` / `customRan` | 실제로 실행된 규칙 id |
+  | `coverage.builtinDisabled` | config로 껐다(`enabled:false`) |
+  | `coverage.builtinOptInOff` | opt-in인데 안 켰다 |
+  | `coverage.builtinSkipped` | **켰는데도 못 돌았다** + 사유 (있을 때만) |
+  | `coverage.customFailed` | 커스텀 규칙이 실행 자체를 실패 (정의 오류·타임아웃) |
+  | `byRule` | 규칙 id → 위반 건수. **실행된 규칙은 0이어도 키가 있다** |
+
+  세 상태가 응답만으로 갈린다: `byRule[id] > 0`(위반 있음) · `byRule[id] === 0`(돌았고 깨끗함) ·
+  **키 없음**(안 돌았음 — `coverage`에서 왜인지 확인). `scope:"file"`은 `summary[]`에
+  페이지별 `scannedNodes`·`ranCount`·`byRule`을 싣는다.
 
 ## 엔진 소스
 

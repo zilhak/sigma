@@ -19,8 +19,12 @@ export interface PageLintResult {
   suppressedCount?: number;
   /** 트리가 노드 상한에서 잘려 부분만 검사됨(clean 신뢰불가) */
   truncated?: boolean;
-  /** 잘린 경우 실제 스캔된 노드 수 */
+  /** 스캔된 노드 수. 0 이면 그 페이지는 사실상 검사되지 않은 것이다 */
   scannedNodes?: number;
+  /** 실행된 규칙 수(빌트인+커스텀). 0 이면 위반 0건이 "깨끗함"을 뜻하지 않는다 */
+  ranCount?: number;
+  /** 규칙 id → 위반 건수. 실행된 규칙은 0 이어도 키가 있다 */
+  byRule?: Record<string, number>;
 }
 
 export interface ReportMeta {

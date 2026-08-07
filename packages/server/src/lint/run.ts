@@ -9,10 +9,10 @@
  */
 import type { TreeNode } from '@sigma/shared';
 import {
-  runBuiltinRules, collectFixableViolations, mergeFixesBySection, isEnabled,
+  runBuiltinRules, collectFixableViolations, mergeFixesBySection, isEnabled, emptyCoverage, ALL_BUILTIN_RULE_IDS,
   fullyOccludedSiblingRule, instanceResizedFromSpecRule, annotationMarkerPairRule, annotationMarkerGapRule, fontNotDefaultRule,
   type InstanceResizedConfig, type AnnotationMarkerPairConfig, type AnnotationMarkerGapConfig, type FontNotDefaultConfig,
-  type Violation, type LintConfig, type LayoutFix,
+  type Violation, type LintConfig, type LayoutFix, type RuleCoverage, type BuiltinRuleId,
 } from '@sigma/shared/lint';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
 import { enrichIfNeeded } from './enrich.js';
@@ -77,7 +77,7 @@ async function runLintOnRoots(
   pluginId: string | undefined,
   isPageRoot: boolean,
   scopeRoot?: TreeNode,
-): Promise<Violation[]> {
+): Promise<{ violations: Violation[]; coverage: RuleCoverage; customRan: string[] }> {
   const hasCustom = (config.custom || []).length > 0;
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom, scopeRoot);
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds);
@@ -85,31 +85,80 @@ async function runLintOnRoots(
   const specMasterIds = await collectSpecMasterIds(config.builtins, roots, wsServer, pluginId);
   const defaultFontFamily = await resolveDefaultFontFamily(config.builtins, wsServer, pluginId);
   const sizingByAlias = await resolveSpecSizing(config.builtins);
-  return [
-    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, specMasterIds, isPageRoot, scopeRoot }),
-    ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
-      ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
+
+  // 커버리지는 엔진이 완성하지 못한다 — 아래 5종은 enrich 된 LintNode 가 필요해 여기서 직접 돈다.
+  // 그 5종을 여기서 안 채우면 "돌았는데 목록에 없다" 가 되어, 이 기능이 없애려던 혼동을 새로 만든다.
+  const coverage = emptyCoverage();
+  /** enrich 가 필요한 규칙: 켰는데 enrich 가 없으면 optInOff 가 아니라 skipped 다 */
+  const markEnrichRule = (id: BuiltinRuleId, on: boolean, optIn: boolean): boolean => {
+    if (!on) { (optIn ? coverage.optInOff : coverage.disabled).push(id); return false; }
+    if (!enriched) {
+      coverage.skipped.push({ rule: id, reason: '노드 상세 정보(enrich)를 받지 못해 실행되지 않음' });
+      return false;
+    }
+    coverage.ran.push(id);
+    return true;
+  };
+
+  const violations = [
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, specMasterIds, isPageRoot, scopeRoot }, coverage),
+    ...(markEnrichRule('fully_occluded_sibling', isEnabled(config.builtins || {}, 'fully_occluded_sibling'), false)
+      ? fullyOccludedSiblingRule(enriched!.nodes, enriched!.relations.children)
       : []),
-    ...(enriched && config.builtins?.instance_resized_from_spec?.enabled === true
-      ? instanceResizedFromSpecRule(enriched.nodes, {
-          ...(config.builtins.instance_resized_from_spec as InstanceResizedConfig),
+    ...(markEnrichRule('instance_resized_from_spec', config.builtins?.instance_resized_from_spec?.enabled === true, true)
+      ? instanceResizedFromSpecRule(enriched!.nodes, {
+          ...(config.builtins!.instance_resized_from_spec as InstanceResizedConfig),
           sizingByAlias,
         })
       : []),
-    ...(enriched && config.builtins?.annotation_marker_pair?.enabled === true
-      ? annotationMarkerPairRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_pair as AnnotationMarkerPairConfig)
+    ...(markEnrichRule('annotation_marker_pair', config.builtins?.annotation_marker_pair?.enabled === true, true)
+      ? annotationMarkerPairRule(enriched!.nodes, enriched!.relations, config.builtins!.annotation_marker_pair as AnnotationMarkerPairConfig)
       : []),
-    ...(enriched && config.builtins?.annotation_marker_gap?.enabled === true
-      ? annotationMarkerGapRule(enriched.nodes, enriched.relations, config.builtins.annotation_marker_gap as AnnotationMarkerGapConfig)
+    ...(markEnrichRule('annotation_marker_gap', config.builtins?.annotation_marker_gap?.enabled === true, true)
+      ? annotationMarkerGapRule(enriched!.nodes, enriched!.relations, config.builtins!.annotation_marker_gap as AnnotationMarkerGapConfig)
       : []),
-    ...(enriched && config.builtins?.font_not_default?.enabled === true
-      ? fontNotDefaultRule(enriched.nodes, {
-          ...(config.builtins.font_not_default as FontNotDefaultConfig),
+    ...(markEnrichRule('font_not_default', config.builtins?.font_not_default?.enabled === true, true)
+      ? fontNotDefaultRule(enriched!.nodes, {
+          ...(config.builtins!.font_not_default as FontNotDefaultConfig),
           family: defaultFontFamily,
         })
       : []),
     ...(enriched ? await runCustomRulesFromEnriched(config, enriched) : []),
   ];
+
+  // 안전망: 24종 중 어디에도 안 담긴 id 가 있으면 그건 커버리지 등록을 빠뜨린 것이다.
+  // 조용히 빠지면 호출자는 "안 돌았구나" 로 읽는데 실제로는 돌았을 수 있다 — 그 혼동이
+  // 바로 이 기능이 없애려는 것이므로, 감추지 말고 응답에 드러낸다.
+  const covered = new Set<string>([
+    ...coverage.ran, ...coverage.disabled, ...coverage.optInOff, ...coverage.skipped.map((s) => s.rule),
+  ]);
+  for (const id of ALL_BUILTIN_RULE_IDS) {
+    if (!covered.has(id)) {
+      coverage.skipped.push({ rule: id, reason: '커버리지 미등록 — sigma 버그입니다(실행 여부를 알 수 없음)' });
+    }
+  }
+
+  // 커스텀 규칙은 enrich 가 없으면 통째로 안 돈다 — 그 사실이 응답에 안 나오면 0건으로 읽힌다.
+  const customRan = enriched ? (config.custom || []).map((r) => r.id) : [];
+  return { violations, coverage, customRan };
+}
+
+/**
+ * 규칙 id → 위반 건수. **실행된 규칙은 0 이어도 키를 남긴다** — 그게 "돌았는데 0건" 과
+ * "아예 안 돔"(키 없음)을 가르는 유일한 신호다. 배경은 coverage 와 같다.
+ */
+function countByRule(violations: Violation[], ranRules: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of ranRules) out[id] = 0;
+  for (const v of violations) out[v.rule] = (out[v.rule] || 0) + 1;
+  return out;
+}
+
+/** 커스텀 규칙이 실행 자체를 실패한 경우(정의 오류·타임아웃·Worker 에러). 조용히 0건이 되지 않게 드러낸다. */
+function customFailures(violations: Violation[]): Array<{ rule: string; error: string }> {
+  return violations
+    .filter((v) => v.source === 'custom' && v.error)
+    .map((v) => ({ rule: v.rule, error: v.error as string }));
 }
 
 /** scope=page — 바인딩된 페이지 1개. apply(자동수정) 지원. */
@@ -146,8 +195,9 @@ export async function runPageLint(
   const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout, includeAbsolute }, pluginId);
   const roots = tree.children as TreeNode[];
   const scopeRoot = tree.rootNode as TreeNode | undefined;
-  const rawViolations = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot, scopeRoot);
-  const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
+  const ran = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot, scopeRoot);
+  const { violations, suppressedCount } = await suppressViolations(ran.violations, wsServer, pluginId);
+  const failedCustom = customFailures(violations);
 
   const fixable = collectFixableViolations(violations);
   const merged = mergeFixesBySection(fixable);
@@ -173,6 +223,20 @@ export async function runPageLint(
     clean: violations.length === 0 && !tree.truncated,
     violationCount: violations.length,
     ...(suppressedCount ? { suppressed: suppressedCount } : {}),
+    // 0건이 "깨끗함" 인지 "규칙이 안 돌았음" 인지는 violations 만 봐서는 알 수 없다.
+    // coverage(무엇이 돌았나) + byRule(각각 몇 건인가) 을 항상 싣는다 — 옵션으로 만들면
+    // 정작 사고가 나는 상황(=의심 없이 0건을 읽는 상황)에서 안 켠다.
+    coverage: {
+      scannedNodes: tree.totalCount,
+      truncated: tree.truncated === true,
+      builtinRan: ran.coverage.ran,
+      builtinDisabled: ran.coverage.disabled,
+      builtinOptInOff: ran.coverage.optInOff,
+      ...(ran.coverage.skipped.length ? { builtinSkipped: ran.coverage.skipped } : {}),
+      customRan: ran.customRan,
+      ...(failedCustom.length ? { customFailed: failedCustom } : {}),
+    },
+    byRule: countByRule(violations, [...ran.coverage.ran, ...ran.customRan]),
     violations,
     autoFixable: merged.length,
   };
@@ -191,14 +255,18 @@ export async function runPageLint(
     : { skipped: true, reason: '자동수정 대상 없음' };
 
   const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout, includeAbsolute }, pluginId);
-  const afterRaw = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot, after.rootNode as TreeNode | undefined);
-  const afterViolations = (await suppressViolations(afterRaw, wsServer, pluginId)).violations;
+  const afterRan = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot, after.rootNode as TreeNode | undefined);
+  const afterViolations = (await suppressViolations(afterRan.violations, wsServer, pluginId)).violations;
 
   return {
     ...base,
     mode: 'apply',
     applyResult,
-    after: { violationCount: afterViolations.length, violations: afterViolations },
+    after: {
+      violationCount: afterViolations.length,
+      byRule: countByRule(afterViolations, [...afterRan.coverage.ran, ...afterRan.customRan]),
+      violations: afterViolations,
+    },
   };
 }
 
@@ -233,12 +301,15 @@ export async function runFileLint(
         includeAbsolute: resolved.config.builtins?.annotation_marker_gap?.enabled === true,
       }, pluginId);
       // scope=file 은 언제나 페이지 루트 전체를 뜬다 → 페이지 절대좌표 전제 규칙 실행 가능.
-      const rawViolations = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId, true);
-      const { violations, suppressedCount } = await suppressViolations(rawViolations, wsServer, pluginId);
+      const ran = await runLintOnRoots(resolved.config, tree.children as TreeNode[], wsServer, pluginId, true);
+      const { violations, suppressedCount } = await suppressViolations(ran.violations, wsServer, pluginId);
       results.push({
         pageId: p.pageId, pageName: p.pageName, configSource: resolved.source, configError: resolved.error,
         violations, suppressedCount,
-        ...(tree.truncated ? { truncated: true, scannedNodes: tree.totalCount } : {}),
+        scannedNodes: tree.totalCount,
+        ranCount: ran.coverage.ran.length + ran.customRan.length,
+        byRule: countByRule(violations, [...ran.coverage.ran, ...ran.customRan]),
+        ...(tree.truncated ? { truncated: true } : {}),
       });
     } catch (error) {
       results.push({
@@ -279,7 +350,12 @@ export async function runFileLint(
       page: r.pageName,
       configSource: r.configSource,
       violations: r.configSource === 'skipped' ? null : r.violations.length,
-      ...(r.truncated ? { scanTruncated: true, scannedNodes: r.scannedNodes } : {}),
+      // 규칙 전체 id 를 페이지마다 반복하면 응답이 커진다 — 여기선 규모(scannedNodes/ranCount)와
+      // 규칙별 건수(byRule)만 싣고, 전체 목록은 리포트 md 에 한 번만 적는다.
+      ...(r.scannedNodes !== undefined ? { scannedNodes: r.scannedNodes } : {}),
+      ...(r.ranCount !== undefined ? { ranCount: r.ranCount } : {}),
+      ...(r.byRule ? { byRule: r.byRule } : {}),
+      ...(r.truncated ? { scanTruncated: true } : {}),
       ...(r.suppressedCount ? { suppressed: r.suppressedCount } : {}),
       ...(r.configError ? { configError: r.configError } : {}),
     })),
