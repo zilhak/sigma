@@ -400,6 +400,28 @@ export class FigmaWebSocketServer {
   }
 
   /**
+   * 플러그인에 명령을 보낸다 (핸들러가 쓰는 공개 진입점).
+   *
+   * ⚠️ commandType 은 code.ts 의 `case '<kebab>'` 와 1:1로 맞아야 한다.
+   * UI 브리지의 제네릭 패스스루(`ui/bridge-server.ts` default)가
+   * UPPER_SNAKE → kebab-case 로 바꿔 그대로 전달하기 때문이다.
+   *
+   * payload 의 필드는 그대로 WebSocket 메시지가 된다. 예약 필드(type/commandId)는
+   * sendCommand 가 제거하므로 덮어쓸 걱정은 없다.
+   *
+   * 이 메서드가 있기 전에는 명령마다 `return this.sendCommand('X', args, {pluginId})`
+   * 한 줄짜리 공개 래퍼를 하나씩 늘려야 했다(76개까지 늘었다). sendCommand 가
+   * private 이라 핸들러가 직접 부를 수 없었던 것이 유일한 이유였다.
+   */
+  command<T = unknown>(
+    commandType: string,
+    payload: Record<string, unknown>,
+    options?: { pluginId?: string; timeoutMs?: number; logSuffix?: string }
+  ): Promise<T> {
+    return this.sendCommand<T>(commandType, payload, options);
+  }
+
+  /**
    * 커맨드 결과 메시지 공통 처리
    * commandId로 pendingCommand를 찾아 resolve/reject 수행
    */
@@ -958,221 +980,25 @@ export class FigmaWebSocketServer {
 
   // === Group / Ungroup / Flatten ===
 
-  async groupNodes(nodeIds: string[], name?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GROUP_NODES', { nodeIds, name }, { pluginId });
-  }
-
-  async ungroupNodes(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('UNGROUP_NODES', { nodeId }, { pluginId });
-  }
-
-  async flattenNodes(nodeIds: string[], name?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('FLATTEN_NODES', { nodeIds, name }, { pluginId });
-  }
-
   // === Viewport ===
-
-  async getViewport(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_VIEWPORT', {}, { pluginId });
-  }
-
-  async setViewport(options: { center?: { x: number; y: number }; zoom?: number; nodeIds?: string[] }, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_VIEWPORT', options, { pluginId });
-  }
 
   // === Boolean Operations ===
 
-  async booleanOperation(nodeIds: string[], operation: string, name?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('BOOLEAN_OPERATION', { nodeIds, operation, name }, { pluginId });
-  }
-
   // === Page Management ===
-
-  async createPage(name?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_PAGE', { name }, { pluginId });
-  }
-
-  async renamePage(pageId: string, name: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('RENAME_PAGE', { pageId, name }, { pluginId });
-  }
-
-  async switchPage(pageId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SWITCH_PAGE', { pageId }, { pluginId });
-  }
-
-  async deletePage(pageId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('DELETE_PAGE', { pageId }, { pluginId });
-  }
-
-  async reorderPage(pageId: string, index: number, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('REORDER_PAGE', { pageId, index }, { pluginId });
-  }
 
   // === Create Nodes ===
 
-  async createRectangle(
-    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: { r: number; g: number; b: number; a?: number }; strokeColor?: { r: number; g: number; b: number; a?: number }; strokeWeight?: number; cornerRadius?: number; pageId?: string },
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('CREATE_RECTANGLE', args, { pluginId });
-  }
-
-  async createTextNode(
-    args: { x: number; y: number; text: string; name?: string; parentId?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; fontColor?: { r: number; g: number; b: number; a?: number }; textAlignHorizontal?: string; pageId?: string },
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('CREATE_TEXT', args, { pluginId });
-  }
-
-  async createEmptyFrame(
-    args: { x: number; y: number; width: number; height: number; name?: string; parentId?: string; fillColor?: unknown; strokeColor?: unknown; strokeWeight?: number; layoutMode?: string; layoutWrap?: string; paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number; primaryAxisAlignItems?: string; counterAxisAlignItems?: string; layoutSizingHorizontal?: string; layoutSizingVertical?: string; itemSpacing?: number; counterAxisSpacing?: number; cornerRadius?: number; pageId?: string },
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('CREATE_EMPTY_FRAME', args, { pluginId });
-  }
-
-  async createEllipse(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_ELLIPSE', args, { pluginId });
-  }
-
-  async createPolygon(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_POLYGON', args, { pluginId });
-  }
-
-  async createStar(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_STAR', args, { pluginId });
-  }
-
-  async createLine(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_LINE', args, { pluginId });
-  }
-
-  async createVector(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_VECTOR', args, { pluginId });
-  }
-
-  async createImageNode(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_IMAGE_NODE', args, { pluginId });
-  }
-
   // === Styles ===
-
-  async createPaintStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_PAINT_STYLE', args, { pluginId });
-  }
-
-  async createTextStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_TEXT_STYLE', args, { pluginId });
-  }
-
-  async createEffectStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_EFFECT_STYLE', args, { pluginId });
-  }
-
-  async createGridStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_GRID_STYLE', args, { pluginId });
-  }
-
-  async applyStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('APPLY_STYLE', args, { pluginId });
-  }
-
-  async deleteStyle(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('DELETE_STYLE', args, { pluginId });
-  }
 
   // === Variables ===
 
-  async createVariableCollection(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_VARIABLE_COLLECTION', args, { pluginId });
-  }
-
-  async createVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_VARIABLE', args, { pluginId });
-  }
-
-  async getVariables(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_VARIABLES', args, { pluginId });
-  }
-
-  async setVariableValue(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_VARIABLE_VALUE', args, { pluginId });
-  }
-
-  async bindVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('BIND_VARIABLE', args, { pluginId });
-  }
-
-  async addVariableMode(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('ADD_VARIABLE_MODE', args, { pluginId });
-  }
-
   // === Selection ===
-
-  async getSelection(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_SELECTION', {}, { pluginId });
-  }
-
-  async setSelectionNodes(
-    nodeIds: string[],
-    zoomToFit?: boolean,
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('SET_SELECTION', { nodeIds, zoomToFit }, { pluginId });
-  }
 
   // === Components ===
 
-  async getLocalComponents(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_LOCAL_COMPONENTS', {}, { pluginId });
-  }
-
-  async createComponentInstance(
-    componentKey: string,
-    x: number,
-    y: number,
-    parentId?: string,
-    pluginId?: string,
-    pageId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('CREATE_COMPONENT_INSTANCE', { componentKey, x, y, parentId, pageId }, { pluginId });
-  }
-
-  async getInstanceOverrides(nodeId?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_INSTANCE_OVERRIDES', { nodeId }, { pluginId });
-  }
-
-  async setInstanceOverrides(
-    nodeId: string,
-    overrides: Record<string, unknown>,
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('SET_INSTANCE_OVERRIDES', { nodeId, overrides }, { pluginId });
-  }
-
   // === Query ===
 
-  async getNodeInfo(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_NODE_INFO', { nodeId }, { pluginId });
-  }
-
-  async getDocumentInfo(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_DOCUMENT_INFO', {}, { pluginId });
-  }
-
-  async getStylesInfo(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_STYLES', {}, { pluginId });
-  }
-
   // === Batch ===
-
-  async scanTextNodes(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SCAN_TEXT_NODES', { nodeId }, { pluginId });
-  }
-
-  async scanNodesByTypes(nodeId: string, types: string[], pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SCAN_NODES_BY_TYPES', { nodeId, types }, { pluginId });
-  }
 
   async batchModifyNodes(
     operations: Array<{ nodeId: string; method: string; args?: Record<string, unknown> }>,
@@ -1182,10 +1008,6 @@ export class FigmaWebSocketServer {
       pluginId,
       timeoutMs: 60000,
     });
-  }
-
-  async batchDeleteNodes(nodeIds: string[], pluginId?: string): Promise<unknown> {
-    return this.sendCommand('BATCH_DELETE', { nodeIds }, { pluginId });
   }
 
   // === Batch Text ===
@@ -1202,207 +1024,25 @@ export class FigmaWebSocketServer {
 
   // === Query (batch) ===
 
-  async getNodesInfo(nodeIds: string[], pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_NODES_INFO', { nodeIds }, { pluginId });
-  }
-
-  async readMyDesign(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('READ_MY_DESIGN', {}, { pluginId });
-  }
-
   // === Annotations ===
-
-  async setMultipleAnnotations(
-    items: Array<{ nodeId: string; label: string; labelType?: string }>,
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('SET_MULTIPLE_ANNOTATIONS', { items }, { pluginId });
-  }
-
-  async getAnnotations(nodeId?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_ANNOTATIONS', { nodeId }, { pluginId });
-  }
-
-  async setAnnotation(
-    nodeId: string,
-    label: string,
-    labelType?: string,
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('SET_ANNOTATION', { nodeId, label, labelType }, { pluginId });
-  }
 
   // === Prototyping ===
 
-  async getReactions(nodeId?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_REACTIONS', { nodeId }, { pluginId });
-  }
-
-  async addReaction(
-    args: { nodeId: string; trigger: string; action: string; destinationId?: string; url?: string; transition?: { type: string; duration?: number; direction?: string }; preserveScrollPosition?: boolean },
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('ADD_REACTION', args, { pluginId });
-  }
-
-  async removeReactions(nodeId: string, triggerType?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('REMOVE_REACTIONS', { nodeId, triggerType }, { pluginId });
-  }
-
-  async setHyperlink(
-    args: { links: Array<{ a: string; b: string }>; direction?: string; slot?: string; remove?: boolean },
-    pluginId?: string
-  ): Promise<unknown> {
-    return this.sendCommand('SET_HYPERLINK', args, { pluginId });
-  }
-
   // === Component System (New) ===
-
-  async createComponent(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_COMPONENT', args, { pluginId });
-  }
 
   // === Component Spec System (스펙 기반 컴포넌트) ===
 
-  async buildComponentFromSpec(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('BUILD_COMPONENT_FROM_SPEC', args, { pluginId });
-  }
-
-  async useComponentSpec(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('USE_COMPONENT_SPEC', args, { pluginId });
-  }
-
-  async setComponentSpecInstanceProps(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_COMPONENT_SPEC_INSTANCE_PROPS', args, { pluginId });
-  }
-
-  async convertToComponent(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CONVERT_TO_COMPONENT', { nodeId }, { pluginId });
-  }
-
-  async createComponentSet(componentIds: string[], name?: string, pluginId?: string, pageId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_COMPONENT_SET', { componentIds, name, pageId }, { pluginId });
-  }
-
-  async addComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('ADD_COMPONENT_PROPERTY', args, { pluginId });
-  }
-
-  async editComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('EDIT_COMPONENT_PROPERTY', args, { pluginId });
-  }
-
-  async deleteComponentProperty(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('DELETE_COMPONENT_PROPERTY', args, { pluginId });
-  }
-
-  async getComponentProperties(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_COMPONENT_PROPERTIES', { nodeId }, { pluginId });
-  }
-
-  async detachInstance(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('DETACH_INSTANCE', { nodeId }, { pluginId });
-  }
-
-  async swapComponent(nodeId: string, newComponentKey: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SWAP_COMPONENT', { nodeId, newComponentKey }, { pluginId });
-  }
-
   // === Creation (New) ===
-
-  async createNodeFromSvg(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_NODE_FROM_SVG', args, { pluginId });
-  }
 
   // === Query (New) ===
 
-  async listAvailableFonts(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('LIST_FONTS', {}, { pluginId });
-  }
-
-  async getNodeCSS(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_CSS', { nodeId }, { pluginId });
-  }
-
   // === Variables Advanced (New) ===
-
-  async setVariableScopes(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_VARIABLE_SCOPES', args, { pluginId });
-  }
-
-  async setVariableAlias(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_VARIABLE_ALIAS', args, { pluginId });
-  }
-
-  async setVariableCodeSyntax(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_VARIABLE_CODE_SYNTAX', args, { pluginId });
-  }
-
-  async renameVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('RENAME_VARIABLE', args, { pluginId });
-  }
-
-  async deleteVariable(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('DELETE_VARIABLE', args, { pluginId });
-  }
 
   // === Team Library (New) ===
 
-  async getAvailableLibraries(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_LIBRARIES', {}, { pluginId, timeoutMs: 30000 });
-  }
-
-  async getLibraryComponents(libraryKey: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_LIBRARY_COMPONENTS', { libraryKey }, { pluginId, timeoutMs: 30000 });
-  }
-
-  async getLibraryVariables(collectionKey: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_LIBRARY_VARIABLES', { collectionKey }, { pluginId, timeoutMs: 30000 });
-  }
-
-  async importLibraryComponent(key: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('IMPORT_LIBRARY_COMPONENT', { key }, { pluginId });
-  }
-
-  async importLibraryStyle(key: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('IMPORT_LIBRARY_STYLE', { key }, { pluginId });
-  }
-
   // === Utilities (New) ===
 
-  async notifyUser(message: string, options?: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('NOTIFY', { message, options }, { pluginId });
-  }
-
-  async commitUndo(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('COMMIT_UNDO', {}, { pluginId });
-  }
-
-  async triggerUndo(pluginId?: string): Promise<unknown> {
-    return this.sendCommand('TRIGGER_UNDO', {}, { pluginId });
-  }
-
-  async saveVersion(title: string, description?: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SAVE_VERSION', { title, description }, { pluginId, timeoutMs: 30000 });
-  }
-
-  async setExportSettings(nodeId: string, settings: unknown[], pluginId?: string): Promise<unknown> {
-    return this.sendCommand('SET_EXPORT_SETTINGS', { nodeId, settings }, { pluginId });
-  }
-
-  async getExportSettings(nodeId: string, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('GET_EXPORT_SETTINGS', { nodeId }, { pluginId });
-  }
-
   // === FigJam (New) ===
-
-  async createSticky(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_STICKY', args, { pluginId });
-  }
-
-  async createConnector(args: Record<string, unknown>, pluginId?: string): Promise<unknown> {
-    return this.sendCommand('CREATE_CONNECTOR', args, { pluginId });
-  }
 
   // Broadcast to all Figma plugins
   broadcastToFigma(message: object) {

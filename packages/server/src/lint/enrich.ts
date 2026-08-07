@@ -6,7 +6,7 @@
 import { flattenTree, buildRelationMaps, type TreeNode, type LintNode } from '@sigma/shared';
 import type { CtxRelations } from './run-custom-rule';
 
-/** wsServer.getNodesInfo() 가 WS 왕복으로 돌려주는 항목 — 플러그인의 NodeDetailInfo를
+/** GET_NODES_INFO 명령이 WS 왕복으로 돌려주는 항목 — 플러그인의 NodeDetailInfo를
  *  서버에선 비구조화된 unknown 으로 받으므로 여기서 필요한 필드만 느슨하게 타이핑한다. */
 export interface NodeInfoLike {
   nodeId: string;

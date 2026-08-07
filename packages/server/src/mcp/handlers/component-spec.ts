@@ -126,8 +126,7 @@ export const componentSpecHandlers: Record<
 
     const { pluginId, pageId } = access;
     try {
-      const result = (await wsServer.buildComponentFromSpec(
-        {
+      const result = (await wsServer.command('BUILD_COMPONENT_FROM_SPEC', {
           html,
           alias,
           namespace,
@@ -136,9 +135,7 @@ export const componentSpecHandlers: Record<
           pageId,
           // overwrite: 기존 노드 in-place 갱신 → 인스턴스 전파 (노드 소실 시 플러그인이 신규 빌드 폴백)
           existingNodeId: existing ? existing.componentNodeId : undefined,
-        },
-        pluginId
-      )) as {
+        }, { pluginId })) as {
         nodeId: string;
         key: string;
         width: number;
@@ -276,8 +273,7 @@ export const componentSpecHandlers: Record<
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.useComponentSpec(
-        {
+      const result = await wsServer.command('USE_COMPONENT_SPEC', {
           componentNodeId: spec.componentNodeId,
           alias,
           props,
@@ -292,9 +288,7 @@ export const componentSpecHandlers: Record<
           // 파일 스코프: 다른 파일에서 등록된 컴포넌트의 오사용 차단
           expectedFileId: spec.fileId,
           specFileName: spec.fileName,
-        },
-        pluginId
-      );
+        }, { pluginId });
 
       // 조용한 변형 감지: 고정폭 컴포넌트에서 긴 텍스트가 줄바꿈되면 높이가 급증한다
       // (영역 밖 침범이 아니라 플러그인의 넘침 경고에는 안 걸림)
@@ -359,16 +353,13 @@ export const componentSpecHandlers: Record<
       }
 
       try {
-        const result = (await wsServer.buildComponentFromSpec(
-          {
+        const result = (await wsServer.command('BUILD_COMPONENT_FROM_SPEC', {
             html: item.html,
             alias: item.alias,
             params: validation.params,
             pageId,
             existingNodeId: existing ? existing.componentNodeId : undefined,
-          },
-          pluginId
-        )) as {
+          }, { pluginId })) as {
           nodeId: string;
           key: string;
           width: number;
@@ -434,7 +425,7 @@ export const componentSpecHandlers: Record<
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setComponentSpecInstanceProps({ nodeId, props }, pluginId);
+      const result = await wsServer.command('SET_COMPONENT_SPEC_INSTANCE_PROPS', { nodeId, props }, { pluginId });
       return jsonResponse({ success: true, ...(result as object) });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

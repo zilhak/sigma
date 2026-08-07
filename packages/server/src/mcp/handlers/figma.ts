@@ -298,7 +298,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
         // 기본 필드만 쓰는 조건이면 트리 하나로 끝난다(왕복 없음).
         const nodesInfo = queryNeedsNodeInfo(where)
-          ? asNodesInfoArray(await wsServer.getNodesInfo(collectNodeIds(roots), pluginId))
+          ? asNodesInfoArray(await wsServer.command('GET_NODES_INFO', { nodeIds: collectNodeIds(roots) }, { pluginId }))
           : [];
         const { nodes } = buildLintNodes(roots, nodesInfo);
 
@@ -771,7 +771,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     if (!sectionId) return jsonResponse({ error: 'sectionId 가 필요합니다' });
 
     try {
-      const info = await wsServer.getNodeInfo(sectionId, pluginId) as { type?: string; width?: number; height?: number };
+      const info = await wsServer.command('GET_NODE_INFO', { nodeId: sectionId }, { pluginId }) as { type?: string; width?: number; height?: number };
       if (info?.type !== 'SECTION') {
         return jsonResponse({
           error: `sectionId(${sectionId}) 가 SECTION 이 아닙니다 (type: ${info?.type ?? 'unknown'}). 기획 레이어는 섹션의 직속 자식이어야 합니다.`,
@@ -780,10 +780,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
       const width = typeof info.width === 'number' && info.width > 0 ? info.width : 800;
       const height = typeof info.height === 'number' && info.height > 0 ? info.height : 600;
 
-      const frameRes = await wsServer.createEmptyFrame({
+      const frameRes = await wsServer.command('CREATE_EMPTY_FRAME', {
         pageId, parentId: sectionId, x: 0, y: 0, width, height, name,
         fillColor: { r: 1, g: 1, b: 1, a: 0 }, layoutMode: 'NONE',
-      } as any, pluginId) as { nodeId?: string };
+      } as any, { pluginId }) as { nodeId?: string };
       const frameId = frameRes?.nodeId;
       if (!frameId) return jsonResponse({ error: '기획 레이어 프레임 생성 실패', detail: frameRes });
 
@@ -838,7 +838,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createRectangle({
+      const result = await wsServer.command('CREATE_RECTANGLE', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -850,7 +850,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         strokeColor: args.strokeColor as any,
         strokeWeight: args.strokeWeight as number | undefined,
         cornerRadius: args.cornerRadius as number | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '사각형이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -865,7 +865,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createTextNode({
+      const result = await wsServer.command('CREATE_TEXT', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -877,7 +877,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         fontWeight: args.fontWeight as number | undefined,
         fontColor: args.fontColor as any,
         textAlignHorizontal: args.textAlignHorizontal as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '텍스트가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -907,7 +907,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
       for (const key of optionalKeys) {
         if (args[key] !== undefined) frameArgs[key] = args[key];
       }
-      const result = await wsServer.createEmptyFrame(frameArgs as any, pluginId);
+      const result = await wsServer.command('CREATE_EMPTY_FRAME', frameArgs as any, { pluginId });
       return jsonResponse({ success: true, message: '프레임이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -924,7 +924,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getViewport(pluginId);
+      const result = await wsServer.command('GET_VIEWPORT', {}, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -939,11 +939,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setViewport({
+      const result = await wsServer.command('SET_VIEWPORT', {
         center: args.center as { x: number; y: number } | undefined,
         zoom: args.zoom as number | undefined,
         nodeIds: args.nodeIds as string[] | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '뷰포트가 변경되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -960,7 +960,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createPage(args.name as string | undefined, pluginId);
+      const result = await wsServer.command('CREATE_PAGE', { name: args.name as string | undefined }, { pluginId });
       return jsonResponse({ success: true, message: '페이지가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -975,7 +975,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.renamePage(args.pageId as string, args.name as string, pluginId);
+      const result = await wsServer.command('RENAME_PAGE', { pageId: args.pageId as string, name: args.name as string }, { pluginId });
       return jsonResponse({ success: true, message: '페이지 이름이 변경되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -990,7 +990,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.switchPage(args.pageId as string, pluginId);
+      const result = await wsServer.command('SWITCH_PAGE', { pageId: args.pageId as string }, { pluginId });
       return jsonResponse({ success: true, message: '페이지가 전환되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1005,7 +1005,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.deletePage(args.pageId as string, pluginId);
+      const result = await wsServer.command('DELETE_PAGE', { pageId: args.pageId as string }, { pluginId });
       return jsonResponse({ success: true, message: '페이지가 삭제되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1020,7 +1020,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.reorderPage(args.pageId as string, args.index as number, pluginId);
+      const result = await wsServer.command('REORDER_PAGE', { pageId: args.pageId as string, index: args.index as number }, { pluginId });
       return jsonResponse({ success: true, message: '페이지 순서가 변경되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1037,11 +1037,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.groupNodes(
-        args.nodeIds as string[],
-        args.name as string | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('GROUP_NODES', { nodeIds: args.nodeIds as string[], name: args.name as string | undefined }, { pluginId });
       return jsonResponse({ success: true, message: '노드가 그룹화되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1056,7 +1052,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.ungroupNodes(args.nodeId as string, pluginId);
+      const result = await wsServer.command('UNGROUP_NODES', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse({ success: true, message: '그룹이 해제되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1071,11 +1067,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.flattenNodes(
-        args.nodeIds as string[],
-        args.name as string | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('FLATTEN_NODES', { nodeIds: args.nodeIds as string[], name: args.name as string | undefined }, { pluginId });
       return jsonResponse({ success: true, message: '노드가 Flatten되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1092,12 +1084,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.booleanOperation(
-        args.nodeIds as string[],
-        args.operation as string,
-        args.name as string | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('BOOLEAN_OPERATION', { nodeIds: args.nodeIds as string[], operation: args.operation as string, name: args.name as string | undefined }, { pluginId });
       return jsonResponse({ success: true, message: 'Boolean 연산이 완료되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1112,7 +1099,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createEllipse({
+      const result = await wsServer.command('CREATE_ELLIPSE', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1124,7 +1111,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         strokeColor: args.strokeColor as any,
         strokeWeight: args.strokeWeight as number | undefined,
         arcData: args.arcData as any,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '타원이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1139,7 +1126,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createPolygon({
+      const result = await wsServer.command('CREATE_POLYGON', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1151,7 +1138,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         strokeColor: args.strokeColor as any,
         strokeWeight: args.strokeWeight as number | undefined,
         pointCount: args.pointCount as number | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '다각형이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1166,7 +1153,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createStar({
+      const result = await wsServer.command('CREATE_STAR', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1179,7 +1166,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         strokeWeight: args.strokeWeight as number | undefined,
         pointCount: args.pointCount as number | undefined,
         innerRadius: args.innerRadius as number | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '별이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1194,7 +1181,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createLine({
+      const result = await wsServer.command('CREATE_LINE', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1204,7 +1191,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         strokeColor: args.strokeColor as any,
         strokeWeight: args.strokeWeight as number | undefined,
         rotation: args.rotation as number | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '선이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1219,7 +1206,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createVector({
+      const result = await wsServer.command('CREATE_VECTOR', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1231,7 +1218,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         strokeColor: args.strokeColor as any,
         strokeWeight: args.strokeWeight as number | undefined,
         vectorPaths: args.vectorPaths as any,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '벡터가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1248,9 +1235,9 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createVariableCollection({
+      const result = await wsServer.command('CREATE_VARIABLE_COLLECTION', {
         name: args.name as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 컬렉션이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1265,11 +1252,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createVariable({
+      const result = await wsServer.command('CREATE_VARIABLE', {
         name: args.name as string,
         collectionId: args.collectionId as string,
         resolvedType: args.resolvedType as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1284,9 +1271,9 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getVariables({
+      const result = await wsServer.command('GET_VARIABLES', {
         variableType: args.type as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse(result as object);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1301,11 +1288,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setVariableValue({
+      const result = await wsServer.command('SET_VARIABLE_VALUE', {
         variableId: args.variableId as string,
         modeId: args.modeId as string,
         value: args.value,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 값이 설정되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1320,11 +1307,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.bindVariable({
+      const result = await wsServer.command('BIND_VARIABLE', {
         nodeId: args.nodeId as string,
         field: args.field as string,
         variableId: args.variableId as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수가 바인딩되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1339,10 +1326,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.addVariableMode({
+      const result = await wsServer.command('ADD_VARIABLE_MODE', {
         collectionId: args.collectionId as string,
         name: args.name as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 모드가 추가되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1359,11 +1346,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createPaintStyle({
+      const result = await wsServer.command('CREATE_PAINT_STYLE', {
         name: args.name as string,
         paints: args.paints as any[],
         description: args.description as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: 'Paint 스타일이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1378,7 +1365,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createTextStyle({
+      const result = await wsServer.command('CREATE_TEXT_STYLE', {
         name: args.name as string,
         fontSize: args.fontSize as number | undefined,
         fontFamily: args.fontFamily as string | undefined,
@@ -1388,7 +1375,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         textCase: args.textCase as string | undefined,
         textDecoration: args.textDecoration as string | undefined,
         description: args.description as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: 'Text 스타일이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1403,11 +1390,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createEffectStyle({
+      const result = await wsServer.command('CREATE_EFFECT_STYLE', {
         name: args.name as string,
         effects: args.effects as any[],
         description: args.description as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: 'Effect 스타일이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1422,11 +1409,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.createGridStyle({
+      const result = await wsServer.command('CREATE_GRID_STYLE', {
         name: args.name as string,
         grids: args.grids as any[],
         description: args.description as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: 'Grid 스타일이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1441,11 +1428,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.applyStyle({
+      const result = await wsServer.command('APPLY_STYLE', {
         nodeId: args.nodeId as string,
         styleType: args.styleType as string,
         styleId: args.styleId as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '스타일이 적용되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1460,9 +1447,9 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.deleteStyle({
+      const result = await wsServer.command('DELETE_STYLE', {
         styleId: args.styleId as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '스타일이 삭제되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1477,7 +1464,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createImageNode({
+      const result = await wsServer.command('CREATE_IMAGE_NODE', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1488,7 +1475,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         parentId: args.parentId as string | undefined,
         scaleMode: args.scaleMode as string | undefined,
         cornerRadius: args.cornerRadius as number | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '이미지 노드가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1505,7 +1492,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getSelection(pluginId);
+      const result = await wsServer.command('GET_SELECTION', {}, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1520,11 +1507,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setSelectionNodes(
-        args.nodeIds as string[],
-        args.zoomToFit as boolean | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('SET_SELECTION', { nodeIds: args.nodeIds as string[], zoomToFit: args.zoomToFit as boolean | undefined }, { pluginId });
       return jsonResponse({ success: true, ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1541,7 +1524,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getLocalComponents(pluginId);
+      const result = await wsServer.command('GET_LOCAL_COMPONENTS', {}, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1556,14 +1539,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createComponentInstance(
-        args.componentKey as string,
-        args.x as number,
-        args.y as number,
-        args.parentId as string | undefined,
-        pluginId,
-        pageId
-      );
+      const result = await wsServer.command('CREATE_COMPONENT_INSTANCE', { componentKey: args.componentKey as string, x: args.x as number, y: args.y as number, parentId: args.parentId as string | undefined, pageId }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트 인스턴스가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1578,7 +1554,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getInstanceOverrides(args.nodeId as string | undefined, pluginId);
+      const result = await wsServer.command('GET_INSTANCE_OVERRIDES', { nodeId: args.nodeId as string | undefined }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1593,11 +1569,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setInstanceOverrides(
-        args.nodeId as string,
-        args.overrides as Record<string, unknown>,
-        pluginId
-      );
+      const result = await wsServer.command('SET_INSTANCE_OVERRIDES', { nodeId: args.nodeId as string, overrides: args.overrides as Record<string, unknown> }, { pluginId });
       return jsonResponse({ success: true, message: '오버라이드가 적용되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1614,7 +1586,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getNodeInfo(args.nodeId as string, pluginId);
+      const result = await wsServer.command('GET_NODE_INFO', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1629,7 +1601,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getDocumentInfo(pluginId);
+      const result = await wsServer.command('GET_DOCUMENT_INFO', {}, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1644,7 +1616,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getStylesInfo(pluginId);
+      const result = await wsServer.command('GET_STYLES', {}, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1661,7 +1633,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.scanTextNodes(args.nodeId as string, pluginId);
+      const result = await wsServer.command('SCAN_TEXT_NODES', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1676,11 +1648,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.scanNodesByTypes(
-        args.nodeId as string,
-        args.types as string[],
-        pluginId
-      );
+      const result = await wsServer.command('SCAN_NODES_BY_TYPES', { nodeId: args.nodeId as string, types: args.types as string[] }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1713,7 +1681,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.batchDeleteNodes(args.nodeIds as string[], pluginId);
+      const result = await wsServer.command('BATCH_DELETE', { nodeIds: args.nodeIds as string[] }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1750,7 +1718,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getNodesInfo(args.nodeIds as string[], pluginId);
+      const result = await wsServer.command('GET_NODES_INFO', { nodeIds: args.nodeIds as string[] }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1765,7 +1733,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.readMyDesign(pluginId);
+      const result = await wsServer.command('READ_MY_DESIGN', {}, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1782,10 +1750,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setMultipleAnnotations(
-        args.items as Array<{ nodeId: string; label: string; labelType?: string }>,
-        pluginId
-      );
+      const result = await wsServer.command('SET_MULTIPLE_ANNOTATIONS', { items: args.items as Array<{ nodeId: string; label: string; labelType?: string }> }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1802,7 +1767,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getAnnotations(args.nodeId as string | undefined, pluginId);
+      const result = await wsServer.command('GET_ANNOTATIONS', { nodeId: args.nodeId as string | undefined }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1817,12 +1782,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setAnnotation(
-        args.nodeId as string,
-        args.label as string,
-        args.labelType as string | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('SET_ANNOTATION', { nodeId: args.nodeId as string, label: args.label as string, labelType: args.labelType as string | undefined }, { pluginId });
       return jsonResponse({ success: true, message: '주석이 추가되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1839,7 +1799,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getReactions(args.nodeId as string | undefined, pluginId);
+      const result = await wsServer.command('GET_REACTIONS', { nodeId: args.nodeId as string | undefined }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1854,7 +1814,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.addReaction({
+      const result = await wsServer.command('ADD_REACTION', {
         nodeId: args.nodeId as string,
         trigger: args.trigger as string,
         action: args.action as string,
@@ -1862,7 +1822,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         url: args.url as string | undefined,
         transition: args.transition as { type: string; duration?: number; direction?: string } | undefined,
         preserveScrollPosition: args.preserveScrollPosition as boolean | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1877,11 +1837,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.removeReactions(
-        args.nodeId as string,
-        args.triggerType as string | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('REMOVE_REACTIONS', { nodeId: args.nodeId as string, triggerType: args.triggerType as string | undefined }, { pluginId });
       return jsonResponse(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1905,15 +1861,12 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     }
 
     try {
-      const result = await wsServer.setHyperlink(
-        {
+      const result = await wsServer.command('SET_HYPERLINK', {
           links,
           direction: args.direction as string | undefined,
           slot: args.slot as string | undefined,
           remove: args.remove as boolean | undefined,
-        },
-        pluginId
-      );
+        }, { pluginId });
       return jsonResponse({
         success: true,
         ...(result as Record<string, unknown>),
@@ -1965,7 +1918,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createComponent({
+      const result = await wsServer.command('CREATE_COMPONENT', {
         pageId,
         x: args.x as number,
         y: args.y as number,
@@ -1973,7 +1926,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         height: args.height as number,
         name: args.name as string | undefined,
         parentId: args.parentId as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1988,7 +1941,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.convertToComponent(args.nodeId as string, pluginId);
+      const result = await wsServer.command('CONVERT_TO_COMPONENT', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse({ success: true, message: '노드가 컴포넌트로 변환되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2003,12 +1956,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createComponentSet(
-        args.componentIds as string[],
-        args.name as string | undefined,
-        pluginId,
-        pageId
-      );
+      const result = await wsServer.command('CREATE_COMPONENT_SET', { componentIds: args.componentIds as string[], name: args.name as string | undefined, pageId }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트 세트가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2023,12 +1971,12 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.addComponentProperty({
+      const result = await wsServer.command('ADD_COMPONENT_PROPERTY', {
         nodeId: args.nodeId as string,
         propertyName: args.propertyName as string,
         propertyType: args.propertyType as string,
         defaultValue: args.defaultValue,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트 속성이 추가되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2043,11 +1991,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.editComponentProperty({
+      const result = await wsServer.command('EDIT_COMPONENT_PROPERTY', {
         nodeId: args.nodeId as string,
         propertyName: args.propertyName as string,
         newValues: args.newValues as Record<string, unknown>,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트 속성이 수정되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2062,10 +2010,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.deleteComponentProperty({
+      const result = await wsServer.command('DELETE_COMPONENT_PROPERTY', {
         nodeId: args.nodeId as string,
         propertyName: args.propertyName as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트 속성이 삭제되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2080,7 +2028,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getComponentProperties(args.nodeId as string, pluginId);
+      const result = await wsServer.command('GET_COMPONENT_PROPERTIES', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트 속성을 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2095,7 +2043,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.detachInstance(args.nodeId as string, pluginId);
+      const result = await wsServer.command('DETACH_INSTANCE', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse({ success: true, message: '인스턴스가 분리되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2126,11 +2074,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.swapComponent(
-        args.nodeId as string,
-        newComponentKey,
-        pluginId
-      );
+      const result = await wsServer.command('SWAP_COMPONENT', { nodeId: args.nodeId as string, newComponentKey }, { pluginId });
       return jsonResponse({ success: true, message: '컴포넌트가 교체되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2147,14 +2091,14 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createNodeFromSvg({
+      const result = await wsServer.command('CREATE_NODE_FROM_SVG', {
         pageId,
         svgString: args.svgString as string,
         x: args.x as number,
         y: args.y as number,
         name: args.name as string | undefined,
         parentId: args.parentId as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: 'SVG 노드가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2169,7 +2113,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.listAvailableFonts(pluginId);
+      const result = await wsServer.command('LIST_FONTS', {}, { pluginId });
       return jsonResponse({ success: true, message: '사용 가능한 폰트 목록을 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2184,7 +2128,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getNodeCSS(args.nodeId as string, pluginId);
+      const result = await wsServer.command('GET_CSS', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse({ success: true, message: '노드의 CSS를 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2201,10 +2145,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setVariableScopes({
+      const result = await wsServer.command('SET_VARIABLE_SCOPES', {
         variableId: args.variableId as string,
         scopes: args.scopes as string[],
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 스코프가 설정되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2219,11 +2163,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setVariableAlias({
+      const result = await wsServer.command('SET_VARIABLE_ALIAS', {
         variableId: args.variableId as string,
         modeId: args.modeId as string,
         aliasTargetId: args.aliasTargetId as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 alias가 설정되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2238,11 +2182,11 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setVariableCodeSyntax({
+      const result = await wsServer.command('SET_VARIABLE_CODE_SYNTAX', {
         variableId: args.variableId as string,
         platform: args.platform as string,
         syntax: args.syntax as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 코드 구문이 설정되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2257,10 +2201,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.renameVariable({
+      const result = await wsServer.command('RENAME_VARIABLE', {
         variableId: args.variableId as string,
         name: args.name as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수 이름이 변경되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2275,9 +2219,9 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.deleteVariable({
+      const result = await wsServer.command('DELETE_VARIABLE', {
         variableId: args.variableId as string,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '변수가 삭제되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2294,7 +2238,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getAvailableLibraries(pluginId);
+      const result = await wsServer.command('GET_LIBRARIES', {}, { pluginId, timeoutMs: 30000 });
       return jsonResponse({ success: true, message: '사용 가능한 라이브러리 목록을 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2309,7 +2253,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getLibraryComponents(args.libraryKey as string, pluginId);
+      const result = await wsServer.command('GET_LIBRARY_COMPONENTS', { libraryKey: args.libraryKey as string }, { pluginId, timeoutMs: 30000 });
       return jsonResponse({ success: true, message: '라이브러리 컴포넌트를 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2324,7 +2268,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getLibraryVariables(args.collectionKey as string, pluginId);
+      const result = await wsServer.command('GET_LIBRARY_VARIABLES', { collectionKey: args.collectionKey as string }, { pluginId, timeoutMs: 30000 });
       return jsonResponse({ success: true, message: '라이브러리 변수를 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2339,7 +2283,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.importLibraryComponent(args.key as string, pluginId);
+      const result = await wsServer.command('IMPORT_LIBRARY_COMPONENT', { key: args.key as string }, { pluginId });
       return jsonResponse({ success: true, message: '라이브러리 컴포넌트를 가져왔습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2354,7 +2298,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.importLibraryStyle(args.key as string, pluginId);
+      const result = await wsServer.command('IMPORT_LIBRARY_STYLE', { key: args.key as string }, { pluginId });
       return jsonResponse({ success: true, message: '라이브러리 스타일을 가져왔습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2371,11 +2315,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.notifyUser(
-        args.message as string,
-        args.options as Record<string, unknown> | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('NOTIFY', { message: args.message as string, options: args.options as Record<string, unknown> | undefined }, { pluginId });
       return jsonResponse({ success: true, message: '알림을 전송했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2390,7 +2330,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.commitUndo(pluginId);
+      const result = await wsServer.command('COMMIT_UNDO', {}, { pluginId });
       return jsonResponse({ success: true, message: 'Undo 스택에 커밋했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2405,7 +2345,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.triggerUndo(pluginId);
+      const result = await wsServer.command('TRIGGER_UNDO', {}, { pluginId });
       return jsonResponse({ success: true, message: 'Undo를 실행했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2420,11 +2360,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.saveVersion(
-        args.title as string,
-        args.description as string | undefined,
-        pluginId
-      );
+      const result = await wsServer.command('SAVE_VERSION', { title: args.title as string, description: args.description as string | undefined }, { pluginId, timeoutMs: 30000 });
       return jsonResponse({ success: true, message: '버전을 저장했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2439,11 +2375,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.setExportSettings(
-        args.nodeId as string,
-        args.settings as unknown[],
-        pluginId
-      );
+      const result = await wsServer.command('SET_EXPORT_SETTINGS', { nodeId: args.nodeId as string, settings: args.settings as unknown[] }, { pluginId });
       return jsonResponse({ success: true, message: 'Export 설정을 적용했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2458,7 +2390,7 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.getExportSettings(args.nodeId as string, pluginId);
+      const result = await wsServer.command('GET_EXPORT_SETTINGS', { nodeId: args.nodeId as string }, { pluginId });
       return jsonResponse({ success: true, message: 'Export 설정을 조회했습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2475,13 +2407,13 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createSticky({
+      const result = await wsServer.command('CREATE_STICKY', {
         pageId,
         text: args.text as string,
         x: args.x as number,
         y: args.y as number,
         parentId: args.parentId as string | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: 'Sticky 노트가 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2496,13 +2428,13 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId, pageId } = access;
     try {
-      const result = await wsServer.createConnector({
+      const result = await wsServer.command('CREATE_CONNECTOR', {
         pageId,
         startNodeId: args.startNodeId as string,
         endNodeId: args.endNodeId as string,
         strokeColor: args.strokeColor as any,
         strokeWeight: args.strokeWeight as number | undefined,
-      }, pluginId);
+      }, { pluginId });
       return jsonResponse({ success: true, message: '연결선이 생성되었습니다', ...result as object });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

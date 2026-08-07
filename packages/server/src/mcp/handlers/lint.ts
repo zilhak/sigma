@@ -85,7 +85,7 @@ async function enrichIfNeeded(
   if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont && !needsMarkerGap) return null;
 
   const nodeIds = collectNodeIds(roots);
-  const nodesInfoRaw = await wsServer.getNodesInfo(nodeIds, pluginId);
+  const nodesInfoRaw = await wsServer.command('GET_NODES_INFO', { nodeIds }, { pluginId });
   return buildLintNodes(roots, extractNodesInfo(nodesInfoRaw), annotationLayerIds);
 }
 
@@ -283,7 +283,7 @@ async function collectInstanceComponentNames(
 
   let infos: NodeInfoLike[] = [];
   try {
-    infos = extractNodesInfo(await wsServer.getNodesInfo(candidates, pluginId));
+    infos = extractNodesInfo(await wsServer.command('GET_NODES_INFO', { nodeIds: candidates }, { pluginId }));
   } catch {
     return empty; // 조회 실패 시 판정 없이 진행(안전 기본값)
   }

@@ -20,9 +20,12 @@ function makeContext(seen: Array<{ nodeId: string; key: string }>) {
     wsServer: {
       isFigmaConnected: () => true,
       getPluginById: () => ({ pluginId: 'p1' }),
-      async swapComponent(nodeId: string, newComponentKey: string) {
-        seen.push({ nodeId, key: newComponentKey });
-        return { nodeId };
+      // 핸들러는 명령별 래퍼가 아니라 공용 command() 로 플러그인에 보낸다.
+      // 여기서 SWAP_COMPONENT 만 걸러 payload 를 관찰한다 — 다른 명령이 새어 오면 즉시 드러난다.
+      async command(commandType: string, payload: Record<string, unknown>) {
+        expect(commandType).toBe('SWAP_COMPONENT');
+        seen.push({ nodeId: payload.nodeId as string, key: payload.newComponentKey as string });
+        return { nodeId: payload.nodeId };
       },
     },
   } as unknown as Parameters<typeof figmaHandlers.sigma_swap_component>[1];
