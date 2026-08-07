@@ -4,40 +4,27 @@
 
 ## 핵심 제약사항
 
-### 1. ES 버전 호환성 (CRITICAL)
+### 1. ES 버전 호환성
 
-**Figma 플러그인 런타임은 `??` (Nullish Coalescing) 연산자를 인식하지 못합니다.**
+**esbuild 가 문법은 lowering 하지만, 런타임 내장 메서드는 lowering 하지 않는다.**
 
-esbuild `target: 'es2017'`로 설정해도 `??` 연산자는 자동 변환되지 않습니다.
+`build.ts` 는 `target: 'es2017'` 로 빌드한다. 이 설정에서:
 
-#### 절대 사용 금지
+| 대상 | 처리 | 근거 |
+|------|------|------|
+| **문법** (`??`, `?.`, `??=`, `\|\|=`) | esbuild 가 es2017 문법으로 **변환한다** | `code.ts:405` 의 `??` → `dist/code.js` 에서 `(_a = msg.data) != null ? _a : ""`. 빌드 후 `grep -c '??' dist/code.js` = 0 |
+| **런타임 내장** (`Object.fromEntries`, `Array.prototype.at`, `String.prototype.replaceAll` 등) | **변환하지 않는다** (polyfill 없음) | esbuild 는 syntax lowering 만 한다 |
 
-| 문법 | ES 버전 | 대안 |
-|------|---------|------|
-| `??` (Nullish Coalescing) | ES2020 | `!== undefined ? a : b` 또는 삼항 연산자 |
-| `??=` | ES2021 | 일반 할당문 |
+따라서 **문법은 자유롭게 써도 되고, 내장 메서드는 조심해야 한다.**
 
-#### 사용 가능
+> 과거 이 문서는 "`??` 는 자동 변환되지 않는다"고 적었으나 빌드 산출물 확인 결과 사실이 아니었다.
+> 그 전제로 작성된 `??` → `||` 대체(`converter/html-parser.ts:289`)는 `0`/`''`/`false` 를
+> 다르게 처리하므로 의미가 같지 않다. 새 코드에서 그런 대체를 하지 말 것.
 
-| 문법 | 비고 |
-|------|------|
-| `?.` (Optional Chaining) | 사용 가능 |
-| `||=`, `&&=` | 사용 가능 |
+#### 확인 방법 (사람이 아니라 빌드가 한다)
 
-#### 예시
-
-```typescript
-// ❌ 금지 (Figma에서 인식 불가)
-const value = match[2] ?? match[3] ?? '';
-
-// ✅ 올바른 방법
-const value = match[2] !== undefined ? match[2]
-            : match[3] !== undefined ? match[3]
-            : '';
-
-// ✅ Optional Chaining은 사용 가능
-const name = obj?.nested?.property;
-```
+`build.ts` 가 빌드 직후 `dist/code.js` 를 검사하고, 변환되지 않은 문법이 남아 있으면
+빌드를 실패시킨다. 별도로 grep 을 칠 필요가 없다.
 
 ### 2. Figma API 환경
 
@@ -66,12 +53,11 @@ figma.ui.postMessage({ type: 'response', data: ... });
 코드 수정 후 반드시 빌드하고 검증:
 
 ```bash
-# 빌드
 bun run build
-
-# 빌드된 파일에서 금지된 문법 확인 (?? 연산자)
-grep -E ' \?\? ' dist/code.js && echo "ERROR: 금지된 문법 발견!"
 ```
+
+빌드 스크립트가 산출물을 자동 검사한다 — 변환되지 않은 문법이 `dist/code.js` 에 남으면
+빌드가 실패하고 무엇이 남았는지 출력한다. 수동 grep 은 필요 없다.
 
 ### 5. 핫 리로드 (CRITICAL)
 
@@ -104,9 +90,7 @@ packages/figma-plugin/
 
 코드 수정 시 확인:
 
-- [ ] `??` 연산자 사용하지 않음 (`?.`는 사용 가능)
-- [ ] `??=` 연산자 사용하지 않음
 - [ ] `code.ts`에서 브라우저 API 사용하지 않음
 - [ ] `ui.ts`에서 `figma.*` API 사용하지 않음
-- [ ] 빌드 후 에러 없음
+- [ ] `bun run build` 성공 (산출물 문법 검사 포함)
 - [ ] Figma Desktop에서 테스트 완료

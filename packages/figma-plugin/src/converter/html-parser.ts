@@ -286,7 +286,10 @@ function extractAttributes(attrsString: string): Record<string, string> {
 
   while ((match = attrRegex.exec(attrsString)) !== null) {
     const name = match[1].toLowerCase();
-    // ES2017 호환: ?? 대신 || 사용 (빈 문자열도 falsy이므로 마지막에 '' 처리)
+    // 따옴표 3종(", ', 없음) 중 매치된 그룹을 고른다. 아래 삼항 체인은
+    // `match[2] ?? match[3] ?? match[4] ?? ''` 와 의미가 같다 —
+    // "?? 는 Figma 에서 못 쓴다"는 (틀린) 전제로 풀어 쓴 흔적이다.
+    // esbuild 가 ?? 를 lowering 하므로 문법 제약은 없다(CLAUDE.md "1. ES 버전 호환성").
     const value = match[2] !== undefined ? match[2]
                 : match[3] !== undefined ? match[3]
                 : match[4] !== undefined ? match[4]

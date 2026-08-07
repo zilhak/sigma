@@ -49,7 +49,37 @@ async function build() {
     await esbuild.build(codeConfig);
     await esbuild.build(uiConfig);
     buildHTML();
+    assertSandboxBundleIsLowered();
     console.log('Build complete!');
+  }
+}
+
+/**
+ * Figma 샌드박스는 esbuild 가 lowering 하지 못한 문법을 실행하지 못한다.
+ * 산출물을 직접 검사한다 — "소스에 쓰지 말 것"이라는 사람 규칙 대신
+ * "산출물에 남지 않을 것"이라는 기계 검증으로 불변식을 지킨다.
+ *
+ * 왜 소스가 아니라 산출물인가: esbuild target(현재 es2017)이 `??` 를 실제로 삼항으로
+ * 바꾼다(code.ts:405 → dist/code.js 의 `(_a = msg.data) != null ? _a : ""`). 즉 소스의 `??` 는
+ * 문제가 아니고, **target 이나 esbuild 버전이 바뀌어 lowering 이 멈추는 것**이 문제다.
+ * 그건 소스를 아무리 봐도 안 보이고 산출물에만 나타난다.
+ *
+ * 주의: 문자열/정규식 리터럴 안의 '??' 도 잡힐 수 있다. 실제로 걸리면
+ * 그 리터럴을 보고 예외 처리할 것 — 검사를 지우지 말 것.
+ */
+function assertSandboxBundleIsLowered() {
+  const codeJs = readFileSync(join(__dirname, 'dist/code.js'), 'utf-8');
+  const banned: Array<[string, RegExp]> = [
+    ['?? (nullish coalescing)', /\?\?[^=]/],
+    ['??= (nullish assignment)', /\?\?=/],
+  ];
+  const found = banned.filter(([, re]) => re.test(codeJs)).map(([label]) => label);
+  if (found.length > 0) {
+    console.error(
+      `[build] dist/code.js 에 변환되지 않은 문법이 남았습니다: ${found.join(', ')}\n` +
+      `        esbuild target(현재 es2017)이 바뀌었거나 esbuild 버전이 달라졌을 수 있습니다.`
+    );
+    process.exit(1);
   }
 }
 
