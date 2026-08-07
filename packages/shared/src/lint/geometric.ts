@@ -64,6 +64,12 @@ export interface LayoutViolation {
   nodes: string[];
   /** 자동수정 가능하면 안전 fix (frame_padding/child_overflow 만) */
   fix?: LayoutFix;
+  /**
+   * 판정에 쓴 실측값(초과량·겹침 크기 등). **호출자가 message 를 정규식으로 긁지 않게** 하려고
+   * 따로 싣는다 — 문구를 파싱하기 시작하면 문구를 못 고친다.
+   * 배경: docs/history/005-geometric-lint-threw-away-its-own-numbers.md
+   */
+  metrics?: Record<string, number | string>;
 }
 
 export interface LintOptions {
@@ -135,13 +141,66 @@ function edgeGap(a: Box, b: Box): number | null {
  */
 const GEOM_EPSILON = 0.05;
 
+/** 각 변에서 pad 여백이 얼마나 모자란가(px). 양수 = 그만큼 모자람/넘침. */
+type InsetDeficit = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * 판정에 쓰는 수치를 버리지 않고 돌려준다 — `insetOk` 는 이 위에 얹는다.
+ *
+ * ⚠️ 여기서 GEOM_EPSILON 을 빼지 않는 이유: epsilon 은 **위반이냐 아니냐**를 가르는 데만
+ * 쓰고, 보고하는 수치는 요구 pad 기준이어야 사람이 읽는 값과 맞는다(1px 넘쳤는데
+ * "0.95px 넘침" 이라고 하면 안 된다). 판정은 `insetOk` 가 epsilon 으로 한다.
+ * 배경: docs/history/005-geometric-lint-threw-away-its-own-numbers.md
+ */
+function insetDeficit(outer: Box, inner: Box, pad: number): InsetDeficit {
+  return {
+    left: pad - (inner.x - outer.x),
+    top: pad - (inner.y - outer.y),
+    right: pad - ((outer.x + outer.width) - (inner.x + inner.width)),
+    bottom: pad - ((outer.y + outer.height) - (inner.y + inner.height)),
+  };
+}
+
 /** inner 가 outer 안에 pad 여백을 두고 들어가는가 (소수점 반올림 오차는 봐 준다) */
 function insetOk(outer: Box, inner: Box, pad: number): boolean {
-  const slack = pad - GEOM_EPSILON;
-  return inner.x - outer.x >= slack &&
-    inner.y - outer.y >= slack &&
-    (outer.x + outer.width) - (inner.x + inner.width) >= slack &&
-    (outer.y + outer.height) - (inner.y + inner.height) >= slack;
+  const d = insetDeficit(outer, inner, pad);
+  return d.left <= GEOM_EPSILON && d.top <= GEOM_EPSILON &&
+    d.right <= GEOM_EPSILON && d.bottom <= GEOM_EPSILON;
+}
+
+const SIDE_LABEL: Record<keyof InsetDeficit, string> = {
+  left: '왼쪽', top: '위', right: '오른쪽', bottom: '아래',
+};
+
+/** 실제로 모자란 변만 골라 (변, 양) 목록으로. 반올림은 표시용이고 metrics 는 원값을 싣는다. */
+function deficitSides(d: InsetDeficit): Array<{ side: keyof InsetDeficit; amount: number }> {
+  return (Object.keys(SIDE_LABEL) as Array<keyof InsetDeficit>)
+    .filter((s) => d[s] > GEOM_EPSILON)
+    .map((s) => ({ side: s, amount: d[s] }));
+}
+
+function describeDeficit(d: InsetDeficit): string {
+  return deficitSides(d).map((x) => `${SIDE_LABEL[x.side]} ${round2(x.amount)}px`).join(', ');
+}
+
+function deficitMetrics(d: InsetDeficit): Record<string, number | string> {
+  const sides = deficitSides(d);
+  const m: Record<string, number | string> = { sides: sides.map((x) => x.side).join(',') };
+  for (const x of sides) m[x.side] = round2(x.amount);
+  return m;
+}
+
+/** 소수점 둘째 자리까지 — Figma 좌표는 소수가 흔하고, 정수로 반올림하면 "0px 넘침"이 나온다. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** 겹친 두 박스의 겹침 폭·높이 */
+function overlapSize(a: Box, b: Box): { width: number; height: number } {
+  return {
+    width: Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x),
+    height: Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y),
+  };
 }
 
 function kids(n: TreeNode): TreeNode[] {
@@ -178,8 +237,8 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
   // 면제 대상 = 기획 프리셋 인스턴스(이름 휴리스틱, 레거시) 또는 기획 레이어(pluginData, 정식).
   const isExempt = (n: TreeNode) => annoWire.has(n.name) || isLayer(n);
   const V: LayoutViolation[] = [];
-  const add = (rule: LayoutRule, message: string, nodes: string[], fix?: LayoutFix) =>
-    V.push(fix ? { rule, message, nodes, fix } : { rule, message, nodes });
+  const add = (rule: LayoutRule, message: string, nodes: string[], fix?: LayoutFix, metrics?: Record<string, number | string>) =>
+    V.push({ rule, message, nodes, ...(fix ? { fix } : {}), ...(metrics ? { metrics } : {}) });
 
   // container 의 직속 자식에 규칙 적용 후 재귀. kind: page | section | frame
   function checkContainer(children: TreeNode[], container: TreeNode | null, kind: 'page' | 'section' | 'frame' | 'unknown') {
@@ -188,8 +247,10 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
     for (let i = 0; i < sections.length; i++) {
       for (let j = i + 1; j < sections.length; j++) {
         if (overlaps(bb(sections[i]), bb(sections[j]))) {
-          add('section_overlap', `섹션 "${sections[i].name}" ↔ "${sections[j].name}" 겹침`,
-            [sections[i].id, sections[j].id]);
+          const ov = overlapSize(bb(sections[i]), bb(sections[j]));
+          add('section_overlap', `섹션 "${sections[i].name}" ↔ "${sections[j].name}" 겹침 (가로 ${round2(ov.width)}px × 세로 ${round2(ov.height)}px)`,
+            [sections[i].id, sections[j].id], undefined,
+            { overlapWidth: round2(ov.width), overlapHeight: round2(ov.height) });
         } else if (sectionGap > 0) {
           // 겹치진 않지만 이웃한 두 섹션이 너무 붙음 → 라벨이 경계를 가림
           const g = edgeGap(bb(sections[i]), bb(sections[j]));
@@ -209,8 +270,10 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
       for (let i = 0; i < cards.length; i++) {
         for (let j = i + 1; j < cards.length; j++) {
           if (overlaps(bb(cards[i]), bb(cards[j]))) {
-            add('card_overlap', `섹션 "${container.name}" 안 "${cards[i].name}" ↔ "${cards[j].name}" 겹침`,
-              [cards[i].id, cards[j].id]);
+            const ov = overlapSize(bb(cards[i]), bb(cards[j]));
+            add('card_overlap', `섹션 "${container.name}" 안 "${cards[i].name}" ↔ "${cards[j].name}" 겹침 (가로 ${round2(ov.width)}px × 세로 ${round2(ov.height)}px)`,
+              [cards[i].id, cards[j].id], undefined,
+              { overlapWidth: round2(ov.width), overlapHeight: round2(ov.height) });
           }
         }
       }
@@ -224,12 +287,16 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
         }
         // R5(섹션): 자식(섹션 로컬좌표)은 섹션 로컬박스(0,0,W,H) 안에 있어야 함
         if (!insetOk(localBox, bb(c), 0)) {
-          add('child_overflow', `"${c.name}" (${c.id}) 가 섹션 "${container.name}" 밖으로 나감`,
-            [c.id], growSectionFix(container, c, 0, 'child_overflow: 자식을 품도록 섹션 확장') ?? undefined);
+          const d = insetDeficit(localBox, bb(c), 0);
+          add('child_overflow', `"${c.name}" (${c.id}) 가 섹션 "${container.name}" 밖으로 나감 — ${describeDeficit(d)} 초과 (섹션 ${round2(localBox.width)}×${round2(localBox.height)})`,
+            [c.id], growSectionFix(container, c, 0, 'child_overflow: 자식을 품도록 섹션 확장') ?? undefined,
+            { ...deficitMetrics(d), containerWidth: round2(localBox.width), containerHeight: round2(localBox.height) });
         } else if (c.type === 'FRAME' && !insetOk(localBox, bb(c), pad)) {
           // R3: 프레임 여백 부족 (섹션에 딱 붙으면 섹션 의미 없음)
-          add('frame_padding', `프레임 "${c.name}" 가 섹션 "${container.name}" 안 ${pad}px 여백 미달`,
-            [c.id, container.id], growSectionFix(container, c, pad, `frame_padding: ${pad}px 여백 확보`) ?? undefined);
+          const d = insetDeficit(localBox, bb(c), pad);
+          add('frame_padding', `프레임 "${c.name}" 가 섹션 "${container.name}" 안 ${pad}px 여백 미달 — ${describeDeficit(d)} 모자람`,
+            [c.id, container.id], growSectionFix(container, c, pad, `frame_padding: ${pad}px 여백 확보`) ?? undefined,
+            { ...deficitMetrics(d), requiredPadding: pad });
         }
       }
     }
@@ -248,7 +315,10 @@ export function lintLayout(roots: TreeNode[], opts: LintOptions = {}): LintResul
         if (isExempt(c)) continue; // 기획 프리셋/레이어 예외
         if (!PLACED_TYPES.has(c.type)) continue; // 배치형 자식만 (리프 제외)
         if (!insetOk(local, bb(c), 0)) {
-          add('child_overflow', `"${c.name}" (${c.id}) 가 "${container.name}" 프레임 내부 좌표를 벗어남`, [c.id]);
+          const d = insetDeficit(local, bb(c), 0);
+          add('child_overflow', `"${c.name}" (${c.id}) 가 "${container.name}" 프레임 내부 좌표를 벗어남 — ${describeDeficit(d)} 초과 (프레임 ${round2(local.width)}×${round2(local.height)})`,
+            [c.id], undefined,
+            { ...deficitMetrics(d), containerWidth: round2(local.width), containerHeight: round2(local.height) });
           // 프레임 확대는 디자인 변경이라 자동수정 안 함(needsManual) — check-first
         }
       }

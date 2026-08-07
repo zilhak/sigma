@@ -60,6 +60,11 @@ export interface Violation {
   fix?: LayoutFix;
   /** predicate 규칙이 타임아웃/예외로 실패하면 결과 대신 여기 기록 (부분 실패 허용) */
   error?: string;
+  /**
+   * 판정에 쓴 실측값(초과량·겹침 크기 등). 기하 규칙이 싣는다 — 호출자가 `message` 를
+   * 정규식으로 긁지 않고 수치를 얻게 하려는 것.
+   */
+  metrics?: Record<string, number | string>;
 }
 
 export type BuiltinRuleId =

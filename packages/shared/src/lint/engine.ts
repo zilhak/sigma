@@ -164,7 +164,7 @@ export function runBuiltinRules(
     });
     for (const v of result.violations) {
       if (isEnabled(builtins, v.rule)) {
-        out.push({ rule: v.rule, source: 'builtin', message: v.message, nodes: v.nodes, fix: v.fix });
+        out.push({ rule: v.rule, source: 'builtin', message: v.message, nodes: v.nodes, fix: v.fix, ...(v.metrics ? { metrics: v.metrics } : {}) });
       }
     }
   }

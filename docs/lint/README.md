@@ -57,6 +57,10 @@ Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기
   | `coverage.customFailed` | 커스텀 규칙이 실행 자체를 실패 (정의 오류·타임아웃) |
   | `byRule` | 규칙 id → 위반 건수. **실행된 규칙은 0이어도 키가 있다** |
 
+- **기하 규칙 위반은 `metrics`에 실측값을 싣는다** — 초과량(`sides`/`left`/`top`/`right`/`bottom`),
+  컨테이너 크기, 겹침 폭·높이, 요구 여백. 초과량을 알려고 `sigma_get_tree`를 다시 부를 필요가 없다.
+  **`message`를 정규식으로 파싱하지 말 것** — 그러면 문구를 못 고친다. 수치는 `metrics`에서 읽는다.
+
   세 상태가 응답만으로 갈린다: `byRule[id] > 0`(위반 있음) · `byRule[id] === 0`(돌았고 깨끗함) ·
   **키 없음**(안 돌았음 — `coverage`에서 왜인지 확인). `scope:"file"`은 `summary[]`에
   페이지별 `scannedNodes`·`ranCount`·`byRule`을 싣는다.

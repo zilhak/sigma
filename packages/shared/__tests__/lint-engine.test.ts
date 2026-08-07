@@ -274,6 +274,62 @@ describe('R5 프레임 내부 포함 (로컬 좌표)', () => {
     expect(v[0].nodes).toContain('i');
   });
 
+  // 판정에 쓴 수치를 버리지 않는다 — 없으면 호출자가 get_tree 로 부모·자식 박스를 다시 받아
+  // 손으로 빼야 한다. 배경: docs/history/005-geometric-lint-threw-away-its-own-numbers.md
+  describe('metrics (판정 수치 노출)', () => {
+    test('child_overflow 는 넘친 변과 양을 싣는다', () => {
+      const roots = [
+        node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+          node('f', 'cell', 'FRAME', [100, 100, 48, 39], [
+            node('i', 'inner', 'INSTANCE', [0, 0, 48, 40]),
+          ]),
+        ]),
+      ];
+      const v = lintLayout(roots).violations.find((x) => x.rule === 'child_overflow')!;
+      expect(v.metrics).toMatchObject({ sides: 'bottom', bottom: 1, containerWidth: 48, containerHeight: 39 });
+      // message 를 파싱하지 않아도 metrics 만으로 초과량을 알 수 있어야 한다
+      expect(v.message).toContain('1px');
+    });
+
+    test('두 변이 함께 넘치면 둘 다 싣는다', () => {
+      const roots = [
+        node('s', 'S', 'SECTION', [0, 0, 2000, 2000], [
+          // ⚠️ 이름을 'box' 로 두면 안 된다 — ANNO_WIRE_NAMES 예외라 검사에서 통째로 빠진다.
+          node('f', 'panel', 'FRAME', [100, 100, 100, 100], [
+            node('i', 'inner', 'INSTANCE', [0, 0, 103, 110]),
+          ]),
+        ]),
+      ];
+      const v = lintLayout(roots).violations.find((x) => x.rule === 'child_overflow')!;
+      expect(v.metrics).toMatchObject({ sides: 'right,bottom', right: 3, bottom: 10 });
+    });
+
+    test('frame_padding 은 모자란 양과 요구값을 싣는다', () => {
+      const roots = [
+        node('s', 'S', 'SECTION', [0, 0, 500, 500], [
+          node('f', 'card', 'FRAME', [5, 40, 100, 100]),
+        ]),
+      ];
+      const v = lintLayout(roots, { padding: 20 }).violations.find((x) => x.rule === 'frame_padding')!;
+      expect(v.metrics).toMatchObject({ sides: 'left', left: 15, requiredPadding: 20 });
+    });
+
+    test('겹침 규칙은 겹친 크기를 싣는다', () => {
+      const roots = [
+        node('a', 'A', 'SECTION', [0, 0, 100, 100]),
+        node('b', 'B', 'SECTION', [90, 80, 100, 100]),
+      ];
+      const v = lintLayout(roots).violations.find((x) => x.rule === 'section_overlap')!;
+      expect(v.metrics).toMatchObject({ overlapWidth: 10, overlapHeight: 20 });
+    });
+
+    test('수치가 없는 규칙은 metrics 를 달지 않는다', () => {
+      const roots = [node('t', 'stray', 'FRAME', [0, 0, 100, 100])];
+      const v = lintLayout(roots).violations.find((x) => x.rule === 'outside_section')!;
+      expect(v.metrics).toBeUndefined();
+    });
+  });
+
   // Figma 의 GROUP 은 자체 좌표계를 만들지 않는다(자식이 그룹의 부모 공간 좌표를 쓴다).
   // 그룹을 (0,0,W,H) 컨테이너로 보면 그룹 안 그룹이 항상 위반으로 잡혔다.
   test('GROUP 은 child_overflow 컨테이너로 보지 않는다', () => {
