@@ -40,6 +40,31 @@ function asNodesInfoArray(raw: unknown): NodeInfoLike[] {
 const QUERY_DEFAULT_LIMIT = 200;
 
 /**
+ * 컨버터가 실제로 읽는 필드가 하나라도 있는지. `{}` 같은 빈 객체를 걸러내기 위한 최소 검사다.
+ *
+ * ⚠️ 왜 필요한가: 예전 가드는 `if (!data)` 뿐이라 `{}` 가 truthy 로 통과했고, 그러면 플러그인이
+ * `createFigmaNode` 에서 null 을 받아 던지는데 그 예외가 응답에 실리지 않아 **성공 응답 + 아무
+ * 노드도 없음**이 됐다. 여기서 미리 끊는다. 지나치게 좁히지 않으려고 "컨버터가 보는 필드가
+ * 전혀 없을 때만" 거부한다.
+ */
+const CONVERTER_FIELDS = ['tagName', 'svgString', 'styles', 'boundingRect', 'children', 'textContent', 'imageDataUrl'] as const;
+
+function describeInvalidFrameData(data: unknown, format: 'json' | 'html'): string | null {
+  if (format === 'html') {
+    if (typeof data !== 'string' || !data.trim()) return 'html 은 비어 있지 않은 문자열이어야 합니다';
+    return null;
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return 'data 는 추출 노드(ExtractedNode) 객체여야 합니다';
+  }
+  const has = CONVERTER_FIELDS.some((k) => (data as Record<string, unknown>)[k] !== undefined);
+  if (!has) {
+    return `data 에 변환에 쓸 필드가 없습니다 (${CONVERTER_FIELDS.join(', ')} 중 하나 이상 필요). 빈 객체로는 노드를 만들 수 없습니다`;
+  }
+  return null;
+}
+
+/**
  * where 조건 검색이 뜨는 트리의 노드 상한·타임아웃.
  *
  * ⚠️ getTree 기본 상한(1000)은 인터랙티브 탐색용이라 조건 검색에 그대로 쓰면 **큰 페이지에서
@@ -73,11 +98,23 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     if (!data) {
       return jsonResponse({ error: 'data 또는 html 필드가 필요합니다' });
     }
-    await wsServer.createFrame(data, args.name as string | undefined, position, format, pluginId, pageId, layoutMode);
+    const invalid = describeInvalidFrameData(data, format);
+    if (invalid) {
+      return jsonResponse({ error: invalid });
+    }
+    const created = await wsServer.createFrame(data, args.name as string | undefined, position, format, pluginId, pageId, layoutMode);
 
+    // 응답은 **플러그인이 만든 것**을 그대로 싣는다. 요청받은 pageId 를 되울리면
+    // 아무것도 만들어지지 않았을 때조차 성공처럼 보인다(그 사고가 실제로 있었다).
     return jsonResponse({
       success: true,
-      message: 'Figma에 프레임이 생성되었습니다',
+      message: `Figma에 프레임이 생성되었습니다: ${created.name} (${created.nodeId})`,
+      created: {
+        nodeId: created.nodeId,
+        name: created.name,
+        childCount: created.childCount,
+        pageName: created.pageName,
+      },
       target: {
         pluginId: pluginId || '(default)',
         pageId: pageId || '(current)',
@@ -103,11 +140,12 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
     const { pluginId, pageId } = access;
     const importPosition = args.position as { x: number; y: number } | undefined;
     const importLayoutMode = (args.layoutMode as 'auto' | 'absolute') || 'auto';
-    await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition, 'json', pluginId, pageId, importLayoutMode);
+    const importedFrame = await wsServer.createFrame(component.data, (args.name as string) || component.name, importPosition, 'json', pluginId, pageId, importLayoutMode);
 
     return jsonResponse({
       success: true,
       message: `'${component.name}'이 Figma로 가져와졌습니다`,
+      created: importedFrame,
       target: {
         pluginId: pluginId || '(default)',
         pageId: pageId || '(current)',

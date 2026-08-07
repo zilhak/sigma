@@ -95,14 +95,10 @@ export function handleServerMessage(msg: ServerMessage) {
         '*'
       );
 
-      if (ws) ws.send(
-        JSON.stringify({
-          type: 'RESULT',
-          commandId: msg.commandId,
-          success: true,
-        })
-      );
-      log(`프레임 생성 완료: ${msg.name || 'Unnamed'}`, 'success');
+      // 여기서 ack 를 쏘지 않는다 — create-frame-result 를 code.ts 에서 기다린다
+      // (commandId 를 실어 보냈으므로 응답에 echo 되고, 제네릭 패스스루가 서버로 넘긴다).
+      // 전달 직후 success 를 쏘면 **플러그인 안에서 무슨 일이 나든 응답은 항상 성공**이 된다:
+      // 빈 data 로 아무것도 만들어지지 않아도 MCP 응답이 0.00 초에 성공으로 돌아왔다.
       break;
     }
 

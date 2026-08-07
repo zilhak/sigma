@@ -49,6 +49,19 @@ export interface FigmaPluginInfo {
 }
 
 /**
+ * 프레임 생성 결과 — 플러그인이 실제로 만든 노드다.
+ *
+ * ⚠️ 이 값을 응답에 실어야 하는 이유: 예전에는 `Promise<void>` 였고 MCP 응답은 "생성되었습니다"
+ * 와 **요청받은 pageId 를 되울린** 문장이었다. 그래서 아무것도 만들어지지 않아도 성공으로 보였다.
+ */
+export interface CreateFrameResult {
+  nodeId: string;
+  name: string;
+  childCount: number;
+  pageName: string;
+}
+
+/**
  * 플러그인 ID 생성기
  */
 function generatePluginId(): string {
@@ -462,7 +475,7 @@ export class FigmaWebSocketServer {
     pluginId?: string,
     pageId?: string,
     layoutMode?: 'auto' | 'absolute'
-  ): Promise<void> {
+  ): Promise<CreateFrameResult> {
     // 청킹 검사를 위해 먼저 타겟 플러그인과 페이로드 확인
     const targetPlugin = this.resolveTargetPlugin(pluginId);
     if (!targetPlugin) {
@@ -487,7 +500,7 @@ export class FigmaWebSocketServer {
     }
 
     // 1MB 이하: sendCommand 사용
-    return this.sendCommand<void>('CREATE_FRAME', {
+    return this.sendCommand<CreateFrameResult>('CREATE_FRAME', {
       format,
       data,
       name,
@@ -509,13 +522,13 @@ export class FigmaWebSocketServer {
     format: 'json' | 'html' = 'json',
     pageId?: string,
     layoutMode?: 'auto' | 'absolute'
-  ): Promise<void> {
+  ): Promise<CreateFrameResult> {
     const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const totalChunks = Math.ceil(payload.length / CHUNK_SIZE);
 
     console.log(`[WebSocket] Sending ${totalChunks} chunks for command ${commandId} (format: ${format})`);
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<CreateFrameResult>((resolve, reject) => {
       // 대용량 데이터는 타임아웃을 길게 설정 (60초)
       const timeout = setTimeout(() => {
         this.pendingCommands.delete(commandId);
@@ -524,7 +537,7 @@ export class FigmaWebSocketServer {
 
       this.pendingCommands.set(commandId, {
         id: commandId,
-        resolve: () => resolve(),
+        resolve: (result: unknown) => resolve(result as CreateFrameResult),
         reject,
         timeout,
       });

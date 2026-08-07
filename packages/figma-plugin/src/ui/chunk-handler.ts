@@ -147,12 +147,9 @@ export function handleChunkEnd(msg: ChunkMsg) {
         }, '*');
       }
 
-      if (ws) ws.send(JSON.stringify({
-        type: 'RESULT',
-        commandId: msg.commandId,
-        success: true,
-      }));
-      log(`프레임 생성 완료 (청크): ${chunkBuffer.name !== undefined ? chunkBuffer.name : 'Unnamed'}`, 'success');
+      // 여기서도 ack 를 쏘지 않는다 — create-frame-result 를 code.ts 에서 기다린다
+      // (위 update-frame 분기와 같은 방식). 1MB 초과 페이로드가 이 경로로 오므로
+      // base64 이미지를 담은 스펙 생성이 조용히 실패하던 자리다.
     }
   } catch (err) {
     log(`청크 파싱 오류: ${err}`, 'error');

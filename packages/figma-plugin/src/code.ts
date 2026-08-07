@@ -130,14 +130,16 @@ setInterval(() => {
 
 // pageId(바인딩 page)를 대상으로 노드를 생성하는 command 집합 — 아래 유효성 검증에만 쓴다.
 // 각 명령은 getTargetPage(pageId)로 얻은 page에 노드를 직접 배치하므로 활성 page를
-// 전환하지 않는다. create-from-json/html, create-section 등은 자체적으로 동일하게
-// 처리하므로 여기 없어도 무방하다(검증 범위만의 차이).
+// 전환하지 않는다.
 const PAGE_SCOPED_CREATE = new Set([
   'create-rectangle', 'create-text', 'create-empty-frame', 'create-ellipse',
   'create-polygon', 'create-star', 'create-line', 'create-vector',
   'create-image-node', 'create-component-instance', 'create-component',
   'create-component-set', 'create-node-from-svg', 'create-sticky', 'create-connector',
   'build-component-from-spec', 'use-component-spec',
+  // create-from-json/html 도 같은 폴백을 타므로 함께 검증한다. 예전 주석은 "여기 없어도
+  // 무방"이라고 했지만, 이 둘만 가드에서 빠져 있었고 실패가 조용히 넘어가는 경로였다.
+  'create-from-json', 'create-from-html',
 ]);
 
 // 메시지 핸들러
@@ -165,11 +167,21 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
   }
 
   switch (msg.type) {
+    // ⚠️ 아래 두 케이스는 **반드시 결과를 보내야 한다**. 예전에는 결과도 에러도 보내지 않고
+    // UI 브리지가 전달 직후 성공 ack 를 쏴서, 플러그인 안에서 무엇이 실패해도(빈 data 로
+    // 아무것도 안 만들어져도) MCP 응답이 항상 성공이었다. createFrameFrom*() 가 돌려주는
+    // {nodeId, pageName, ...} 를 그대로 실어 보내면 서버가 "어디에 무엇을 만들었는지"를
+    // 되울림이 아니라 실측으로 응답할 수 있다.
     case 'create-from-json': {
       const position = msg.position as { x: number; y: number } | undefined;
       const pageId = msg.pageId as string | undefined;
       const forceAbsolute = msg.forceAbsolute as boolean | undefined;
-      await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId, getTargetPage, forceAbsolute, msg.focusView === true);
+      try {
+        const created = await createFrameFromJSON(msg.data as ExtractedNode, msg.name as string | undefined, position, pageId, getTargetPage, forceAbsolute, msg.focusView === true);
+        sendResult('create-frame-result', created);
+      } catch (error) {
+        sendError('create-frame-result', error instanceof Error ? error.message : 'Unknown error');
+      }
       break;
     }
 
@@ -177,7 +189,12 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       const htmlPosition = msg.position as { x: number; y: number } | undefined;
       const htmlPageId = msg.pageId as string | undefined;
       const htmlForceAbsolute = msg.forceAbsolute as boolean | undefined;
-      await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId, getTargetPage, htmlForceAbsolute, msg.focusView === true);
+      try {
+        const created = await createFrameFromHTML(msg.data as string, msg.name as string | undefined, htmlPosition, htmlPageId, getTargetPage, htmlForceAbsolute, msg.focusView === true);
+        sendResult('create-frame-result', created);
+      } catch (error) {
+        sendError('create-frame-result', error instanceof Error ? error.message : 'Unknown error');
+      }
       break;
     }
 

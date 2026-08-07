@@ -108,7 +108,7 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
   // CSS 계산 소수 좌표·자식 없는 아이콘 프레임이 오탐의 전부였고(L1-2 실측: default_name 5277건,
   // empty_container 72건이 100% 인스턴스 내부), 그것 때문에 세 규칙이 통째로 꺼져 있었다.
   // 마스터 페이지처럼 그 안쪽이 검사 대상이면 includeInsideInstances: true 로 켠다.
-  const instScope = (id: string) => ({
+  const instScope = (id: BuiltinRuleId) => ({
     includeInsideInstances: (builtins[id] as { includeInsideInstances?: boolean } | undefined)?.includeInsideInstances === true,
   });
   if (isEnabled(builtins, 'stray_pixel')) out.push(...strayPixelRule(roots, instScope('stray_pixel')));

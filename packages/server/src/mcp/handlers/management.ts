@@ -137,10 +137,11 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
       }
 
       if (wsServer.isFigmaConnected()) {
-        await wsServer.createFrame(args.data as string, args.name as string, saveImportPosition, 'html', saveImportPluginId, saveImportPageId, saveLayoutMode);
+        const htmlFrame = await wsServer.createFrame(args.data as string, args.name as string, saveImportPosition, 'html', saveImportPluginId, saveImportPageId, saveLayoutMode);
         return jsonResponse({
           success: true,
           message: `'${args.name}'이 Figma로 가져와졌습니다 (HTML, 저장 안 함)`,
+          created: htmlFrame,
           target: {
             pluginId: saveImportPluginId || '(default)',
             pageId: saveImportPageId || '(current)',
@@ -165,11 +166,12 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
 
     // Figma 연결 시 가져오기
     if (wsServer.isFigmaConnected()) {
-      await wsServer.createFrame(savedComponent.data, savedComponent.name, saveImportPosition, 'json', saveImportPluginId, saveImportPageId, saveLayoutMode);
+      const savedFrame = await wsServer.createFrame(savedComponent.data, savedComponent.name, saveImportPosition, 'json', saveImportPluginId, saveImportPageId, saveLayoutMode);
       return jsonResponse({
         success: true,
         message: `'${savedComponent.name}'이 저장되고 Figma로 가져와졌습니다`,
         id: savedComponent.id,
+        created: savedFrame,
         target: {
           pluginId: saveImportPluginId || '(default)',
           pageId: saveImportPageId || '(current)',
