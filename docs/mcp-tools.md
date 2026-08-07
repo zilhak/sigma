@@ -125,7 +125,7 @@ config 하나로 빌트인 규칙 24종(기본 ON 15종 = 기하 8 + 구조/이�
 
 **빌트인 24종(파라미터·기본값 — opt-in 9종: `raw_node`·`annotation_layer`·`instance_default_name`·`content_spread`·`origin_anchor`·`instance_resized_from_spec`·`annotation_marker_pair`·`annotation_marker_gap`·`font_not_default`), JSON/predicate 커스텀 규칙 스키마,
 `scope`/`configMode` 상세, `configPath`의 Docker 배포 주의사항, 복붙용 예제 config,
-설계 근거는 [lint.md](lint.md) 참조.**
+설계 근거는 [lint/](lint/) 참조 (룰 1개 = 파일 1개, 인덱스는 [lint/rules/](lint/rules/README.md)).**
 
 ## 조회/검색
 
