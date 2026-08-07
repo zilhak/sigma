@@ -143,35 +143,6 @@ export function handlePluginMessage(msg: Record<string, unknown>) {
         });      }
       break;
 
-    case PLUGIN_MSG.ROUNDTRIP_RESULT:
-      // 라운드트립 테스트 결과 처리
-      if (msg.success) {
-        if (msg.identical) {
-          log(`라운드트립 테스트 성공 (${msg.format}): 완전 동일`, 'success');
-        } else {
-          const diffCount = msg.differences ? (msg.differences as unknown[]).length : 0;
-          log(`라운드트립 테스트 완료 (${msg.format}): ${diffCount}개 차이점`, 'warn');
-        }
-      } else {
-        log(`라운드트립 테스트 실패: ${msg.error}`, 'error');
-      }
-
-      // 서버로 결과 전송
-      if (ws && ws.readyState === WebSocket.OPEN && pendingCommandId) {
-        sendToServer({
-          type: 'ROUNDTRIP_RESULT',
-          commandId: pendingCommandId,
-          format: msg.format,
-          success: msg.success,
-          identical: msg.identical,
-          differences: msg.differences,
-          original: msg.original,
-          extracted: msg.extracted,
-          createdFrameId: msg.createdFrameId,
-          error: msg.error,
-        });      }
-      break;
-
     default: {
       // 제네릭 패스스루: kebab-case-result → UPPER_SNAKE_RESULT 변환 후 서버로 전달
       const msgType = msg.type as string;

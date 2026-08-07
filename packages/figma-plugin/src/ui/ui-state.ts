@@ -129,12 +129,9 @@ export function getPollingInterval(): number | null { return pollingInterval; }
 export function setPollingInterval(value: number | null) { pollingInterval = value; }
 
 export function getIsConnected(): boolean { return isConnected; }
-export function setIsConnected(value: boolean) { isConnected = value; }
 
-export function getIsMinimized(): boolean { return isMinimized; }
 export function setIsMinimized(value: boolean) { isMinimized = value; }
 
-export function getAssignedPluginId(): string | null { return assignedPluginId; }
 export function setAssignedPluginId(value: string | null) { assignedPluginId = value; }
 
 export function getChunkBuffer(commandId: string): ChunkBuffer | null {

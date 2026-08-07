@@ -28,7 +28,6 @@ import { buildComponentFromSpec, useComponentSpec, setComponentSpecInstanceProps
 import { getAvailableLibraries, getLibraryComponents, getLibraryVariables, importLibraryComponent, importLibraryStyle } from './node-ops';
 import { setExportSettings, getExportSettings } from './node-ops';
 import { createSticky, createConnector } from './node-ops';
-import { testRoundtripJSON, testRoundtripHTML } from './testing';
 
 /**
  * ExtractedNode 트리에서 svgString이 없는 SVG 노드를 찾아
@@ -611,56 +610,6 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         format: 'html',
         success: true,
         data: htmlParts.join('\n'),
-      });
-      break;
-    }
-
-    case 'test-roundtrip-json': {
-      const jsonData = msg.data as ExtractedNode;
-      const jsonName = msg.name as string | undefined;
-
-      if (!jsonData) {
-        figma.ui.postMessage({
-          type: 'roundtrip-result',
-          commandId,
-          format: 'json',
-          success: false,
-          error: 'JSON 데이터가 필요합니다.',
-        });
-        break;
-      }
-
-      const jsonResult = await testRoundtripJSON(jsonData, jsonName);
-      figma.ui.postMessage({
-        type: 'roundtrip-result',
-        commandId,
-        format: 'json',
-        ...jsonResult,
-      });
-      break;
-    }
-
-    case 'test-roundtrip-html': {
-      const htmlData = msg.data as string;
-      const htmlName = msg.name as string | undefined;
-
-      if (!htmlData) {
-        figma.ui.postMessage({
-          type: 'roundtrip-result',
-          commandId,
-          format: 'html',
-          success: false,
-          error: 'HTML 데이터가 필요합니다.',
-        });
-        break;
-      }
-
-      const htmlResult = await testRoundtripHTML(htmlData, htmlName);
-      figma.ui.postMessage({
-        type: 'roundtrip-result',
-        commandId,
-        format: 'html',
-        ...htmlResult,
       });
       break;
     }

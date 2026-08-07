@@ -105,13 +105,13 @@ describe('브리지 명시 case 는 늘어나면 안 된다', () => {
   test('bridge-plugin 은 다섯 필드 밖의 값을 싣는 case 만 남긴다', () => {
     const src = readSource('ui/bridge-plugin.ts');
     const cases = [...src.matchAll(/case PLUGIN_MSG\.([A-Z_]+)/g)].map((m) => m[1]);
-    // *_RESULT 중 남은 것은 전용 필드를 싣는 둘뿐이다:
-    //   EXTRACT_RESULT   — format·data(+ Export 모달 콜백)
-    //   ROUNDTRIP_RESULT — format·identical·differences·original·extracted·createdFrameId
+    // *_RESULT 중 남은 것은 셋뿐이다:
+    //   EXTRACT_RESULT   — format·data 를 싣고 Export 모달 콜백까지 부른다
+    //   PAGE_LINT_RESULT · GOTO_NODE_RESULT — UI 전용(서버로 forward 하지 않는다)
     // 나머지 *_RESULT 는 {commandId,success,result,error} 뿐이라 제네릭 패스스루가 그대로 만든다.
     const results = [...new Set(cases)].filter((c) => c.endsWith('_RESULT')).sort();
     expect(results).toEqual([
-      'EXTRACT_RESULT', 'GOTO_NODE_RESULT', 'PAGE_LINT_RESULT', 'ROUNDTRIP_RESULT',
+      'EXTRACT_RESULT', 'GOTO_NODE_RESULT', 'PAGE_LINT_RESULT',
     ]);
   });
 

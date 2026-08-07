@@ -12,29 +12,16 @@ export const SERVER_MSG = {
 } as const;
 
 // 플러그인(code.ts) → UI 메시지 타입 상수
+// 플러그인(code.ts) → UI 메시지 중 **브리지가 특별 처리하는 것만** 나열한다.
+// 그 밖의 *-result 는 bridge-plugin 의 default 패스스루가 {commandId,success,result,error} 로
+// 그대로 서버에 넘기므로 여기 추가하지 않는다.
 export const PLUGIN_MSG = {
   SUCCESS: 'success',
   ERROR: 'error',
   INFO: 'info',
   FILE_INFO: 'file-info',
   PAGES_LIST: 'pages-list',
-  DELETE_RESULT: 'delete-result',
-  UPDATE_RESULT: 'update-result',
-  MODIFY_RESULT: 'modify-result',
   EXTRACT_RESULT: 'extract-result',
-  ROUNDTRIP_RESULT: 'roundtrip-result',
-  FIND_NODE_RESULT: 'find-node-result',
-  TREE_RESULT: 'tree-result',
-  EXPORT_IMAGE_RESULT: 'export-image-result',
-  EXTRACT_NODE_JSON_RESULT: 'extract-node-json-result',
-  CREATE_SECTION_RESULT: 'create-section-result',
-  MOVE_NODE_RESULT: 'move-node-result',
-  CLONE_NODE_RESULT: 'clone-node-result',
-  SET_PAGE_DATA_RESULT: 'set-page-data-result',
-  GET_PAGE_DATA_RESULT: 'get-page-data-result',
-  SET_NODE_DATA_RESULT: 'set-node-data-result',
-  GET_NODE_DATA_RESULT: 'get-node-data-result',
-  GET_NODES_DATA_RESULT: 'get-nodes-data-result',
   PAGE_LINT_RESULT: 'page-lint-result',
   GOTO_NODE_RESULT: 'goto-node-result',
   SELECTION_CHANGED: 'selection-changed',

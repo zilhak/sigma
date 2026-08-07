@@ -225,17 +225,6 @@ export class FigmaWebSocketServer {
     return false;
   }
 
-  // Get connected Figma plugins (WebSocket array - 내부용)
-  getFigmaPluginSockets(): WebSocket[] {
-    const sockets: WebSocket[] = [];
-    for (const [ws, plugin] of this.plugins) {
-      if (plugin.type === 'figma-plugin' && ws.readyState === WebSocket.OPEN) {
-        sockets.push(ws);
-      }
-    }
-    return sockets;
-  }
-
   // Get plugin by ID
   getPluginById(pluginId: string): Plugin | undefined {
     return this.pluginsById.get(pluginId);
@@ -258,16 +247,6 @@ export class FigmaWebSocketServer {
       }
     }
     return plugins;
-  }
-
-  // Get first connected Figma plugin ID (기본 타겟용)
-  getDefaultPluginId(): string | null {
-    for (const plugin of this.pluginsById.values()) {
-      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN) {
-        return plugin.id;
-      }
-    }
-    return null;
   }
 
   // Resolve target plugin - ID가 주어지면 해당 플러그인, 아니면 첫 번째 플러그인
@@ -984,14 +963,6 @@ export class FigmaWebSocketServer {
 
   // === FigJam (New) ===
 
-  // Broadcast to all Figma plugins
-  broadcastToFigma(message: object) {
-    const jsonMessage = JSON.stringify(message);
-    for (const ws of this.getFigmaPluginSockets()) {
-      ws.send(jsonMessage);
-    }
-  }
-
   // Close server
   close() {
     if (this.pingInterval) {
@@ -1003,16 +974,6 @@ export class FigmaWebSocketServer {
     }
 
     this.wss.close();
-  }
-
-  // Get connected Figma file info (첫 번째 플러그인)
-  getFigmaFileInfo(): FigmaFileInfo | null {
-    for (const plugin of this.plugins.values()) {
-      if (plugin.type === 'figma-plugin' && plugin.ws.readyState === WebSocket.OPEN && plugin.fileInfo) {
-        return plugin.fileInfo;
-      }
-    }
-    return null;
   }
 
   // Get status

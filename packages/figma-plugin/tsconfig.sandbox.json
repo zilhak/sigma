@@ -15,7 +15,6 @@
     "src/converter/**/*",
     "src/extractor/**/*",
     "src/node-ops/**/*",
-    "src/testing/**/*",
     "src/utils.ts",
     "__tests__/**/*"
   ]
