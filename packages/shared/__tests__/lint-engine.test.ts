@@ -423,6 +423,57 @@ describe('simple-rules.ts (신규 빌트인 4종)', () => {
     expect(emptyContainerRule(roots, o)).toHaveLength(1);
   });
 
+  // 인스턴스만 제외하면 절반만 닫힌다 — 같은 래퍼가 마스터(COMPONENT) 안에도 그대로 있다.
+  // 마스터 페이지 실측: OneUI 452 · SECloudit 마스터 1851 이 100% COMPONENT 내부였고, 그래서
+  // 그 페이지들은 page config 로 세 규칙을 통째로 끄는 수밖에 없었다(진짜 위반도 함께 실명).
+  test('스펙 스탬프가 찍힌 마스터 내부도 건너뛴다 (specMasterIds)', () => {
+    const roots = [
+      node('spec', 'button_primary_md', 'COMPONENT', [0, 0, 100, 40], [
+        node('w', 'Frame', 'FRAME', [0.5, 0, 100, 40], [
+          node('deep', 'Rectangle 3', 'RECTANGLE', [1.5, 2, 10, 10]),
+        ]),
+        node('empty', 'Frame 2', 'FRAME', [0, 0, 8, 8]),
+      ]),
+    ];
+    const o = { specMasterIds: new Set(['spec']) };
+    expect(strayPixelRule(roots, o)).toHaveLength(0);
+    expect(defaultNameRule(roots, o)).toHaveLength(0);
+    expect(emptyContainerRule(roots, o)).toHaveLength(0);
+  });
+
+  // 반대쪽 — 스탬프가 없으면 사람이 조립한 로컬 컴포넌트이므로 그 안쪽 위반은 고칠 수 있다.
+  test('스탬프 없는 로컬 COMPONENT 내부는 계속 검사한다', () => {
+    const roots = [
+      node('local', 'gnb_cluster_only', 'COMPONENT', [0, 0, 100, 40], [
+        node('w', 'Frame', 'FRAME', [0.5, 0, 100, 40]),
+      ]),
+    ];
+    const o = { specMasterIds: new Set(['other-id']) };
+    expect(defaultNameRule(roots, o)).toHaveLength(1);
+    expect(strayPixelRule(roots, o)).toHaveLength(1);
+    expect(emptyContainerRule(roots, o)).toHaveLength(1);
+    // specMasterIds 를 아예 주지 않아도 같다(수집 실패 시 예전 동작 유지)
+    expect(defaultNameRule(roots)).toHaveLength(1);
+  });
+
+  test('스펙 마스터 **자신**은 건너뛰지 않는다 (내부만 제외)', () => {
+    const roots = [node('spec', 'Frame 7', 'COMPONENT', [0.5, 0, 100, 40])];
+    const o = { specMasterIds: new Set(['spec']) };
+    expect(defaultNameRule(roots, o)).toHaveLength(1);
+    expect(strayPixelRule(roots, o)).toHaveLength(1);
+  });
+
+  test('includeInsideInstances 는 스펙 마스터 내부까지 다시 켠다 (스펙 감사용)', () => {
+    const roots = [
+      node('spec', 'button_primary_md', 'COMPONENT', [0, 0, 100, 40], [
+        node('w', 'Frame', 'FRAME', [0.5, 0, 100, 40]),
+      ]),
+    ];
+    const o = { specMasterIds: new Set(['spec']), includeInsideInstances: true };
+    expect(defaultNameRule(roots, o)).toHaveLength(1);
+    expect(strayPixelRule(roots, o)).toHaveLength(1);
+  });
+
   test('인스턴스 **자신**은 건너뛰지 않는다 (내부만 제외)', () => {
     const roots = [node('inst', 'Frame 9', 'INSTANCE', [0.5, 0, 100, 40])];
     expect(defaultNameRule(roots)).toHaveLength(1);

@@ -21,34 +21,45 @@ function walk(roots: TreeNode[], visit: (n: TreeNode) => void): void {
 }
 
 /**
- * 인스턴스 **내부**를 건너뛰는 옵션이 있는 순회.
+ * 인스턴스·**스펙 마스터** 내부를 건너뛰는 옵션이 있는 순회.
  *
  * ⚠️ 왜 필요한가: 이름·소수 좌표·빈 프레임 계열 규칙이 **오탐이 너무 많다는 이유로 통째로 꺼져
- * 있었다.** 실측해 보니 그 오탐이 전부 한 곳에서 나왔다 — component-spec 인스턴스 내부다.
+ * 있었다.** 실측해 보니 그 오탐이 전부 한 곳에서 나왔다 — component-spec 이 만든 트리 내부다.
  * 스펙 HTML 이 만든 래퍼는 이름이 "Frame" 이고, CSS 로 계산된 좌표는 소수이며, 아이콘 프레임은
  * 자식이 없다. 전부 **스펙이 정하는 것이라 이 화면에서 고칠 수 없는 것들**이다.
  * L1-2 기준 default_name 5277건·empty_container 72건이 **100% 인스턴스 내부**였고,
  * 그것만 빼면 각각 0건 — 즉 규칙이 죽어 있을 이유가 없었다.
  *
- * 마스터 페이지에서는 그 안쪽이 곧 검사 대상이므로 `includeInsideInstances: true` 로 켠다.
+ * ⚠️ 인스턴스만 빼면 절반만 닫힌다 — 같은 래퍼가 **마스터(COMPONENT) 안에도 그대로 있다.**
+ * 마스터 페이지 실측: `🎨 02 · OneUI` 452 · `🎨 06 · SECloudit 마스터` 1851 등이 **100% COMPONENT
+ * 내부**였고, 그래서 마스터 페이지들은 page config 로 세 규칙을 통째로 끄는 수밖에 없었다(= 그
+ * 페이지에서 손조립 컴포넌트의 진짜 위반도 함께 못 봄). 그래서 **스펙 스탬프가 찍힌 COMPONENT**
+ * (`specMasterIds`, 판정은 호출측이 pluginData `sigma-spec` 으로 주입)의 내부도 건너뛴다.
+ * 스탬프 없는 로컬 COMPONENT 는 사람이 조립한 것이므로 **계속 검사한다** — 거기 위반은 고칠 수 있다.
+ *
+ * 안쪽까지 보고 싶을 때(스펙 자체를 감사하는 경우)는 `includeInsideInstances: true` 로 켠다.
  */
 function walkOutsideInstances(
   roots: TreeNode[],
   includeInside: boolean,
   visit: (n: TreeNode) => void,
+  specMasterIds?: ReadonlySet<string>,
 ): void {
   const stack: Array<{ n: TreeNode; inside: boolean }> = roots.map((n) => ({ n, inside: false }));
   while (stack.length) {
     const { n, inside } = stack.pop() as { n: TreeNode; inside: boolean };
     if (!inside || includeInside) visit(n);
-    const childInside = inside || n.type === 'INSTANCE';
+    const opensSpecTree = n.type === 'INSTANCE' || (n.type === 'COMPONENT' && specMasterIds?.has(n.id) === true);
+    const childInside = inside || opensSpecTree;
     if (n.children) for (const c of n.children) stack.push({ n: c, inside: childInside });
   }
 }
 
-/** 인스턴스 내부까지 볼지 정하는 공통 옵션. 기본 = 보지 않는다. */
+/** 스펙이 만든 트리(인스턴스·스탬프 찍힌 마스터) 내부까지 볼지 정하는 공통 옵션. 기본 = 보지 않는다. */
 export interface InstanceScopeOption {
   includeInsideInstances?: boolean;
+  /** 스펙 스탬프(`sigma-spec`)가 찍힌 COMPONENT id — 이 안쪽은 스펙 소관이라 검사하지 않는다. */
+  specMasterIds?: ReadonlySet<string>;
 }
 
 export function strayPixelRule(roots: TreeNode[], opts: InstanceScopeOption = {}): Violation[] {
@@ -62,7 +73,7 @@ export function strayPixelRule(roots: TreeNode[], opts: InstanceScopeOption = {}
         nodes: [n.id],
       });
     }
-  });
+  }, opts.specMasterIds);
   return out;
 }
 
@@ -79,7 +90,7 @@ export function defaultNameRule(
     if (DEFAULT_NAME_RE.test(n.name)) {
       out.push({ rule: 'default_name', source: 'builtin', message: `"${n.name}" (${n.id}) 기본 이름 방치`, nodes: [n.id] });
     }
-  });
+  }, opts.specMasterIds);
   return out;
 }
 
@@ -91,7 +102,7 @@ export function emptyContainerRule(roots: TreeNode[], opts: InstanceScopeOption 
     if (CONTAINER_TYPES.has(n.type) && n.childCount === 0) {
       out.push({ rule: 'empty_container', source: 'builtin', message: `"${n.name}" (${n.id}) 빈 컨테이너`, nodes: [n.id] });
     }
-  });
+  }, opts.specMasterIds);
   return out;
 }
 

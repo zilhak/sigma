@@ -212,7 +212,7 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case SERVER_MSG.GET_NODES_DATA: {
       log(`노드 데이터 배치 조회: ${(msg.nodeIds as unknown[] | undefined)?.length ?? 0}개 / ${msg.key}`, 'info');
-      parent.postMessage({ pluginMessage: { type: 'get-nodes-data', nodeIds: msg.nodeIds, key: msg.key, commandId: msg.commandId } }, '*');
+      parent.postMessage({ pluginMessage: { type: 'get-nodes-data', nodeIds: msg.nodeIds, key: msg.key, plain: msg.plain, commandId: msg.commandId } }, '*');
       break;
     }
 

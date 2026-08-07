@@ -842,12 +842,17 @@ export class FigmaWebSocketServer {
    * 여러 노드의 특정 sigma sharedPluginData 키를 배치 조회 (lint suppress 필터용).
    * 값이 없는 노드는 결과 맵에서 생략된다.
    */
+  /**
+   * @param plain true 면 네임스페이스 없는 pluginData 를 읽는다(기본은 sharedPluginData "sigma").
+   *   컴포넌트 스펙 스탬프(`sigma-spec`)가 plain 쪽에 있어서 lint 의 스펙 마스터 판정에 쓰인다.
+   */
   async getNodesData(
     nodeIds: string[],
     key: string,
-    pluginId?: string
+    pluginId?: string,
+    plain?: boolean
   ): Promise<{ key: string; data: Record<string, string> }> {
-    return this.sendCommand('GET_NODES_DATA', { nodeIds, key }, {
+    return this.sendCommand('GET_NODES_DATA', { nodeIds, key, plain }, {
       pluginId,
       timeoutMs: 60000,
       logSuffix: ` (${nodeIds.length} nodes, key: ${key})`,

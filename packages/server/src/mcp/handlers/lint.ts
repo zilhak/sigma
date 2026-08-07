@@ -220,6 +220,48 @@ async function resolveDefaultFontFamily(
  * 후보 = 최상위(다른 INSTANCE 내부가 아닌) INSTANCE 노드. 배치 1왕복으로 조회.
  * 규칙이 꺼져 있으면 조회 없이 빈 맵(비용 0). 조회 실패 시에도 빈 맵(판정 없이 진행).
  */
+/**
+ * 스펙 스탬프가 찍힌 COMPONENT id 를 모은다 — 이름·소수좌표·빈프레임 규칙이 그 **내부**를
+ * 건너뛰기 위한 판정 근거다.
+ *
+ * ⚠️ 왜 이 조회가 필요한가: 스탬프는 `component.setPluginData('sigma-spec', …)` 로 찍히는데
+ * (`node-ops/component-spec.ts`), 이건 **네임스페이스 없는 pluginData** 라 기존 배치 조회
+ * (sharedPluginData "sigma")로는 읽히지 않는다. 그래서 `plain: true` 로 부른다.
+ *
+ * 이게 없으면 마스터 페이지에서 세 규칙을 통째로 끄는 수밖에 없었고(실측 100% COMPONENT 내부),
+ * 그러면 그 페이지의 **손조립 컴포넌트 위반도 함께 안 보인다**.
+ * 규칙이 하나도 안 켜져 있으면 조회하지 않는다(비용 0).
+ */
+const SPEC_TREE_RULES = ['stray_pixel', 'default_name', 'empty_container'] as const;
+
+async function collectSpecMasterIds(
+  builtins: LintConfig['builtins'],
+  roots: TreeNode[],
+  wsServer: ToolContext['wsServer'],
+  pluginId: string | undefined,
+): Promise<Set<string>> {
+  const empty = new Set<string>();
+  const anyEnabled = SPEC_TREE_RULES.some((id) => isEnabled(builtins || {}, id));
+  if (!anyEnabled) return empty;
+
+  const candidates: string[] = [];
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type === 'COMPONENT') { candidates.push(n.id); continue; } // 마스터 안의 중첩은 볼 필요 없다
+      if (n.children) walk(n.children);
+    }
+  };
+  walk(roots);
+  if (candidates.length === 0) return empty;
+
+  try {
+    const res = await wsServer.getNodesData(candidates, 'sigma-spec', pluginId, true);
+    return new Set(Object.keys(res.data || {}));
+  } catch {
+    return empty; // 조회 실패 시 제외 없이 진행(= 예전 동작, 안전측)
+  }
+}
+
 async function collectInstanceComponentNames(
   builtins: LintConfig['builtins'],
   roots: TreeNode[],
@@ -272,10 +314,11 @@ async function runLintOnRoots(
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom, scopeRoot);
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
+  const specMasterIds = await collectSpecMasterIds(config.builtins, roots, wsServer, pluginId);
   const defaultFontFamily = await resolveDefaultFontFamily(config.builtins, wsServer, pluginId);
   const sizingByAlias = await resolveSpecSizing(config.builtins);
   return [
-    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, isPageRoot, scopeRoot }),
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, specMasterIds, isPageRoot, scopeRoot }),
     ...(enriched && isEnabled(config.builtins || {}, 'fully_occluded_sibling')
       ? fullyOccludedSiblingRule(enriched.nodes, enriched.relations.children)
       : []),

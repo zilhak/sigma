@@ -364,15 +364,19 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
     case 'get-nodes-data': {
       // 배치 조회: nodeIds 각각의 sigma sharedPluginData[key] (lint suppress 필터용).
+      // plain:true 면 **네임스페이스 없는 pluginData** 를 읽는다 — 컴포넌트 스펙 스탬프
+      // (`sigma-spec`)가 그 저장소에 있어서, lint 가 "이 COMPONENT 가 스펙 마스터인지"를
+      // 판정하려면 이 경로가 필요하다.
       const gndKey = msg.key as string;
       const gndIds = (msg.nodeIds as string[] | undefined) || [];
+      const gndPlain = msg.plain === true;
       if (!gndKey) { sendError('get-nodes-data-result', 'key가 필요합니다'); break; }
       try {
         const map: Record<string, string> = {};
         for (const id of gndIds) {
           const n = figma.getNodeById(id);
           if (!n) continue;
-          const raw = n.getSharedPluginData('sigma', gndKey);
+          const raw = gndPlain ? n.getPluginData(gndKey) : n.getSharedPluginData('sigma', gndKey);
           if (raw !== '') map[id] = raw;
         }
         sendResult('get-nodes-data-result', { key: gndKey, data: map });

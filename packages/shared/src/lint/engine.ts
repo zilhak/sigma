@@ -79,6 +79,11 @@ export interface BuiltinRuleContext {
    *  자식이므로, 이걸 넘겨야 자식이 "페이지 직속"으로 오인되지 않고(outside_section 오탐) 컨테이너
    *  밖으로 나갔는지도 판정된다(child_overflow). 페이지 전체 검사에선 undefined. */
   scopeRoot?: TreeNode;
+  /** 스펙 스탬프(pluginData `sigma-spec`)가 찍힌 COMPONENT id — 그 **안쪽**은 스펙 HTML 소관이라
+   *  이름·소수좌표·빈프레임 규칙에서 제외한다. 인스턴스만 제외하면 마스터 페이지에서 같은 오탐이
+   *  그대로 남아(OneUI 452 · SEC 마스터 1851 등 100% COMPONENT 내부) 페이지 config 로 규칙을
+   *  통째로 끄는 수밖에 없었다. 스탬프 **없는** 로컬 COMPONENT 는 사람이 조립한 것이라 계속 검사한다. */
+  specMasterIds?: Iterable<string>;
 }
 
 /** 페이지 트리(roots)에 config.builtins 로 켜진 규칙만 실행해 Violation[] 를 반환. */
@@ -104,12 +109,15 @@ export function runBuiltinRules(roots: TreeNode[], builtins: BuiltinsConfig = {}
     }
   }
 
-  // 이 셋은 **인스턴스 내부를 기본으로 건너뛴다** — 스펙 HTML 이 만든 래퍼 이름("Frame")·
+  // 이 셋은 **스펙이 만든 트리 내부를 기본으로 건너뛴다** — 스펙 HTML 이 만든 래퍼 이름("Frame")·
   // CSS 계산 소수 좌표·자식 없는 아이콘 프레임이 오탐의 전부였고(L1-2 실측: default_name 5277건,
   // empty_container 72건이 100% 인스턴스 내부), 그것 때문에 세 규칙이 통째로 꺼져 있었다.
-  // 마스터 페이지처럼 그 안쪽이 검사 대상이면 includeInsideInstances: true 로 켠다.
+  // 인스턴스뿐 아니라 **스탬프 찍힌 마스터(COMPONENT) 내부도** 같은 이유로 제외한다(specMasterIds).
+  // 스펙 자체를 감사할 때는 includeInsideInstances: true 로 안쪽까지 켠다.
+  const specMasters = ctx.specMasterIds ? new Set(ctx.specMasterIds) : undefined;
   const instScope = (id: BuiltinRuleId) => ({
     includeInsideInstances: (builtins[id] as { includeInsideInstances?: boolean } | undefined)?.includeInsideInstances === true,
+    specMasterIds: specMasters,
   });
   if (isEnabled(builtins, 'stray_pixel')) out.push(...strayPixelRule(roots, instScope('stray_pixel')));
   if (isEnabled(builtins, 'default_name')) out.push(...defaultNameRule(roots, { ...instScope('default_name'), includeVectors: (builtins.default_name as { includeVectors?: boolean } | undefined)?.includeVectors === true }));
