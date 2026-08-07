@@ -2,8 +2,13 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "lib": ["ES2022"],
-    "types": ["@figma/plugin-typings"]
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "@figma/plugin-typings",
+      "bun"
+    ]
   },
   "include": [
     "src/code.ts",
@@ -11,6 +16,7 @@
     "src/extractor/**/*",
     "src/node-ops/**/*",
     "src/testing/**/*",
-    "src/utils.ts"
+    "src/utils.ts",
+    "__tests__/**/*"
   ]
 }

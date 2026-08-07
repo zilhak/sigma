@@ -30,21 +30,22 @@ describe('mergeConfigs', () => {
   });
 
   test('custom 도 rule id 단위로 override — base 에만 있는 규칙은 살아남는다', () => {
-    const base = { custom: [{ id: 'a', select: {}, check: {} }] } as never;
-    expect(mergeConfigs(base, {}).custom).toEqual([{ id: 'a', select: {}, check: {} }]);
+    const ruleA = { id: 'a', select: {}, check: { op: 'exists', field: 'x' } } as const;
+    const ruleB = { id: 'b', select: {}, check: { op: 'exists', field: 'y' } } as const;
+    const base = { custom: [ruleA] } as never;
+    expect(mergeConfigs(base, {}).custom).toEqual([ruleA]);
     // 페이지가 규칙 하나만 얹어도 base 의 나머지 규칙이 사라지면 안 된다
     // (그래서 오타 블록리스트 규칙이 특정 페이지에서 통째로 무효였다).
-    const over = { custom: [{ id: 'b', select: {}, check: {} }] } as never;
-    expect(mergeConfigs(base, over).custom).toEqual([
-      { id: 'a', select: {}, check: {} },
-      { id: 'b', select: {}, check: {} },
-    ]);
+    const over = { custom: [ruleB] } as never;
+    expect(mergeConfigs(base, over).custom).toEqual([ruleA, ruleB]);
   });
 
   test('같은 id 는 페이지 쪽이 이긴다', () => {
-    const base = { custom: [{ id: 'a', select: {}, check: { field: 'x' } }] } as never;
-    const over = { custom: [{ id: 'a', select: {}, check: { field: 'y' } }] } as never;
-    expect(mergeConfigs(base, over).custom).toEqual([{ id: 'a', select: {}, check: { field: 'y' } }]);
+    const fromBase = { id: 'a', select: {}, check: { op: 'exists', field: 'x' } } as const;
+    const fromPage = { id: 'a', select: {}, check: { op: 'exists', field: 'y' } } as const;
+    const base = { custom: [fromBase] } as never;
+    const over = { custom: [fromPage] } as never;
+    expect(mergeConfigs(base, over).custom).toEqual([fromPage]);
   });
 
   test('null 인자 허용', () => {
