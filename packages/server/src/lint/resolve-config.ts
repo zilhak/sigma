@@ -4,7 +4,7 @@
  * LintConfig 를 결정한다. 저장 config 는 페이지/문서 노드의 sharedPluginData("sigma","lint").
  */
 import type { LintConfig } from '@sigma/shared/lint';
-import { validateLintConfigShape, LintConfigError } from './load-config.js';
+import { validateLintConfigShape, LintConfigError, loadLintConfig } from './load-config.js';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
 
 export type ConfigMode = 'uniform' | 'per-page' | 'merge';
@@ -103,4 +103,32 @@ export async function resolvePageConfig(
   if (stored.config) return { config: mergeConfigs(base, stored.config), source: 'merged', error: storeErr };
   if (base) return { config: base, source: 'base', error: storeErr };
   return { config: null, source: 'skipped', error: storeErr };
+}
+
+/** base config 해석: inline > configPath > 문서 저장 'lint'. 없으면 null. */
+export async function resolveBaseConfig(
+  args: Record<string, unknown>,
+  wsServer: FigmaWebSocketServer,
+  pluginId: string | undefined,
+): Promise<{ config: LintConfig | null; label: string; error?: string }> {
+  const inline = args.config;
+  if (inline !== undefined) {
+    try {
+      return { config: validateLintConfigShape(inline, 'inline config'), label: 'inline' };
+    } catch (error) {
+      return { config: null, label: 'inline', error: error instanceof LintConfigError ? error.message : String(error) };
+    }
+  }
+  const configPath = args.configPath as string | undefined;
+  if (configPath) {
+    try {
+      return { config: await loadLintConfig(configPath), label: configPath };
+    } catch (error) {
+      return { config: null, label: configPath, error: error instanceof LintConfigError ? error.message : String(error) };
+    }
+  }
+  // 문서 저장 base
+  const docStored = await readStoredConfig(wsServer, 'document', pluginId);
+  if (docStored.config) return { config: docStored.config, label: 'document-stored' };
+  return { config: null, label: 'none', error: docStored.error };
 }

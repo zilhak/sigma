@@ -10,7 +10,8 @@
  * 데이터**(LintNode) 위에서만 동작한다 — 문서를 직접 변형할 수 없다(§1 read-only 결정).
  */
 import { Worker } from 'node:worker_threads';
-import type { LintNode, PredicateRule, Violation } from '@sigma/shared/lint';
+import { runMatchRule, type LintNode, type LintConfig, type PredicateRule, type Violation } from '@sigma/shared/lint';
+import type { BuildLintNodesResult } from './enrich.js';
 
 const DEFAULT_TIMEOUT_MS = 2000;
 
@@ -122,4 +123,26 @@ export async function runPredicateRule(input: RunPredicateRuleInput): Promise<Vi
       finish([{ rule: rule.id, source: 'custom', message: `Worker 에러: ${err.message}`, nodes: [], error: err.message }]);
     });
   });
+}
+
+/**
+ * enrich 된 노드 위에서 config.custom 의 규칙들을 순서대로 실행한다.
+ * predicate 는 Worker 격리(runPredicateRule), JSON 선언적(match)은 그 자리에서.
+ */
+export function runCustomRulesFromEnriched(
+  config: LintConfig,
+  enriched: BuildLintNodesResult,
+): Promise<Violation[]> {
+  const customRules = config.custom || [];
+  return (async () => {
+    const violations: Violation[] = [];
+    for (const rule of customRules) {
+      if (rule.kind === 'predicate') {
+        violations.push(...await runPredicateRule({ rule, nodes: enriched.nodes, relations: enriched.relations }));
+      } else {
+        violations.push(...runMatchRule(rule, enriched.nodes));
+      }
+    }
+    return violations;
+  })();
 }

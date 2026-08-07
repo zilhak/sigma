@@ -4,7 +4,8 @@
  * 이 enrichment는 config.custom 이 있을 때만 호출한다(불필요한 왕복 방지).
  */
 import type { TreeNode } from '@sigma/shared';
-import { flattenTree, buildRelationMaps, type LintNode } from '@sigma/shared/lint';
+import { flattenTree, buildRelationMaps, isEnabled, type LintNode, type LintConfig } from '@sigma/shared/lint';
+import type { FigmaWebSocketServer } from '../websocket/server.js';
 import type { CtxRelations } from './run-custom-rule';
 
 /** GET_NODES_INFO 명령이 WS 왕복으로 돌려주는 항목 — 플러그인의 NodeDetailInfo를
@@ -114,4 +115,38 @@ export function buildLintNodes(
 /** 트리의 모든 노드 id를 모아 get_nodes_info 배치 호출에 넘길 목록을 만든다. */
 export function collectNodeIds(roots: TreeNode[]): string[] {
   return flattenTree(roots).map(({ node }) => node.id);
+}
+
+/** GET_NODES_INFO 응답은 배열로 오기도 하고 { nodes: [...] } 로 오기도 한다 — 둘 다 받는다. */
+export function extractNodesInfo(raw: unknown): NodeInfoLike[] {
+  if (Array.isArray(raw)) return raw as NodeInfoLike[];
+  if (raw && typeof raw === 'object' && Array.isArray((raw as { nodes?: unknown }).nodes)) {
+    return (raw as { nodes: NodeInfoLike[] }).nodes;
+  }
+  return [];
+}
+
+/**
+ * 상세 조회(GET_NODES_INFO) 왕복은 **그것을 요구하는 규칙이 켜졌을 때만** 한다.
+ * 켜진 게 하나도 없으면 null 을 돌려주고 호출부는 TreeNode 만으로 진행한다(왕복 0).
+ */
+export async function enrichIfNeeded(
+  config: LintConfig,
+  roots: TreeNode[],
+  wsServer: FigmaWebSocketServer,
+  pluginId: string | undefined,
+  annotationLayerIds?: Iterable<string>,
+): Promise<BuildLintNodesResult | null> {
+  const needsCustom = (config.custom || []).length > 0;
+  const needsOcclusion = isEnabled(config.builtins || {}, 'fully_occluded_sibling');
+  // instance_resized_from_spec 은 opt-in — 켰을 때만 상세 조회(마스터 크기·스펙 alias)를 태운다.
+  const needsSpecSize = config.builtins?.instance_resized_from_spec?.enabled === true;
+  const needsMarkerPair = config.builtins?.annotation_marker_pair?.enabled === true;
+  const needsFont = config.builtins?.font_not_default?.enabled === true;
+  const needsMarkerGap = config.builtins?.annotation_marker_gap?.enabled === true;
+  if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont && !needsMarkerGap) return null;
+
+  const nodeIds = collectNodeIds(roots);
+  const nodesInfoRaw = await wsServer.command('GET_NODES_INFO', { nodeIds }, { pluginId });
+  return buildLintNodes(roots, extractNodesInfo(nodesInfoRaw), annotationLayerIds);
 }

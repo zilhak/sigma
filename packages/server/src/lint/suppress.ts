@@ -9,6 +9,7 @@
  *   { "rules": "all", "reason": … }        → 모든 룰 + 의도
  */
 import type { Violation } from '@sigma/shared/lint';
+import type { FigmaWebSocketServer } from '../websocket/server.js';
 
 export interface LintIgnore {
   all: boolean;
@@ -87,4 +88,28 @@ export function collectSubjectNodeIds(violations: Violation[]): string[] {
     if (v.nodes[0]) ids.add(v.nodes[0]);
   }
   return [...ids];
+}
+
+/**
+ * 노드 단위 inline suppress 적용 — 위반 주체 노드의 sigma "lint-ignore" 를 배치 조회해 억제.
+ * 위반이 없으면 조회 자체를 건너뛴다(왕복 0).
+ */
+export async function suppressViolations(
+  violations: Violation[],
+  wsServer: FigmaWebSocketServer,
+  pluginId: string | undefined,
+): Promise<{ violations: Violation[]; suppressedCount: number }> {
+  if (violations.length === 0) return { violations, suppressedCount: 0 };
+  const nodeIds = collectSubjectNodeIds(violations);
+  if (nodeIds.length === 0) return { violations, suppressedCount: 0 };
+  let ignoreMap: Record<string, string> = {};
+  try {
+    const res = await wsServer.getNodesData(nodeIds, 'lint-ignore', pluginId);
+    ignoreMap = res.data || {};
+  } catch {
+    // 조회 실패 시 억제 없이 원본 유지(안전 기본값)
+    return { violations, suppressedCount: 0 };
+  }
+  const { kept, suppressedCount } = filterSuppressed(violations, ignoreMap);
+  return { violations: kept, suppressedCount };
 }

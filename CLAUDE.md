@@ -651,7 +651,9 @@ packages/
 │       │       ├── management.ts # 스토리지/상태 관리
 │       │       ├── lint.ts    # sigma_lint (scope/configMode 해석 + 실행)
 │       │       └── component-spec.ts # 컴포넌트 스펙 등록/사용
-│       ├── lint/               # 서버측 lint 지원
+│       ├── lint/               # 서버측 lint 지원 (MCP 응답 포맷을 모르는 계층)
+│       │   ├── run.ts          # scope 별 실행 오케스트레이션 (page/file)
+│       │   ├── collect-context.ts # 룰별 추가 컨텍스트 수집 (기획레이어/스펙마스터/인스턴스명/기본폰트/스펙크기)
 │       │   ├── resolve-config.ts # config 출처 3순위 + configMode 병합
 │       │   ├── load-config.ts  # config 파일 로드/검증
 │       │   ├── enrich.ts       # 노드 상세 보강 (fills/opacity 등)
