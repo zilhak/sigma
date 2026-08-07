@@ -24,7 +24,7 @@ import { createVariableCollection, createVariable, getVariables, setVariableValu
 import { createNodeFromSvg } from './node-ops';
 import { listAvailableFonts, getNodeCSS } from './node-ops';
 import { createComponent, convertToComponent, createComponentSet, addComponentProperty, editComponentProperty, deleteComponentProperty, getComponentPropertyDefinitions, detachInstance, swapComponent } from './node-ops';
-import { buildComponentFromSpec, useComponentSpec, setComponentSpecInstanceProps } from './node-ops';
+import { buildComponentFromSpec, useComponentSpec, setComponentSpecInstanceProps, collectSpecInstanceUsage } from './node-ops';
 import { getAvailableLibraries, getLibraryComponents, getLibraryVariables, importLibraryComponent, importLibraryStyle } from './node-ops';
 import { setExportSettings, getExportSettings } from './node-ops';
 import { createSticky, createConnector } from './node-ops';
@@ -1659,6 +1659,18 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
         sendError('use-component-spec-result', errMsg);
+      }
+      break;
+    }
+
+    // 스펙 마스터의 인스턴스 사용처 조회 (전 페이지). 삭제 전 "정말 0인가" 확인에 쓴다 —
+    // 예전엔 이걸 커스텀 lint 를 37페이지에 돌려서 확인했다.
+    case 'spec-instance-usage': {
+      try {
+        sendResult('spec-instance-usage-result', collectSpecInstanceUsage(msg.componentNodeId as string));
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('spec-instance-usage-result', errMsg);
       }
       break;
     }

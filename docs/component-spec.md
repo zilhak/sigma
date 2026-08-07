@@ -25,6 +25,13 @@
 - **overwrite = in-place 갱신**: 기존 ComponentNode의 내용을 교체하므로 nodeId가
   유지되고 **기존 인스턴스에 자동 전파**된다. TEXT 속성은 이름으로 매칭해 재사용하므로
   인스턴스의 props 오버라이드도 유지된다. (노드가 삭제된 경우에만 신규 빌드로 폴백)
+  - **응답의 `impact` 를 반드시 볼 것.** 갱신은 다른 페이지의 인스턴스에도 전파되는데 그
+    파급이 화면 밖에서 일어난다. `impact.sizeChanged` 가 true 면 그 인스턴스 위에 얹힌
+    주석 마커·영역 표시가 어긋나므로, `impact.instances.pages` 에 나온 페이지들에
+    `sigma_lint`(`annotation_marker_gap`)를 다시 돌린다. 실제로 이걸 몰라서 같은 사고가
+    두 번 났다 — 상세는 [`docs/history/007-spec-update-propagated-in-silence.md`](history/007-spec-update-propagated-in-silence.md).
+  - 삭제(`deleteNode:true`)는 인스턴스가 남아 있으면 **개수·페이지와 함께 거부**한다
+    (`force:true` 로만 강행). 레지스트리만 지우는 경우는 마스터가 남으므로 막지 않는다.
 - **파일 스코프**: 등록 시 파일 ID(`figma.root` pluginData `sigma-file-id`, 최초 1회
   발급)를 레코드에 기록하고, use 시 현재 파일과 대조한다. 다른 파일에서 등록된
   컴포넌트를 쓰려 하면 출처 파일명을 알려주며 거부한다.

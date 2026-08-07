@@ -318,12 +318,12 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부) | `token`, `alias`, `description` + (`html` 또는 `htmlPath`) | `htmlPath`(파일에서 HTML 읽기, `html`과 상호배타 — base64 이미지처럼 본문이 큰 스펙은 인자로 옮기다 깨지면 등록은 통과하고 렌더만 실패), `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
+| `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부). `overwrite` 갱신 시 응답 `impact` 로 크기 변화·인스턴스 사용처 통지 | `token`, `alias`, `description` + (`html` 또는 `htmlPath`) | `htmlPath`(파일에서 HTML 읽기, `html`과 상호배타 — base64 이미지처럼 본문이 큰 스펙은 인자로 옮기다 깨지면 등록은 통과하고 렌더만 실패), `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
 | `sigma_list_component_specs` | 스펙 카탈로그 조회 (alias 지정 시 HTML 원문 포함 상세) | — | `alias`, `namespace` |
 | `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
 | `sigma_set_component_spec_instance_props` | 기존 인스턴스의 param 재설정 | `token`, `nodeId`, `props` | — |
 | `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/4종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
-| `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지). **바인딩된 파일이 소유한 스펙만** — 다른 파일 것은 거부 | `token`, `alias` | `namespace`, `deleteNode`, `allowCrossFile` |
+| `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지). **바인딩된 파일이 소유한 스펙만** — 다른 파일 것은 거부. `deleteNode` 인데 인스턴스가 남았으면 개수·페이지와 함께 거부 | `token`, `alias` | `namespace`, `deleteNode`, `allowCrossFile`, `force` |
 
 > **파일별 등록 정책(`componentSpec.warn`)**: 문서 노드에 저장된 lint config의 `componentSpec.warn`(`aliasPattern?`/`htmlPattern?`/`unlessDescription?`/`message`/`namespace?` — 앞의 둘 중 **최소 하나 필수**, 둘 다 주면 AND)에 alias나 **스펙 HTML 내용**이 걸리면 `sigma_create_component_spec`의 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실린다 — **경고만이고 등록을 막지 않는다**. 설정은 `sigma_set_page_data({ pageId: "document", key: "lint", ... })`. `validateOnly`(토큰 없는 dry-run)는 대상 파일을 특정할 수 없어 검사하지 않는다. **한계**: 게이트는 sigma 도구 경로만 덮고(사람이 Figma에서 직접 만든 컴포넌트는 안 걸림), 레지스트리는 서버 전역이라 다른 파일에 바인딩해 등록하면 우회된다 — 실수 방지용이지 강제 수단이 아니다. 상세는 [`docs/component-spec.md`](docs/component-spec.md) §파일별 등록 정책.
 

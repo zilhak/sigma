@@ -63,6 +63,50 @@ export interface BuildComponentFromSpecResult {
   /** 이 파일의 Sigma 파일 ID (레지스트리 파일 스코프용) */
   fileId: string;
   fileName: string;
+  /** in-place 갱신일 때, 전파가 닿은 인스턴스 사용처 (신규 빌드면 없음) */
+  instances?: SpecInstanceUsage;
+}
+
+/**
+ * 이 스펙 마스터를 쓰는 인스턴스가 몇 개, 어느 페이지에 있는가.
+ *
+ * in-place 재등록은 **모든 인스턴스에 자동 전파**되는데, 그 파급이 화면 밖에서 일어나
+ * 도구가 침묵하면 아무도 모른다(실사고 2건 — 스펙 폭 교정으로 다른 섹션의 주석 마커가 어긋남).
+ * 배경: docs/history/007-spec-update-propagated-in-silence.md
+ */
+export interface SpecInstanceUsage {
+  count: number;
+  /** 페이지별 집계. 개별 인스턴스 id 는 싣지 않는다 — 수천 개면 응답이 커진다 */
+  pages: Array<{ pageId: string; pageName: string; count: number }>;
+  /** 0 이 "정말 없다" 인지 "못 찾았다" 인지 구분할 근거 */
+  source: 'component.instances';
+}
+
+/**
+ * ⚠️ `.instances` 접근을 여기 한 곳으로 모은다. Figma 가 dynamic-page 를 강제하게 되면
+ * `figma.loadAllPagesAsync()` 선행이 필요해지는데, 그때 고칠 자리가 하나여야 한다.
+ * (현재 manifest 에 `documentAccess:"dynamic-page"` 가 없어 동기 접근이 그대로 동작한다.)
+ */
+export function collectSpecInstanceUsage(componentNodeId: string): SpecInstanceUsage {
+  const node = figma.getNodeById(componentNodeId);
+  if (!node || node.type !== 'COMPONENT') {
+    return { count: 0, pages: [], source: 'component.instances' };
+  }
+  const byPage = new Map<string, { pageName: string; count: number }>();
+  const instances = (node as ComponentNode).instances;
+  for (const inst of instances) {
+    let cur: BaseNode | null = inst;
+    while (cur && cur.type !== 'PAGE') cur = cur.parent;
+    if (!cur) continue; // 문서에서 떨어진 인스턴스는 세지 않는다
+    const page = cur as PageNode;
+    const hit = byPage.get(page.id);
+    if (hit) hit.count++;
+    else byPage.set(page.id, { pageName: page.name, count: 1 });
+  }
+  const pages: Array<{ pageId: string; pageName: string; count: number }> = [];
+  byPage.forEach((v, pageId) => pages.push({ pageId, pageName: v.pageName, count: v.count }));
+  pages.sort((a, b) => b.count - a.count);
+  return { count: instances.length, pages, source: 'component.instances' };
 }
 
 /**
@@ -284,6 +328,8 @@ export async function buildComponentFromSpec(
         updated: true,
         fileId: getOrCreateFileId(),
         fileName: figma.root.name,
+        // 갱신은 이미 전파됐다. 어디에 전파됐는지를 같은 응답에서 말해 준다.
+        instances: collectSpecInstanceUsage(component.id),
       };
     }
     // 기존 노드 소실/limbo → 신규 빌드로 폴백

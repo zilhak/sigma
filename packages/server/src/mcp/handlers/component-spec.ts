@@ -144,6 +144,7 @@ export const componentSpecHandlers: Record<
         updated: boolean;
         fileId: string;
         fileName: string;
+        instances?: { count: number; pages: Array<{ pageId: string; pageName: string; count: number }>; source: string };
       };
 
       const now = Date.now();
@@ -169,10 +170,29 @@ export const componentSpecHandlers: Record<
         alias, namespace, html, description: description.trim(),
       });
 
+      // in-place 갱신의 파급 범위. 크기가 바뀌면 인스턴스 기하가 통째로 달라져 그 위에 얹힌
+      // 주석 마커·영역 표시가 어긋나는데, 그 일은 **화면 밖 다른 페이지에서** 일어난다.
+      // 차단이 아니라 통지가 목적이다 — 교정 자체는 정당한 작업이다.
+      // 배경: docs/history/007-spec-update-propagated-in-silence.md
+      const sizeChanged = !!existing
+        && (existing.size.width !== result.width || existing.size.height !== result.height);
+      const impact = existing
+        ? {
+            isUpdate: true,
+            sizeChanged,
+            ...(sizeChanged ? { previousSize: existing.size, newSize: { width: result.width, height: result.height } } : {}),
+            ...(result.instances ? { instances: result.instances } : {}),
+            ...(sizeChanged && result.instances && result.instances.count > 0
+              ? { note: '크기가 바뀌었습니다 — 이 스펙 인스턴스 위에 얹힌 주석 마커·영역 표시가 어긋날 수 있습니다. 위 페이지들에 sigma_lint(annotation_marker_gap)를 다시 돌리세요.' }
+              : {}),
+          }
+        : { isUpdate: false };
+
       return jsonResponse({
         success: true,
         // 박스모델 경고 — 등록은 됐지만 이대로 두면 인스턴스마다 child_overflow 가 난다.
         ...(validation.warnings?.length ? { warnings: validation.warnings } : {}),
+        impact,
         ...(policyWarnings.length ? { policyWarnings } : {}),
         message: result.updated
           ? `컴포넌트 "${namespace}/${alias}"가 in-place 갱신되었습니다 — 기존 인스턴스에 반영됩니다`
@@ -474,6 +494,25 @@ export const componentSpecHandlers: Record<
     // 마스터 노드까지 지운다. 레지스트리만 지우면 마스터가 마스터 페이지에 남아
     // "지웠는데 아직 보인다"가 되고, 두 번에 나눠 부르는 걸 잊기 쉽다.
     const deleteNode = args.deleteNode === true;
+
+    // 인스턴스가 남은 마스터를 지우면 그 인스턴스들이 깨진다. 예전엔 이걸 확인하려고
+    // 커스텀 lint 를 scope:file 로 37페이지에 돌렸고, 그러고도 한 번 놓쳤다.
+    // 레지스트리만 지우는 경우는 마스터가 남으므로 막지 않는다 — 파괴적인 건 deleteNode 쪽이다.
+    let usage: { count: number; pages: unknown[] } | undefined;
+    if (deleteNode && spec.componentNodeId) {
+      try {
+        usage = await wsServer.command('SPEC_INSTANCE_USAGE', { componentNodeId: spec.componentNodeId }, { pluginId }) as typeof usage;
+      } catch {
+        usage = undefined; // 조회 실패는 삭제를 막지 않되, 아래에서 "확인 못 했다"로 드러난다
+      }
+      if (usage && usage.count > 0 && args.force !== true) {
+        return jsonResponse({
+          error: `"${spec.namespace}/${spec.alias}" 의 인스턴스가 ${usage.count}개 남아 있어 마스터를 지우면 전부 깨집니다`,
+          instances: usage,
+          hint: '인스턴스를 먼저 정리하거나, 레지스트리만 지우려면 deleteNode 를 빼세요. 그래도 지우려면 force:true',
+        });
+      }
+    }
     let nodeDeleted: boolean | undefined;
     let nodeError: string | undefined;
     let nodeNote: string | undefined;
@@ -495,6 +534,8 @@ export const componentSpecHandlers: Record<
       // 사후에라도 "어느 파일 것을 지웠는지" 가 응답에 남게 한다.
       fileName: spec.fileName,
       ...(crossFile ? { crossFile: true } : {}),
+      ...(usage ? { instances: usage } : {}),
+      ...(deleteNode && !usage ? { instancesUnknown: true } : {}),
       ...(deleteNode ? { nodeDeleted: nodeDeleted === true, ...(nodeError ? { nodeError } : {}), ...(nodeNote ? { nodeNote } : {}) } : {}),
       message: deleteNode
         ? (nodeDeleted
