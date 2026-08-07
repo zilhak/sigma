@@ -62,7 +62,15 @@ function validateShape(parsed: unknown, path: string): LintConfig {
   return obj as LintConfig;
 }
 
-/** config.componentSpec — 스펙 등록 시 alias 이름 패턴 경고 정책. */
+/**
+ * config.componentSpec — 스펙 등록 시 경고 정책.
+ *
+ * 조건은 aliasPattern(이름) 과 htmlPattern(스펙 HTML 내용) 두 축이고 **최소 하나**가 필요하다.
+ * 예전엔 aliasPattern 을 필수로 요구했는데, 그러면 htmlPattern 단독 규칙이 저장 자체가 안 됐다 —
+ * 정작 그게 도구 설명이 대표 용례로 제시한 형태였다(아이콘 창작 금지는 alias 로 못 잡는다.
+ * 위반이 다른 컴포넌트 HTML 안에 묻힌 inline <svg> 로 들어오기 때문). 타입 정의·판정 로직은
+ * 처음부터 선택으로 다뤘고 이 검증만 달랐다.
+ */
 function validateComponentSpecPolicy(value: unknown, path: string): void {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new LintConfigError(`config.componentSpec 은 객체여야 합니다: ${path}`);
@@ -77,8 +85,17 @@ function validateComponentSpecPolicy(value: unknown, path: string): void {
       throw new LintConfigError(`config.componentSpec.warn[${i}] 는 객체여야 합니다: ${path}`);
     }
     const e = entry as Record<string, unknown>;
-    if (typeof e.aliasPattern !== 'string' || !e.aliasPattern) {
-      throw new LintConfigError(`config.componentSpec.warn[${i}].aliasPattern 은 필수 문자열입니다: ${path}`);
+    // 선택 문자열 필드는 "있으면 비어 있지 않은 문자열" 로만 본다. 여기서 안 막으면 숫자·빈
+    // 문자열이 통과한 뒤 policy.ts 의 new RegExp 에서야 문제가 된다(등록 시점이라 늦다).
+    for (const key of ['aliasPattern', 'htmlPattern', 'unlessDescription', 'namespace'] as const) {
+      if (e[key] !== undefined && (typeof e[key] !== 'string' || !e[key])) {
+        throw new LintConfigError(`config.componentSpec.warn[${i}].${key} 는 비어 있지 않은 문자열이어야 합니다: ${path}`);
+      }
+    }
+    // 조건이 하나도 없으면 전 스펙에 매칭돼 경고가 무의미해진다. policy.ts 가 런타임에도
+    // 걸러 주지만 그건 등록 시점이라, config 를 넣는 순간 막는다.
+    if (e.aliasPattern === undefined && e.htmlPattern === undefined) {
+      throw new LintConfigError(`config.componentSpec.warn[${i}] 는 aliasPattern 과 htmlPattern 중 최소 하나가 필요합니다: ${path}`);
     }
     if (typeof e.message !== 'string' || !e.message) {
       throw new LintConfigError(`config.componentSpec.warn[${i}].message 는 필수 문자열입니다: ${path}`);

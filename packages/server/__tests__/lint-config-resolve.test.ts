@@ -165,9 +165,33 @@ describe('config.componentSpec 형태검증 (스펙 등록 정책)', () => {
     expect(shape({ componentSpec: { warn: {} } })).toThrow(LintConfigError);
   });
 
-  test('aliasPattern/message 누락은 거부 — 조용히 안 도는 정책을 막는다', () => {
-    expect(shape({ componentSpec: { warn: [{ message: 'x' }] } })).toThrow(/aliasPattern/);
+  test('조건이 하나도 없거나 message 가 없으면 거부 — 조용히 안 도는 정책을 막는다', () => {
+    expect(shape({ componentSpec: { warn: [{ message: 'x' }] } })).toThrow(/최소 하나/);
     expect(shape({ componentSpec: { warn: [{ aliasPattern: '^t' }] } })).toThrow(/message/);
+  });
+
+  test('htmlPattern 단독을 통과시킨다 — 도구 설명이 제시한 대표 용례', () => {
+    // 아이콘 창작 금지는 alias 로 못 잡는다. 위반이 다른 컴포넌트 HTML 안에 묻힌
+    // inline <svg> 로 들어오기 때문이라 htmlPattern 단독 규칙이 성립해야 한다.
+    const cfg = validateLintConfigShape({
+      componentSpec: { warn: [
+        { htmlPattern: '<svg', unlessDescription: '출처', message: '아이콘을 새로 그리지 마세요' },
+      ] },
+    }, 'test');
+    expect(cfg.componentSpec?.warn).toHaveLength(1);
+  });
+
+  test('aliasPattern 단독도 계속 통과한다 (하위호환)', () => {
+    expect(() => validateLintConfigShape({
+      componentSpec: { warn: [{ aliasPattern: '^table$', message: 'x' }] },
+    }, 'test')).not.toThrow();
+  });
+
+  test('선택 필드에 문자열이 아닌 값을 주면 거부', () => {
+    expect(shape({ componentSpec: { warn: [{ aliasPattern: '^a$', htmlPattern: 123, message: 'x' }] } }))
+      .toThrow(/htmlPattern/);
+    expect(shape({ componentSpec: { warn: [{ htmlPattern: '<svg', unlessDescription: '', message: 'x' }] } }))
+      .toThrow(/unlessDescription/);
   });
 
   test('componentSpec 미지정은 통과(기존 config 호환)', () => {
