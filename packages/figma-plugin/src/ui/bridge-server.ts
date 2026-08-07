@@ -1,7 +1,7 @@
 import { SERVER_MSG } from './constants';
 import {
   getWs, setAssignedPluginId,
-  log, showMessage, updatePluginIdDisplay,
+  log, updatePluginIdDisplay,
 } from './ui-state';
 import { handleChunkStart, handleChunk, handleChunkEnd } from './chunk-handler';
 
@@ -115,284 +115,31 @@ export function handleServerMessage(msg: ServerMessage) {
       handleChunkEnd(msg);
       break;
 
-    case SERVER_MSG.GET_PAGES:
-      log('페이지 목록 요청', 'info');
-      sendToPlugin('get-pages', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);
-      break;
-
-    case SERVER_MSG.DELETE_FRAME:
-      log(`프레임 삭제 요청: ${msg.nodeId}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
-      sendToPlugin('delete-frame', undefined, undefined, undefined, undefined, msg.nodeId, msg.pageId, msg.commandId);
-      break;
-
-    case SERVER_MSG.UPDATE_FRAME: {
-      const updateFormat = msg.format !== undefined ? msg.format : 'json';
-      const upPageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
-      log(`프레임 업데이트 요청: ${msg.nodeId} (${updateFormat})${upPageInfo}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'update-frame',
-            nodeId: msg.nodeId,
-            format: updateFormat,
-            data: msg.data,
-            name: msg.name,
-            pageId: msg.pageId,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.MODIFY_NODE: {
-      log(`노드 조작 요청: ${msg.nodeId} / ${msg.method}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'modify-node',
-            nodeId: msg.nodeId,
-            method: msg.method,
-            args: msg.args,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.SET_PAGE_DATA: {
-      log(`페이지 데이터 저장 요청: ${msg.key}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'set-page-data',
-            key: msg.key,
-            value: msg.value,
-            pageId: msg.pageId,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.GET_PAGE_DATA: {
-      log(`페이지 데이터 조회 요청: ${msg.key ?? '(전체)'}${msg.pageId ? ` [page: ${msg.pageId}]` : ''}`, 'info');
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'get-page-data',
-            key: msg.key,
-            pageId: msg.pageId,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.SET_NODE_DATA: {
-      log(`노드 데이터 저장 요청: ${msg.nodeId} / ${msg.key}`, 'info');
-      parent.postMessage({ pluginMessage: { type: 'set-node-data', nodeId: msg.nodeId, key: msg.key, value: msg.value, commandId: msg.commandId } }, '*');
-      break;
-    }
-
-    case SERVER_MSG.GET_NODE_DATA: {
-      log(`노드 데이터 조회 요청: ${msg.nodeId} / ${msg.key ?? '(전체)'}`, 'info');
-      parent.postMessage({ pluginMessage: { type: 'get-node-data', nodeId: msg.nodeId, key: msg.key, commandId: msg.commandId } }, '*');
-      break;
-    }
-
-    case SERVER_MSG.GET_NODES_DATA: {
-      log(`노드 데이터 배치 조회: ${(msg.nodeIds as unknown[] | undefined)?.length ?? 0}개 / ${msg.key}`, 'info');
-      parent.postMessage({ pluginMessage: { type: 'get-nodes-data', nodeIds: msg.nodeIds, key: msg.key, plain: msg.plain, commandId: msg.commandId } }, '*');
-      break;
-    }
-
     case SERVER_MSG.PING:
       if (ws) ws.send(JSON.stringify({ type: 'PONG' }));
       break;
 
-    case SERVER_MSG.IMPORTED:
-      showMessage('프레임이 생성되었습니다!', 'success');
-      break;
-
-    case SERVER_MSG.EXTRACT_JSON:
-      log('JSON 추출 요청', 'info');
-      sendToPlugin('extract-to-json', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);
-      break;
-
-    case SERVER_MSG.EXTRACT_HTML:
-      log('HTML 추출 요청', 'info');
-      sendToPlugin('extract-to-html', undefined, undefined, undefined, undefined, undefined, undefined, msg.commandId);
-      break;
-
-    case SERVER_MSG.TEST_ROUNDTRIP_JSON:
-      log(`JSON 라운드트립 테스트 요청: ${msg.name || 'Unnamed'}`, 'info');
-      sendToPlugin('test-roundtrip-json', msg.data, msg.name as string | undefined, undefined, undefined, undefined, undefined, msg.commandId);
-      break;
-
-    case SERVER_MSG.TEST_ROUNDTRIP_HTML:
-      log(`HTML 라운드트립 테스트 요청: ${msg.name || 'Unnamed'}`, 'info');
-      sendToPlugin('test-roundtrip-html', msg.data, msg.name as string | undefined, undefined, undefined, undefined, undefined, msg.commandId);
-      break;
-
-    case SERVER_MSG.FIND_NODE: {
-      log(`노드 찾기 요청: ${JSON.stringify(msg.path)}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'find-node',
-            path: msg.path,
-            typeFilter: msg.typeFilter,
-            pageId: msg.pageId,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.GET_TREE: {
-      log(`트리 조회 요청: nodeId=${msg.nodeId || 'root'}, depth=${msg.depth || 1}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'get-tree',
-            nodeId: msg.nodeId,
-            path: msg.path,
-            depth: msg.depth,
-            filter: msg.filter,
-            limit: msg.limit,
-            pageId: msg.pageId,
-            // ⚠️ 이 브리지는 필드를 손으로 골라 넘긴다 — 여기 빠진 인자는 **서버가 보내도 조용히 사라진다.**
-            // 실제로 fields 가 빠져 있어 `fields:"geometry"` 가 MCP 경로에서 한 번도 동작하지 않았고
-            // (응답에 fullPath·meta 가 그대로 오고 absolute 는 오지 않았다), 도구 설명은 그동안
-            // 절대좌표를 준다고 적혀 있었다. 새 인자를 추가할 때 여기도 함께 늘릴 것.
-            fields: msg.fields,
-            includeAbsolute: msg.includeAbsolute,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.EXPORT_IMAGE: {
-      log(`이미지 export 요청: ${msg.nodeId} (${msg.format || 'PNG'}, scale: ${msg.scale || 2})`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'export-image',
-            nodeId: msg.nodeId,
-            format: msg.format,
-            scale: msg.scale,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.EXTRACT_NODE_JSON: {
-      const extractFormat = msg.format || 'json';
-      log(`노드 추출 요청: ${msg.nodeId} (${extractFormat})`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'extract-node-json',
-            nodeId: msg.nodeId,
-            format: extractFormat,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.CREATE_SECTION: {
-      const sectionPageInfo = msg.pageId ? ` [page: ${msg.pageId}]` : '';
-      log(`Section 생성 요청: ${msg.name || 'Section'}${sectionPageInfo}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'create-section',
-            name: msg.name,
-            position: msg.position,
-            size: msg.size,
-            children: msg.children,
-            fills: msg.fills,
-            pageId: msg.pageId,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.MOVE_NODE: {
-      log(`노드 이동 요청: ${msg.nodeId} → ${msg.parentId}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'move-node',
-            nodeId: msg.nodeId,
-            parentId: msg.parentId,
-            index: msg.index,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
-    case SERVER_MSG.CLONE_NODE: {
-      log(`노드 복제 요청: ${msg.nodeId}${msg.parentId ? ` → ${msg.parentId}` : ''}`, 'info');
-
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'clone-node',
-            nodeId: msg.nodeId,
-            parentId: msg.parentId,
-            position: msg.position,
-            name: msg.name,
-            commandId: msg.commandId,
-          },
-        },
-        '*'
-      );
-      break;
-    }
-
     default: {
-      // 제네릭 패스스루: 새 명령어는 UPPER_SNAKE → kebab-case 변환 후 플러그인으로 전달
+      // 제네릭 패스스루: 명령은 UPPER_SNAKE → kebab-case 변환 후 플러그인으로 전달한다.
+      //
+      // ⚠️ 명시적 case 를 새로 만들지 말 것. 필드를 손으로 고르는 순간
+      // "서버가 보냈는데 조용히 사라지는 인자"가 생긴다 — 실제로 세 번 났다
+      // (get-tree 의 fields/includeAbsolute, build-component-from-spec 의 namespace).
+      // 명시 case 가 정당한 경우는 ① 브리지 자체 상태를 바꾸거나(REGISTERED, CHUNK_*, PING)
+      // ② 하나의 명령이 여러 code.ts case 로 갈라질 때(CREATE_FRAME) 뿐이다.
       if (msg.commandId && msg.type) {
         const kebabType = msg.type.toLowerCase().replace(/_/g, '-');
-        log(`명령 전달: ${msg.type} → ${kebabType}`, 'info');
 
         // type만 제외하고 나머지(commandId 포함)를 플러그인에 전달 —
         // commandId를 함께 실어 code.ts가 응답에 그대로 echo하게 한다.
         const { type: _type, ...rest } = msg;
+
+        // 어떤 인자가 실려 갔는지 남긴다 — 명시 case 가 만들던 상세 로그의 대체물.
+        const keys = Object.keys(rest).filter(
+          (k) => k !== 'commandId' && (rest as Record<string, unknown>)[k] !== undefined
+        );
+        log(`명령 전달: ${msg.type} → ${kebabType} { ${keys.join(', ')} }`, 'info');
+
         parent.postMessage(
           { pluginMessage: { type: kebabType, ...rest } },
           '*'

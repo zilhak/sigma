@@ -191,75 +191,15 @@ export class FigmaWebSocketServer {
         break;
 
       case 'RESULT':
-      case 'DELETE_RESULT':
-      case 'UPDATE_RESULT':
-      case 'MODIFY_RESULT':
-      case 'FIND_NODE_RESULT':
-      case 'TREE_RESULT':
-      case 'EXPORT_IMAGE_RESULT':
-      case 'EXTRACT_NODE_JSON_RESULT':
-      case 'CREATE_SECTION_RESULT':
-      case 'MOVE_NODE_RESULT':
-      case 'CLONE_NODE_RESULT':
-      case 'CREATE_RECTANGLE_RESULT':
-      case 'CREATE_TEXT_RESULT':
-      case 'CREATE_EMPTY_FRAME_RESULT':
-      case 'GET_SELECTION_RESULT':
-      case 'SET_SELECTION_RESULT':
-      case 'GET_LOCAL_COMPONENTS_RESULT':
-      case 'CREATE_COMPONENT_INSTANCE_RESULT':
-      case 'GET_INSTANCE_OVERRIDES_RESULT':
-      case 'SET_INSTANCE_OVERRIDES_RESULT':
-      case 'GET_NODE_INFO_RESULT':
-      case 'GET_DOCUMENT_INFO_RESULT':
-      case 'GET_STYLES_RESULT':
-      case 'SCAN_TEXT_NODES_RESULT':
-      case 'SCAN_NODES_BY_TYPES_RESULT':
-      case 'BATCH_MODIFY_RESULT':
-      case 'BATCH_DELETE_RESULT':
-      case 'GET_ANNOTATIONS_RESULT':
-      case 'SET_ANNOTATION_RESULT':
-      case 'SET_MULTIPLE_TEXT_CONTENTS_RESULT':
-      case 'GET_NODES_INFO_RESULT':
-      case 'READ_MY_DESIGN_RESULT':
-      case 'SET_MULTIPLE_ANNOTATIONS_RESULT':
-      case 'GET_REACTIONS_RESULT':
-      case 'ADD_REACTION_RESULT':
-      case 'REMOVE_REACTIONS_RESULT':
-      case 'CREATE_ELLIPSE_RESULT':
-      case 'CREATE_POLYGON_RESULT':
-      case 'CREATE_STAR_RESULT':
-      case 'CREATE_LINE_RESULT':
-      case 'CREATE_VECTOR_RESULT':
-      case 'CREATE_IMAGE_NODE_RESULT':
-      case 'CREATE_PAINT_STYLE_RESULT':
-      case 'CREATE_TEXT_STYLE_RESULT':
-      case 'CREATE_EFFECT_STYLE_RESULT':
-      case 'CREATE_GRID_STYLE_RESULT':
-      case 'APPLY_STYLE_RESULT':
-      case 'DELETE_STYLE_RESULT':
-      case 'CREATE_VARIABLE_COLLECTION_RESULT':
-      case 'CREATE_VARIABLE_RESULT':
-      case 'GET_VARIABLES_RESULT':
-      case 'SET_VARIABLE_VALUE_RESULT':
-      case 'BIND_VARIABLE_RESULT':
-      case 'ADD_VARIABLE_MODE_RESULT':
-      case 'GROUP_NODES_RESULT':
-      case 'UNGROUP_NODES_RESULT':
-      case 'FLATTEN_NODES_RESULT':
-      case 'BOOLEAN_OPERATION_RESULT':
-      case 'CREATE_PAGE_RESULT':
-      case 'RENAME_PAGE_RESULT':
-      case 'SWITCH_PAGE_RESULT':
-      case 'DELETE_PAGE_RESULT':
-      case 'REORDER_PAGE_RESULT':
-      case 'GET_VIEWPORT_RESULT':
-      case 'SET_VIEWPORT_RESULT':
+        // ⚠️ 'RESULT' 는 '_RESULT' 로 끝나지 않아 아래 default 가 잡지 못한다 — 그래서 이것만 명시한다.
+        // 청크 전송 완료 응답(ui/chunk-handler.ts)이 이 타입으로 온다.
         this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
         break;
 
       default:
-        // 자동 결과 패스스루: _RESULT로 끝나고 commandId가 있는 메시지는 자동으로 resolve
+        // 자동 결과 패스스루: _RESULT로 끝나고 commandId가 있는 메시지는 자동으로 resolve.
+        // ⚠️ 새 명령을 추가할 때 여기 case 라벨을 늘릴 필요가 없다 — 예전엔 64개가 나열돼
+        // 있었지만 전부 이 분기가 똑같이 처리하던 것이라 지웠다.
         if (message.type?.endsWith('_RESULT') && message.commandId) {
           this.resolveCommandResult(message as { type: string; commandId?: string; success?: boolean; error?: string; result?: unknown; frames?: unknown });
         }

@@ -1,32 +1,14 @@
 // 서버(WebSocket) → UI 메시지 타입 상수
+// 서버(WebSocket) → UI 메시지 중 **브리지가 특별 처리하는 것만** 나열한다.
+// 그 밖의 모든 명령은 bridge-server 의 default 제네릭 패스스루가 처리하므로 여기 추가하지 않는다.
+// (필드를 손으로 고르는 case 를 늘리면 인자가 조용히 사라지는 버그가 돌아온다 — 실제로 세 번 났다.)
 export const SERVER_MSG = {
   REGISTERED: 'REGISTERED',
   CREATE_FRAME: 'CREATE_FRAME',
-  GET_PAGES: 'GET_PAGES',
-  DELETE_FRAME: 'DELETE_FRAME',
-  UPDATE_FRAME: 'UPDATE_FRAME',
-  MODIFY_NODE: 'MODIFY_NODE',
-  FIND_NODE: 'FIND_NODE',
-  GET_TREE: 'GET_TREE',
-  CREATE_SECTION: 'CREATE_SECTION',
-  MOVE_NODE: 'MOVE_NODE',
-  EXPORT_IMAGE: 'EXPORT_IMAGE',
-  EXTRACT_NODE_JSON: 'EXTRACT_NODE_JSON',
-  EXTRACT_JSON: 'EXTRACT_JSON',
-  EXTRACT_HTML: 'EXTRACT_HTML',
-  TEST_ROUNDTRIP_JSON: 'TEST_ROUNDTRIP_JSON',
-  TEST_ROUNDTRIP_HTML: 'TEST_ROUNDTRIP_HTML',
-  PING: 'PING',
-  IMPORTED: 'IMPORTED',
   CHUNK_START: 'CHUNK_START',
   CHUNK: 'CHUNK',
   CHUNK_END: 'CHUNK_END',
-  CLONE_NODE: 'CLONE_NODE',
-  SET_PAGE_DATA: 'SET_PAGE_DATA',
-  GET_PAGE_DATA: 'GET_PAGE_DATA',
-  SET_NODE_DATA: 'SET_NODE_DATA',
-  GET_NODE_DATA: 'GET_NODE_DATA',
-  GET_NODES_DATA: 'GET_NODES_DATA',
+  PING: 'PING',
 } as const;
 
 // 플러그인(code.ts) → UI 메시지 타입 상수

@@ -79,3 +79,50 @@ describe('UI 브리지 인자 전달', () => {
     }
   });
 });
+
+describe('브리지 명시 case 는 늘어나면 안 된다', () => {
+  test('bridge-server 의 명시 case 는 특별 처리가 필요한 6종뿐이다', () => {
+    const src = readSource('ui/bridge-server.ts');
+    const cases = [...src.matchAll(/case SERVER_MSG\.([A-Z_]+)/g)].map((m) => m[1]);
+    // 인자를 손으로 고르는 case 가 늘면 "조용히 사라지는 인자" 버그가 돌아온다.
+    // 늘려야 한다고 판단했다면, 왜 패스스루로 안 되는지를 여기 주석으로 먼저 적을 것.
+    // 남은 6종의 근거: 브리지 상태 변경(REGISTERED) · 청크 조립(CHUNK_*) ·
+    // 하트비트(PING) · 하나의 명령이 두 code.ts case 로 갈라짐(CREATE_FRAME).
+    expect([...new Set(cases)].sort()).toEqual([
+      'CHUNK', 'CHUNK_END', 'CHUNK_START', 'CREATE_FRAME', 'PING', 'REGISTERED',
+    ]);
+  });
+
+  test('SERVER_MSG 상수도 그 6종만 갖는다 (상수만 남으면 case 를 다시 늘리게 된다)', () => {
+    const src = readSource('ui/constants.ts');
+    const body = src.slice(src.indexOf('export const SERVER_MSG'), src.indexOf('} as const;', src.indexOf('export const SERVER_MSG')));
+    const keys = [...body.matchAll(/^\s{2}([A-Z_]+):/gm)].map((m) => m[1]);
+    expect(keys.sort()).toEqual([
+      'CHUNK', 'CHUNK_END', 'CHUNK_START', 'CREATE_FRAME', 'PING', 'REGISTERED',
+    ]);
+  });
+
+  test('bridge-plugin 은 다섯 필드 밖의 값을 싣는 case 만 남긴다', () => {
+    const src = readSource('ui/bridge-plugin.ts');
+    const cases = [...src.matchAll(/case PLUGIN_MSG\.([A-Z_]+)/g)].map((m) => m[1]);
+    // *_RESULT 중 남은 것은 전용 필드를 싣는 둘뿐이다:
+    //   EXTRACT_RESULT   — format·data(+ Export 모달 콜백)
+    //   ROUNDTRIP_RESULT — format·identical·differences·original·extracted·createdFrameId
+    // 나머지 *_RESULT 는 {commandId,success,result,error} 뿐이라 제네릭 패스스루가 그대로 만든다.
+    const results = [...new Set(cases)].filter((c) => c.endsWith('_RESULT')).sort();
+    expect(results).toEqual([
+      'EXTRACT_RESULT', 'GOTO_NODE_RESULT', 'PAGE_LINT_RESULT', 'ROUNDTRIP_RESULT',
+    ]);
+  });
+
+  test("서버 수신 switch 는 'RESULT' 하나만 명시한다 (나머지는 default 가 처리)", () => {
+    const src = readFileSync(
+      join(import.meta.dir, '../../server/src/websocket/server.ts'), 'utf-8',
+    );
+    const labels = [...src.matchAll(/^\s+case '([A-Z_]+)':/gm)].map((m) => m[1]);
+    // '_RESULT' 로 끝나는 라벨을 명시하는 것은 default 와 중복이다.
+    // 'RESULT' 만 예외 — endsWith('_RESULT') 가 false 라 default 가 못 잡는다.
+    expect(labels.filter((l) => l.endsWith('_RESULT'))).toEqual([]);
+    expect(labels).toContain('RESULT');
+  });
+});
