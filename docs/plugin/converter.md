@@ -18,6 +18,7 @@ converter/
 ├── layout.ts         # Flexbox 레이아웃
 ├── grid.ts           # CSS Grid 레이아웃
 ├── html-parser.ts    # HTML 문자열 → ExtractedNode 파싱
+├── font-loader.ts    # 폰트 로드/폴백 (weight → Figma style 매핑)
 └── index.ts          # Barrel export
 ```
 

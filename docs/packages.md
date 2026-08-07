@@ -33,6 +33,7 @@ src/
 │   ├── tool-definitions.ts   # 129개 MCP 도구 스키마 정의
 │   ├── tool-handler.ts       # Record 기반 핸들러 라우터
 │   ├── helpers.ts            # 공통 헬퍼 (인증, 검증)
+│   ├── hangul-escape.ts      # 한글 \uXXXX 손조립 오타 감지 (도구 호출 경로 전체에 배선)
 │   ├── spec-presets.ts       # 내장 스펙 프리셋 (anno/wire)
 │   └── handlers/
 │       ├── auth.ts           # 토큰 로그인/바인딩/상태
@@ -46,6 +47,7 @@ src/
 │   ├── resolve-config.ts     # config 출처 3순위 + configMode 병합
 │   ├── load-config.ts        # config 파일 로드/검증
 │   ├── enrich.ts             # 노드 상세 보강 (fills/opacity 등)
+│   ├── suppress.ts           # 노드 단위 lint 억제 (lint-ignore sharedPluginData 해석)
 │   ├── run-custom-rule.ts    # predicate 규칙 Worker 격리 실행
 │   └── report.ts             # scope:file 결과 → markdown 리포트
 ├── image/
@@ -105,6 +107,7 @@ src/
 │   ├── prototyping.ts        # 프로토타이핑/인터랙션
 │   ├── hyperlink.ts          # 노드 간 상호 이동 링크 (slot 인지)
 │   ├── frames.ts             # 프레임 목록/삭제
+│   ├── removal.ts            # 삭제 되읽기 검증 (메인 COMPONENT 는 remove() 후에도 조회됨)
 │   ├── section.ts            # Section 생성
 │   ├── move.ts               # 이동/복제/그룹/언그룹/평탄화
 │   ├── boolean.ts            # Boolean 연산
@@ -197,11 +200,15 @@ src/
 │   ├── simple-rules.ts       # 구조/이름/가시성 6종 + raw_node
 │   ├── occlusion.ts          # fully_occluded_sibling
 │   ├── page-rules.ts         # 페이지 루트 전용 (content_spread, origin_anchor)
+│   ├── spec-instance.ts      # 스펙 인스턴스 크기 (instance_resized_from_spec)
+│   ├── annotation-marker.ts  # 기획 주석 마커↔범례 짝·거리 (룰 2종)
+│   ├── font.ts               # 파일 기본 폰트와 다른 TEXT (font_not_default)
 │   ├── json-rule.ts          # JSON 선언적 커스텀 규칙
 │   └── tree-utils.ts         # 트리 순회 헬퍼
 ├── component-spec/           # 컴포넌트 스펙 시스템
 │   ├── types.ts              # ComponentSpecRecord, ComponentParam 등
-│   ├── validate.ts           # 스펙 HTML 검증 (CSS 화이트리스트, slot 규칙)
+│   ├── validate.ts           # 스펙 HTML 검증 (CSS 화이트리스트, slot 규칙, 박스모델 경고)
+│   ├── policy.ts             # 파일별 스펙 등록 정책 (순수 함수)
 │   └── index.ts
 ├── enhancer/                 # CDP 보강 레이어
 │   ├── core.ts               # enhance(cdp, node, options)

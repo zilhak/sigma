@@ -263,6 +263,25 @@ autocomplete, card, table — 전부 등록·인스턴스 생성·Auto Layout �
 | 알 수 없는 props | 에러 + 사용 가능 param 목록 |
 | 컴포넌트 노드 삭제 후 사용 | "계약 위반 ... 다시 등록하세요" (Figma의 limbo 컴포넌트로 조용히 생성하지 않음) |
 
+## 등록 시 박스모델 경고 (`warnings`)
+
+등록·`validateOnly` 양쪽에서, 루트의 `width`/`height`에서 border·padding을 뺀 **내용상자보다 큰
+직계 자식**이 있으면 응답에 `warnings: string[]`가 실린다 (`packages/shared/src/component-spec/validate.ts`).
+
+- **거부하지 않는다.** 이미 등록된 스펙을 깨지 않기 위해서다.
+- **둘 다 px로 명시됐을 때만 판정한다.** 한쪽이라도 hug(내용에 맞춤)이면 넘침을 단정할 수 없다.
+- per-side 선언이 shorthand를 이기는 CSS 규칙 그대로 계산한다.
+- 고칠 값을 **양쪽으로 제시**한다 — 자식을 N px로 줄이거나, 루트를 M px로 키우거나.
+- **무시했을 때의 대가**: 이 스펙으로 만든 **인스턴스마다** `child_overflow` 위반이 하나씩 생긴다.
+  실제로 표 셀 스펙 하나로 한 번에 250건이 났고, 그때는 이미 찍힌 인스턴스를 전부 손봐야 했다.
+  등록 때 1건으로 듣는 편이 압도적으로 싸다.
+
+> ⚠️ `warnings`와 `policyWarnings`는 다른 것이다.
+> - `warnings` = **형식 검증** 결과. 스펙 HTML 자체가 기하학적으로 앞뒤가 안 맞는다는 뜻.
+>   파일과 무관하게 항상 검사되고 `validateOnly`에서도 나온다.
+> - `policyWarnings` = **파일별 규약** 위반. 그 Figma 파일의 문서 노드에 저장된 `componentSpec.warn`에
+>   걸렸다는 뜻. 대상 파일을 특정할 수 없는 `validateOnly`에서는 나오지 않는다.
+
 ## 파일별 등록 정책 (`componentSpec.warn`)
 
 "이 Figma 파일에선 이런 이름으로 스펙을 등록하지 말자"를 **경고**로 거는 장치.
@@ -274,7 +293,10 @@ sigma_set_page_data({ token, pageId: "document", key: "lint", value: JSON.string
   componentSpec: {
     warn: [
       { aliasPattern: "^table$", message: "테이블은 wire/table 프리셋을 쓰세요" },
-      { aliasPattern: "^btn_",  message: "버튼은 ui_button 권장", namespace: "design" }
+      { aliasPattern: "^btn_",  message: "버튼은 ui_button 권장", namespace: "design" },
+      // 이름으로는 못 잡는 규약 — 아이콘 창작은 대부분 "다른 컴포넌트 HTML 안에 묻힌 inline <svg>" 로 들어온다
+      { htmlPattern: "<svg", unlessDescription: "출처",
+        message: "아이콘을 새로 그리지 말고 등록된 세트에서 가져오세요 — 부득이하면 description 에 출처를 적으세요" }
     ]
   }
 }) })
@@ -282,7 +304,24 @@ sigma_set_page_data({ token, pageId: "document", key: "lint", value: JSON.string
 
 - **적용 시점**: `sigma_create_component_spec` 의 등록·`overwrite` 갱신 **양쪽**. 매칭되면 응답에 `policyWarnings` 배열이 실린다.
 - **경고일 뿐 거부가 아니다.** 등록은 그대로 완료된다 — 규약을 아직 합의하지 못한 팀에서 도구가 먼저 벽이 되는 걸 피한다.
-- 판정 입력은 **alias/namespace 뿐**이다(`aliasPattern`은 정규식, `namespace`는 선택적 한정). HTML 내용 검사는 §스펙 HTML 규칙, 문서에 놓인 노드 검사는 [lint.md](lint.md)의 몫이다.
+- **판정 입력은 네 개다** (`packages/shared/src/component-spec/policy.ts`):
+
+  | 필드 | 역할 |
+  |---|---|
+  | `aliasPattern` | alias에 거는 정규식 (예: `"^table$"`) |
+  | `htmlPattern` | **스펙 HTML 내용**에 거는 정규식 (예: `"<svg"`) |
+  | `unlessDescription` | description이 이 정규식에 걸리면 **면제** |
+  | `namespace` | 이 namespace에서만 적용 (생략 시 전체) |
+
+  `aliasPattern`과 `htmlPattern`을 함께 주면 **AND**(둘 다 걸려야 경고)다. 규칙 하나에는
+  **둘 중 최소 하나가 필요**하다 — 조건이 없으면 전 스펙에 매칭돼 경고가 무의미해지므로
+  config 검증 단계에서 거부된다.
+- **HTML 내용도 이 정책의 판정 대상이다.** alias로는 못 잡는 규약이 있기 때문이다 — 대표적으로
+  "아이콘을 새로 그리지 마라"는 위반이 *아이콘 스펙*이 아니라 **다른 컴포넌트 HTML 안에 묻힌
+  inline `<svg>`** 로 들어온다(손그림 고래·정렬 캐럿·가짜 로고가 전부 그랬다). 이때는 위 예제처럼
+  걸고, 정당한 사례는 description에 출처를 적어 면제받는다. 한편 **무엇이 유효한 HTML인가**
+  (화이트리스트·값 검증)는 여전히 §스펙 HTML 규칙의 몫이고, **문서에 놓인 노드** 검사는
+  [lint.md](lint.md)의 몫이다.
 - `validateOnly: true`(토큰 없는 dry-run)에선 대상 파일을 특정할 수 없어 **검사하지 않는다**.
 - 잘못된 정규식은 조용히 무시하지 않고 "패턴이 잘못돼 건너뛰었다"는 경고를 대신 낸다(안 도는 정책이 통과처럼 보이는 걸 막는다). 정책 조회 자체가 실패하면 경고 없이 등록만 진행한다.
 - ⚠️ **한계 두 가지.** ① 게이트는 sigma 도구 경로만 덮는다 — 사람이 Figma에서 직접 만든 컴포넌트엔 안 걸린다. ② **레지스트리는 서버 전역**(`~/.sigma/component-specs/<namespace>__<alias>.json`)이라 다른 파일에 바인딩해 등록하면 정책을 우회할 수 있고, 그렇게 등록된 스펙은 이 파일에서도 보인다. 실수 방지용이지 강제 수단이 아니다.

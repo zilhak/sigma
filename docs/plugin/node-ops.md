@@ -23,6 +23,15 @@ Figma 노드를 생성, 수정, 조회, 삭제하는 핵심 모듈입니다.
 | `create.ts` | SVG, 이미지 노드 생성 | `sigma_create_node_from_svg/image` |
 | `export.ts` | 이미지 export | `sigma_screenshot` (내부) |
 | `page.ts` | 페이지 관리 | `sigma_create/rename/switch/delete_page` |
+| `hyperlink.ts` | 노드 간 상호 이동 링크 (slot 인지) | `sigma_set_hyperlink` |
+| `removal.ts` | 삭제 되읽기 검증 — 메인 COMPONENT 는 `remove()` 후에도 `getNodeById` 로 조회되는 Figma 동작 대응 | (삭제 계열 공통) |
+
+**이 문서가 다루지 않는 모듈** — 같은 디렉토리에 있지만 설명은 형제 문서에 있습니다:
+
+| 파일 | 설명 위치 |
+|------|-----------|
+| `components.ts` · `library.ts` · `styles.ts` · `variables.ts` | [components.md](components.md) |
+| `annotations.ts` · `component-spec.ts` · `figjam.ts` · `prototyping.ts` | [prototyping.md](prototyping.md) |
 
 ---
 

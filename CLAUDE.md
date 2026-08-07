@@ -286,7 +286,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/4종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지) | `alias` | `namespace` |
 
-> **파일별 등록 정책(`componentSpec.warn`)**: 문서 노드에 저장된 lint config의 `componentSpec.warn`(`aliasPattern`/`message`/`namespace?`)에 alias가 걸리면 `sigma_create_component_spec`의 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실린다 — **경고만이고 등록을 막지 않는다**. 설정은 `sigma_set_page_data({ pageId: "document", key: "lint", ... })`. `validateOnly`(토큰 없는 dry-run)는 대상 파일을 특정할 수 없어 검사하지 않는다. **한계**: 게이트는 sigma 도구 경로만 덮고(사람이 Figma에서 직접 만든 컴포넌트는 안 걸림), 레지스트리는 서버 전역이라 다른 파일에 바인딩해 등록하면 우회된다 — 실수 방지용이지 강제 수단이 아니다. 상세는 [`docs/component-spec.md`](docs/component-spec.md) §파일별 등록 정책.
+> **파일별 등록 정책(`componentSpec.warn`)**: 문서 노드에 저장된 lint config의 `componentSpec.warn`(`aliasPattern?`/`htmlPattern?`/`unlessDescription?`/`message`/`namespace?` — 앞의 둘 중 **최소 하나 필수**, 둘 다 주면 AND)에 alias나 **스펙 HTML 내용**이 걸리면 `sigma_create_component_spec`의 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실린다 — **경고만이고 등록을 막지 않는다**. 설정은 `sigma_set_page_data({ pageId: "document", key: "lint", ... })`. `validateOnly`(토큰 없는 dry-run)는 대상 파일을 특정할 수 없어 검사하지 않는다. **한계**: 게이트는 sigma 도구 경로만 덮고(사람이 Figma에서 직접 만든 컴포넌트는 안 걸림), 레지스트리는 서버 전역이라 다른 파일에 바인딩해 등록하면 우회된다 — 실수 방지용이지 강제 수단이 아니다. 상세는 [`docs/component-spec.md`](docs/component-spec.md) §파일별 등록 정책.
 
 ### 컴포넌트 (토큰 필수)
 
@@ -311,6 +311,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 | `sigma_get_annotations` | 노드의 주석 목록 조회 | `token`, `nodeId` | — |
 | `sigma_set_annotation` | 노드에 주석 추가 | `token`, `nodeId`, `label` | `labelType` |
 | `sigma_set_multiple_annotations` | 여러 노드에 주석 일괄 추가 | `token`, `items` | — |
+| `sigma_create_annotation_layer` | 섹션에 기획 레이어(anno/wire 인스턴스를 담는 투명 오버레이 프레임) 생성 + pluginData `role="annotation-layer"` 태깅 | `token`, `sectionId` | `name` |
 
 ### 프로토타이핑 (토큰 필수)
 
@@ -593,6 +594,7 @@ packages/
 │       │   ├── prototyping.ts # 프로토타이핑/인터랙션
 │       │   ├── hyperlink.ts   # 노드 간 상호 이동 링크 (slot 인지)
 │       │   ├── frames.ts      # 프레임 목록/삭제
+│       │   ├── removal.ts     # 삭제 되읽기 검증 (메인 COMPONENT 는 remove() 후에도 조회됨)
 │       │   ├── section.ts     # Section 생성
 │       │   ├── move.ts        # 이동/복제/그룹/언그룹/평탄화
 │       │   ├── boolean.ts     # Boolean 연산 (Union/Subtract/Intersect/Exclude)
@@ -622,6 +624,7 @@ packages/
 │       │   ├── tool-definitions.ts # 도구 스키마 정의
 │       │   ├── tool-handler.ts # Record 기반 핸들러 라우터
 │       │   ├── helpers.ts     # 공통 헬퍼 (인증, 검증)
+│       │   ├── hangul-escape.ts # 한글 \uXXXX 손조립 오타 감지 (도구 호출 경로 전체에 배선)
 │       │   ├── spec-presets.ts # 내장 스펙 프리셋 (anno/wire)
 │       │   └── handlers/      # 도구 핸들러 모듈
 │       │       ├── auth.ts    # 인증/바인딩
@@ -635,6 +638,7 @@ packages/
 │       │   ├── resolve-config.ts # config 출처 3순위 + configMode 병합
 │       │   ├── load-config.ts  # config 파일 로드/검증
 │       │   ├── enrich.ts       # 노드 상세 보강 (fills/opacity 등)
+│       │   ├── suppress.ts     # 노드 단위 lint 억제 (lint-ignore sharedPluginData 해석)
 │       │   ├── run-custom-rule.ts # predicate 규칙 Worker 격리 실행
 │       │   └── report.ts       # scope:file 결과 → markdown 리포트
 │       ├── image/process.ts    # 이미지 후처리
@@ -665,6 +669,9 @@ packages/
     │   │   ├── simple-rules.ts # 구조/이름/가시성 6종 + raw_node
     │   │   ├── occlusion.ts   # fully_occluded_sibling
     │   │   ├── page-rules.ts  # 페이지 루트 전용 (content_spread, origin_anchor)
+    │   │   ├── spec-instance.ts # 스펙 인스턴스 크기 (instance_resized_from_spec)
+    │   │   ├── annotation-marker.ts # 기획 주석 마커↔범례 짝·거리 (룰 2종)
+    │   │   ├── font.ts        # 파일 기본 폰트와 다른 TEXT (font_not_default)
     │   │   ├── json-rule.ts   # JSON 선언적 커스텀 규칙
     │   │   └── tree-utils.ts  # 트리 순회 헬퍼
     │   ├── enhancer/          # CDP 보강 레이어 (추출 결과를 CDP로 보강)
@@ -684,7 +691,8 @@ packages/
     │   │   └── index.ts
     │   ├── component-spec/    # 컴포넌트 스펙 시스템
     │   │   ├── types.ts       # ComponentSpecRecord, ComponentParam 등
-    │   │   ├── validate.ts    # 스펙 HTML 검증 (CSS 화이트리스트, slot 규칙)
+    │   │   ├── validate.ts    # 스펙 HTML 검증 (CSS 화이트리스트, slot 규칙, 박스모델 경고)
+    │   │   ├── policy.ts      # 파일별 스펙 등록 정책 (순수 함수)
     │   │   └── index.ts
     │   ├── extractor-standalone-entry.ts  # → dist/extractor.standalone.js
     │   ├── storybook-standalone-entry.ts  # → dist/storybook.standalone.js
