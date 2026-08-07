@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { toolDefinitions } from './tool-definitions.js';
 import { handleTool } from './tool-handler.js';
 import type { ToolContext } from './helpers.js';
+import { SERVER_VERSION } from '../version.js';
 
 /**
  * 에이전트에게 주입되는 서버 사용 안내.
@@ -56,7 +57,7 @@ export function createMcpServer(context: ToolContext) {
   const server = new Server(
     {
       name: 'sigma',
-      version: '0.1.0',
+      version: SERVER_VERSION,
       // 클라이언트 목록 표시용 한 줄 소개. 상세 안내는 아래 instructions 로 간다.
       description: 'Sigma - 웹 컴포넌트 추출 → Figma 변환 자동화 MCP 서버 (멀티에이전트 동시 작업 지원).',
     },

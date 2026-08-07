@@ -132,6 +132,22 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 - 공용 패키지(`packages/shared`) 변경은 **두 축(플러그인·서버)을 모두 +1** 한다 (shared는 양쪽에 반영되므로). `shared`·`chrome-extension`의 package.json 버전 자체는 규칙 추적 대상이 아니다.
 - 과거 버전 히스토리는 무시하고 **현재(`1.0`)부터** 시작한다.
 
+**버전 문자열은 코드에 손으로 적지 않는다 — 두 축이 따로 있다**
+
+이 저장소에 나타나는 버전은 성격이 다른 **두 종류**이며, 섞으면 안 된다.
+
+| 축 | 무엇 | 출처 | 언제 오르나 |
+|---|---|---|---|
+| **A. 패키지 판** | 서버 배너·`GET /api/version`·MCP `serverInfo.version`, 플러그인 UI 헤더, 확장 popup·`manifest.version` | 각 패키지의 `package.json` 에서 **자동 유도** | 위 커밋 규칙대로 커밋마다 |
+| **B. 스크립트 API 계약** | `window.__sigma__` / `__sigma_storybook__` / `__sigma_diff__` 의 `version`, 확장 `injected.ts` 의 `INJECTED_API_VERSION` | 해당 파일의 **상수 리터럴** | API 시그니처·반환 모양이 바뀔 때만 |
+
+- A 는 **어디서도 하드코딩하지 않는다.** 서버는 `packages/server/src/version.ts` 의 `SERVER_VERSION`,
+  플러그인·확장은 각 `build.ts` 가 자기 `package.json` 을 읽어 빌드 시 주입한다.
+  `packages/chrome-extension/src/manifest.json` 의 `version` 은 빌드가 덮어쓰는 **자리표시자(`0.0.0`)** 이므로 손으로 고치지 말 것.
+- B 는 리빌드했다고 올리지 않는다. 이 값으로 분기하는 소비자가 있어서, 판번호가 흔들리면 그쪽이 깨진다.
+- `@sigma/shared` 에 **공용 VERSION 상수를 되살리지 말 것.** 추적 축이 플러그인·서버 둘로 갈라져 있어
+  하나의 값은 최소 한쪽에서 반드시 틀린다(실제로 `'v1.0'` 이 양쪽 모두와 어긋난 채 굳어 있었다).
+
 ---
 
 ## 아키텍처

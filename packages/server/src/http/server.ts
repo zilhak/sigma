@@ -4,7 +4,8 @@ import { fileURLToPath } from 'url';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { VERSION, type ExtractedNode } from '@sigma/shared';
+import { type ExtractedNode } from '@sigma/shared';
+import { SERVER_VERSION } from '../version.js';
 import * as storage from '../storage/index.js';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
 
@@ -39,7 +40,7 @@ export function createHttpServer(wsServer: FigmaWebSocketServer) {
   // Version check
   app.get('/api/version', (c) => {
     return c.json({
-      version: VERSION,
+      version: `v${SERVER_VERSION}`,
       name: 'Sigma Server',
     });
   });

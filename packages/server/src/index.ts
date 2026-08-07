@@ -5,10 +5,20 @@ import { FigmaWebSocketServer } from './websocket/server.js';
 import { createHttpServer } from './http/server.js';
 import { createMcpRouter } from './mcp/router.js';
 import { startupCleanup } from './storage/index.js';
+import { SERVER_VERSION } from './version.js';
+
+/** 배너 상자의 내부 폭(테두리 사이 칸 수). 위아래 ═ 줄과 같아야 상자가 안 어긋난다. */
+const BANNER_WIDTH = 39;
+
+function bannerLine(label: string): string {
+  const pad = Math.max(0, BANNER_WIDTH - label.length);
+  const left = Math.floor(pad / 2);
+  return `║${' '.repeat(left)}${label}${' '.repeat(pad - left)}║`;
+}
 
 async function main() {
   console.log('╔═══════════════════════════════════════╗');
-  console.log('║           Sigma Server v0.1.0         ║');
+  console.log(bannerLine(`Sigma Server v${SERVER_VERSION}`));
   console.log('╚═══════════════════════════════════════╝');
 
   // Storage cleanup on startup (TTL + size limit)

@@ -1,8 +1,13 @@
-/**
- * Sigma 버전
- * 모노레포 전체에서 공유되는 버전 정보
- */
-export const VERSION = 'v1.0';
+// 버전 상수는 여기 두지 않는다.
+//
+// 예전에는 `export const VERSION = 'v1.0'` 하나가 플러그인 UI 헤더·확장 popup·
+// GET /api/version 을 동시에 대표했다. 그런데 루트 CLAUDE.md 의 버전 규칙은 추적 축을
+// 플러그인·서버 **둘**로 나누고 각각 독립적으로 올린다(지금 1.30 / 1.40). 축이 갈라진
+// 순간부터 어떤 값을 넣어도 최소 한쪽은 틀리고, 실제로 둘 다 틀린 채 'v1.0' 으로 굳어 있었다.
+//
+// 이제 각 패키지가 자기 package.json 의 version 을 읽어 쓴다:
+//   서버   packages/server/src/version.ts
+//   플러그인·확장  각 build.ts 가 빌드 시 주입
 
 /**
  * 서버 포트 설정

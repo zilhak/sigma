@@ -40,7 +40,6 @@ export {
 
 // Constants
 export {
-  VERSION,
   PORTS,
   HTTP_PORT,
   WS_PORT,

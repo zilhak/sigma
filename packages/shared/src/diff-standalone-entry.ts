@@ -93,6 +93,8 @@ if (!window.__sigma_diff__) {
      */
     clearSnapshots,
 
+    // `window.__sigma_diff__` API 계약의 판번호 — 패키지 버전과 별개 축이다.
+    // 이 API 의 함수 시그니처/반환 모양이 바뀔 때만 올린다(리빌드만으로는 올리지 않는다).
     version: '1.0.0',
   };
 

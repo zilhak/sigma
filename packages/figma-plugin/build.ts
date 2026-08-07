@@ -2,10 +2,19 @@ import * as esbuild from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { VERSION } from '@sigma/shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
+
+/**
+ * UI 헤더에 박히는 버전의 단일 출처 = 이 패키지의 package.json.
+ * 루트 CLAUDE.md 의 버전 규칙이 플러그인 축을 올리면 그 값이 그대로 보인다.
+ * 예전엔 shared 의 공용 상수 하나(`'v1.0'`)를 서버·확장과 함께 썼는데,
+ * 추적 축이 플러그인/서버로 갈라진 뒤로는 어느 쪽에도 맞지 않는 값이었다.
+ */
+const PKG_VERSION: string = JSON.parse(
+  readFileSync(join(__dirname, 'package.json'), 'utf-8')
+).version;
 
 async function build() {
   // Ensure dist directory exists
@@ -91,7 +100,7 @@ function buildHTML() {
   let html = readFileSync(join(__dirname, 'src/ui.html'), 'utf-8');
 
   // Inject version into HTML
-  html = html.replace(/>__VERSION__<\/span>/g, `>${VERSION}</span>`);
+  html = html.replace(/>__VERSION__<\/span>/g, `>v${PKG_VERSION}</span>`);
 
   // Inline the JS into the HTML
   html = html.replace(

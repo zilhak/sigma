@@ -6,6 +6,17 @@
 // 모듈로 인식되도록 export 추가
 export {};
 
+/**
+ * `window.__sigma__` 가 노출하는 **API 계약**의 판번호.
+ * 확장 패키지 버전(package.json)과는 별개 축이다 — 이 값은 API 모양이 바뀔 때만 올린다.
+ * 자동 유도하지 않는 이유: 확장을 리빌드했다고 API 계약이 바뀐 건 아니고,
+ * 이 값을 보고 분기하는 쪽(sigma:ready 리스너)에 리빌드마다 다른 번호를 주면 안 된다.
+ *
+ * 한 파일 안에서 `sigmaAPI.version` 은 '1.1.0', sigma:ready 이벤트는 '1.0.0' 으로
+ * 서로 다르게 적혀 있었다. 같은 API 를 두 번 말하는 것이므로 상수 하나로 합쳤다.
+ */
+const INJECTED_API_VERSION = '1.1.0';
+
 declare global {
   interface Window {
     __sigma__: typeof sigmaAPI;
@@ -70,7 +81,7 @@ function getElementInfo(el: Element): ElementInfo {
 }
 
 const sigmaAPI = {
-  version: '1.1.0',
+  version: INJECTED_API_VERSION,
 
   // === DOM 탐색 유틸리티 (동기, 즉시 반환) ===
 
@@ -265,6 +276,6 @@ window.__sigma__ = sigmaAPI;
 
 // API 준비 완료 알림
 window.dispatchEvent(
-  new CustomEvent('sigma:ready', { detail: { version: '1.0.0' } })
+  new CustomEvent('sigma:ready', { detail: { version: INJECTED_API_VERSION } })
 );
 console.log('[Sigma] API injected on window.__sigma__');
