@@ -48,6 +48,27 @@ parent.postMessage({ pluginMessage: { type: 'action', data: ... } }, '*');
 figma.ui.postMessage({ type: 'response', data: ... });
 ```
 
+이 경계는 **타입으로 강제된다.** 어겨도 빌드는 통과하고 런타임에서 죽기 때문에,
+사람 체크리스트가 아니라 tsconfig 로 막는다.
+
+| 설정 파일 | 대상 | 뺀 것 |
+|---|---|---|
+| `tsconfig.sandbox.json` | `code.ts`, `converter/`, `extractor/`, `node-ops/`, `testing/`, `utils.ts` | `lib` 에서 `DOM` — `document`/`DOMParser` 사용 시 컴파일 에러 |
+| `tsconfig.ui.json` | `ui.ts`, `ui/` | `types` 에서 `@figma/plugin-typings` — `figma.*` 사용 시 컴파일 에러 |
+
+`bun run typecheck` 가 둘 다 검사한다. `console`·`fetch`·타이머는 `@figma/plugin-typings` 가
+직접 선언하므로 `DOM` 없이도 sandbox 쪽에서 그대로 쓸 수 있다.
+
+**새 파일을 추가할 때는 두 `include` 중 정확히 한 곳에 들어가야 한다.**
+어느 쪽에도 없으면 타입체크에서 통째로 빠지므로, 새 디렉토리를 만들면 `include` 도 함께 늘린다.
+(현재 `src/**/*.ts` 45개 = sandbox 39 + ui 6.)
+
+> **`@sigma/shared` 유입 주의**: `converter/html-parser.ts`·`converter/styles.ts` 가
+> `parseColor` 를 값으로 import 하므로 shared 의 기본 배럴이 sandbox 타입 프로그램에 딸려 온다.
+> 지금 들어오는 파일들은 DOM 을 쓰지 않아 문제가 없다. 나중에 `shared/src/index.ts` 가
+> DOM 의존 모듈(`extractor/` 등)을 re-export 하면 여기서 DOM 에러가 난다 — **그건 올바른 실패다.**
+> `lib` 에 `DOM` 을 되돌리지 말고 re-export 를 되돌릴 것.
+
 ### 4. 빌드 확인
 
 코드 수정 후 반드시 빌드하고 검증:
@@ -74,23 +95,38 @@ bun run build
 
 ## 파일 구조
 
+번들 경계 = 디렉토리 경계다. 두 트리는 서로를 참조하지 않는다.
+
 ```
 packages/figma-plugin/
 ├── src/
-│   ├── code.ts       # 메인 플러그인 로직
-│   ├── ui.ts         # WebSocket 통신, UI 로직
-│   ├── ui.html       # UI 템플릿
-│   └── manifest.json # 플러그인 메타데이터
-├── dist/             # 빌드 출력 (git ignored)
-├── build.ts          # esbuild 설정
-└── CLAUDE.md         # 이 파일
+│   │                     ── ▼ dist/code.js (Figma Sandbox) ─ tsconfig.sandbox.json
+│   ├── code.ts           # 메시지 핸들러 (명령 → node-ops 위임)
+│   ├── converter/        # JSON/HTML → Figma 노드
+│   ├── extractor/        # Figma 노드 → JSON/HTML (역추출)
+│   ├── node-ops/         # Figma 노드 조작
+│   ├── testing/          # 라운드트립 테스트
+│   ├── utils.ts          # createSolidPaint 등
+│   │
+│   │                     ── ▼ dist/ui.html (iframe) ─ tsconfig.ui.json
+│   ├── ui.ts             # WebSocket 통신, UI 진입점
+│   ├── ui/               # 브리지·상태·청크 핸들러
+│   ├── ui.html           # UI 템플릿 (빌드 시 ui.js 인라인)
+│   │
+│   └── manifest.json     # 플러그인 메타데이터
+├── __tests__/            # 유닛테스트 (figma 전역 없이 도는 것만)
+├── dist/                 # 빌드 출력 (git ignored)
+├── build.ts              # esbuild 설정 + 산출물 문법 검사
+├── tsconfig.sandbox.json # sandbox 트리 (DOM 없음)
+├── tsconfig.ui.json      # iframe 트리 (figma 타이핑 없음)
+└── CLAUDE.md             # 이 파일
 ```
 
 ## 체크리스트
 
 코드 수정 시 확인:
 
-- [ ] `code.ts`에서 브라우저 API 사용하지 않음
-- [ ] `ui.ts`에서 `figma.*` API 사용하지 않음
+- [ ] 새 파일이 `tsconfig.sandbox.json` 또는 `tsconfig.ui.json` 의 `include` 에 들어갔음
+- [ ] `bun run typecheck` 통과 (런타임 경계 위반은 여기서 잡힌다)
 - [ ] `bun run build` 성공 (산출물 문법 검사 포함)
 - [ ] Figma Desktop에서 테스트 완료

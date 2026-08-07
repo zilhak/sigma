@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bun run build --watch",
     "build": "bun run build.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit -p tsconfig.sandbox.json && tsc --noEmit -p tsconfig.ui.json"
   },
   "dependencies": {
     "@sigma/shared": "workspace:*"

@@ -1,9 +1,7 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "types": ["@figma/plugin-typings"]
-  },
-  "include": ["src/**/*"]
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.sandbox.json" },
+    { "path": "./tsconfig.ui.json" }
+  ]
 }
