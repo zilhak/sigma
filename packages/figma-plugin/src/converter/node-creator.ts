@@ -288,6 +288,8 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
             };
             // 실측 여부는 부모 rect로 판정 (추출 데이터는 부모가 항상 실측,
             // 손-HTML은 스타일 유래 width만 있어도 height가 0 → CSS 의미론 분기로)
+            // 배경: docs/history/012-hand-written-html-had-no-bounding-rect.md
+            // 이 이중 분기를 한쪽으로 합치면 두 입력 중 하나가 반드시 깨진다.
             if (node.boundingRect && node.boundingRect.width > 0 && node.boundingRect.height > 0) {
               // 익스텐션 추출 데이터: 실측 교차축 크기가 부모 내부 교차축과
               // 일치할 때만(실제 stretch된 경우만) 적용 — HUG/FIXED 자식 보호.
@@ -426,6 +428,8 @@ export async function createFigmaNode(node: ExtractedNode, isRoot: boolean = tru
   // (extractBoundingFromStyle) "일부 자식만 width>0"인 혼합 상태가 생기는데, 이를
   // 실측으로 오판해 검증하면 정상 Auto Layout 전체가 절대배치로 파괴된다.
   // → 부모 rect가 완전 실측일 때만 검증하고, 비교 대상도 완전 실측 자식으로 한정한다.
+  // 배경: docs/history/012-hand-written-html-had-no-bounding-rect.md
+  // rect===0 만 막는 판정으로 두 번 무너졌다. 판정은 반드시 w>0 && h>0 둘 다로.
   const parentFullyMeasured = node.boundingRect
     && node.boundingRect.width > 0 && node.boundingRect.height > 0;
   if (frame.layoutMode !== 'NONE' && children.length > 0 && parentFullyMeasured) {

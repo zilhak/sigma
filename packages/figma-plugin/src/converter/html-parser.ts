@@ -28,6 +28,8 @@ function parseSpacing(value: string): [number, number, number, number] {
  * 손-HTML의 스타일 유래 크기가 rect에 들어가면 변환기의 "실측 데이터" 판정
  * (형상 검증·stretch 휴리스틱)이 오발동해 Auto Layout이 파괴된다.
  * (SVG는 예외 — svgString 크기 결정에 rect를 쓰므로 전체 추출 유지)
+ * 배경: docs/history/012-hand-written-html-had-no-bounding-rect.md
+ * 편의상 크기를 채우면 변환기의 게이트가 **한꺼번에** 무력해진다.
  */
 function extractPositionFromStyle(attrsString: string): { x: number; y: number; width: number; height: number } {
   const full = extractBoundingFromStyle(attrsString);
