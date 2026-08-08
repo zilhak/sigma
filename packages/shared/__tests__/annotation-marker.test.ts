@@ -267,3 +267,65 @@ describe('annotationMarkerGapRule', () => {
     expect(annotationMarkerGapRule(stripped, relations)).toEqual([]);
   });
 });
+
+/**
+ * 가림 판정 — 모달 패널에 완전히 가려진 노드는 후보에서 뺀다.
+ * 실측: 상태 프레임 위에 뜬 모달의 패널 위에 마커를 놨는데, 패널에 가려 보이지도 않는
+ * 아래 표 셀이 "마커가 덮고 있다" 로 잡혔다(한 섹션 3건, 억제로만 넘길 수 있었다).
+ * 배경: docs/history/014-marker-gap-judged-invisible-nodes.md
+ */
+function modalScene(opts: { panelOpaque: boolean }) {
+  const opaqueFill = [{ type: 'SOLID', visible: true, opacity: 1 }];
+  const nodes: LintNode[] = [
+    { id: 'S', name: 'screen', type: 'FRAME', x: 0, y: 0, width: 600, height: 700, childCount: 2, absoluteX: 0, absoluteY: 0 },
+    // 표 셀 — 패널 뒤에 완전히 숨는다
+    { id: 'cell', name: 'table_cell', type: 'INSTANCE', x: 0, y: 0, width: 100, height: 30, childCount: 0, absoluteX: 20, absoluteY: 300 },
+    // 모달 패널 — 불투명 흰 바탕(테스트에 따라 fill 을 뺀다)
+    { id: 'panel', name: 'modal_panel', type: 'FRAME', x: 0, y: 0, width: 500, height: 634, childCount: 1, absoluteX: 0, absoluteY: 0,
+      opacity: 1, ...(opts.panelOpaque ? { fills: opaqueFill } : {}) },
+    // 패널 위의 실제 대상 — 패널은 이 노드의 **조상**이라 가림판으로 세면 안 된다
+    { id: 'btn', name: 'confirm', type: 'INSTANCE', x: 0, y: 0, width: 80, height: 30, childCount: 0, absoluteX: 40, absoluteY: 337 },
+    { id: 'L', name: '📝 기획 주석', type: 'FRAME', x: 0, y: 0, width: 600, height: 700, childCount: 1, isAnnotationLayer: true, absoluteX: 0, absoluteY: 0 },
+    // 마커: 셀과 겹치고(가려진 것), btn 과는 8px (규약 안)
+    { id: 'M', name: 'marker①', type: 'INSTANCE', x: 0, y: 0, width: 24, height: 24, childCount: 1, specAlias: 'marker', absoluteX: 40, absoluteY: 305 },
+  ];
+  // children 배열의 뒤쪽이 위(z) — panel 이 cell 보다 나중에 그려진다
+  const relations = {
+    children: { R: ['S', 'L'], S: ['cell', 'panel'], panel: ['btn'], L: ['M'], cell: [], btn: [], M: [] },
+    children_unused: undefined,
+    ancestors: { S: ['R'], cell: ['S', 'R'], panel: ['S', 'R'], btn: ['panel', 'S', 'R'], L: ['R'], M: ['L', 'R'] },
+  } as unknown as MarkerPairRelations;
+  return { nodes, relations };
+}
+
+describe('annotationMarkerGapRule — 가림 판정', () => {
+  /** positive control: 패널이 불투명하지 않으면 셀이 보이므로 종전대로 잡혀야 한다 */
+  test('가림판이 없으면 덮음을 그대로 잡는다 (규칙이 무력해지지 않았다)', () => {
+    const { nodes, relations } = modalScene({ panelOpaque: false });
+    const v = annotationMarkerGapRule(nodes, relations);
+    expect(v.length).toBe(1);
+    expect(v[0].message).toContain('덮고 있다');
+    expect(v[0].nodes).toContain('cell');
+  });
+
+  test('불투명 패널에 완전히 가려진 셀은 후보에서 빠져 오탐이 사라진다', () => {
+    const { nodes, relations } = modalScene({ panelOpaque: true });
+    expect(annotationMarkerGapRule(nodes, relations)).toEqual([]);
+  });
+
+  test('가림판의 자식은 가려진 것으로 보지 않는다 (부모는 자식보다 먼저 그려진다)', () => {
+    // btn 이 잘못 제외되면 후보가 0개가 되어 "가리킬 요소가 없다" 로 바뀐다
+    const { nodes, relations } = modalScene({ panelOpaque: true });
+    const v = annotationMarkerGapRule(nodes, relations);
+    expect(v.map((x) => x.message).join()).not.toContain('가리킬 만한 요소가 없다');
+  });
+
+  test('가림판이 후보보다 아래(z)면 가리지 못한다', () => {
+    const { nodes, relations } = modalScene({ panelOpaque: true });
+    // panel 을 cell 보다 먼저 그리도록 순서를 뒤집으면 셀이 위로 올라와 다시 보인다
+    relations.children.S = ['panel', 'cell'];
+    const v = annotationMarkerGapRule(nodes, relations);
+    expect(v.length).toBe(1);
+    expect(v[0].message).toContain('덮고 있다');
+  });
+});

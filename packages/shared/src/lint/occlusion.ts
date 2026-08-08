@@ -24,7 +24,15 @@ interface PaintLike {
   visible?: boolean;
 }
 
-function isOpaqueSolidFill(node: LintNode): boolean {
+/**
+ * "이 노드는 뒤를 완전히 가리는가" — 노드 불투명도 1 + 보이는 SOLID fill 하나 이상.
+ * 그라디언트/이미지는 불투명을 증명할 수 없어 인정하지 않는다(누락 허용, 오탐 방지 우선).
+ *
+ * `annotation_marker_gap` 도 같은 판정을 쓴다(가려진 후보 제외). 판정만 공유하고 **비교 방식은
+ * 다르다** — 이 규칙은 형제끼리 부모 로컬좌표 + 형제 인덱스로 z 를 보고, marker_gap 은
+ * 컨테이너를 넘나들어 절대좌표 + 전역 페인트 순서를 본다. 억지로 한 함수로 합치지 말 것.
+ */
+export function isOpaqueSolidFill(node: LintNode): boolean {
   const nodeOpacity = typeof node.opacity === 'number' ? node.opacity : 1;
   if (nodeOpacity < 1) return false;
   if (!Array.isArray(node.fills)) return false;

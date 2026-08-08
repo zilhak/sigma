@@ -17,6 +17,7 @@
  * 기본 OFF(opt-in): 마커/범례 프리셋을 쓰는 파일에서만 의미가 있다.
  */
 import type { LintNode, Violation } from './types';
+import { isOpaqueSolidFill } from './occlusion';
 
 export interface AnnotationMarkerPairConfig {
   /** 마커 인스턴스의 스펙 alias. 기본 'marker'(anno 프리셋). */
@@ -284,6 +285,61 @@ class Grid {
   }
 }
 
+/**
+ * 전역 페인트 순서 비교기 — Figma 는 트리를 깊이우선으로 그리고 `children` 뒤쪽이 위다.
+ * 두 노드의 루트부터의 자식 인덱스 경로를 사전순 비교하면 어느 쪽이 위인지 나온다.
+ *
+ * 형제 비교(`fully_occluded_sibling`)로는 안 되는 이유: 마커는 주석 레이어(섹션 최상위)에 있고
+ * 가려진 후보는 **다른 프레임 안**이라 공통 부모가 없다. 그래서 절대좌표 + 전역 z 가 필요하다.
+ */
+class PaintOrder {
+  private parentOf = new Map<string, string>();
+  private indexOf = new Map<string, number>();
+  private keyCache = new Map<string, number[]>();
+
+  constructor(children: Record<string, string[]>) {
+    for (const [parent, kids] of Object.entries(children)) {
+      for (let i = 0; i < kids.length; i++) {
+        this.parentOf.set(kids[i], parent);
+        this.indexOf.set(kids[i], i);
+      }
+    }
+  }
+
+  private key(id: string): number[] {
+    const cached = this.keyCache.get(id);
+    if (cached) return cached;
+    const path: number[] = [];
+    let cur: string | undefined = id;
+    const guard = new Set<string>();
+    while (cur !== undefined && !guard.has(cur)) {
+      guard.add(cur);
+      const idx = this.indexOf.get(cur);
+      if (idx === undefined) break;
+      path.unshift(idx);
+      cur = this.parentOf.get(cur);
+    }
+    this.keyCache.set(id, path);
+    return path;
+  }
+
+  /** a 가 b 보다 나중에 그려지는가(= 위인가). 조상/자손 관계면 false(부모는 자식을 가리지 못한다). */
+  isAbove(a: string, b: string): boolean {
+    const ka = this.key(a), kb = this.key(b);
+    const n = Math.min(ka.length, kb.length);
+    for (let i = 0; i < n; i++) {
+      if (ka[i] !== kb[i]) return ka[i] > kb[i];
+    }
+    return false;
+  }
+}
+
+function containsRect(outer: Rect, inner: Rect): boolean {
+  return outer.x <= inner.x && outer.y <= inner.y
+    && outer.x + outer.w >= inner.x + inner.w
+    && outer.y + outer.h >= inner.y + inner.h;
+}
+
 export function annotationMarkerGapRule(
   nodes: LintNode[],
   relations: MarkerPairRelations,
@@ -302,6 +358,8 @@ export function annotationMarkerGapRule(
 
   const markers: Array<{ node: LintNode; rect: Rect }> = [];
   const grid = new Grid(256);
+  /** 불투명 가림판 후보(모달 패널 등). 후보와 같은 격자로 훑어 근처만 비교한다. */
+  const occluders = new Grid(256);
   let hasAbsolute = false;
 
   for (const n of nodes) {
@@ -310,6 +368,11 @@ export function annotationMarkerGapRule(
     if (n.type === 'INSTANCE' && n.specAlias === markerAlias && inLayer(n)) {
       if (rect) markers.push({ node: n, rect });
       continue;
+    }
+    // 가림판 수집은 후보 조건(원자적 노드)과 별개다 — 모달 패널은 자식을 가진 컨테이너다.
+    if (rect && rect.w > 0 && rect.h > 0 && !n.isAnnotationLayer && !inLayer(n)
+        && n.visible !== false && isOpaqueSolidFill(n)) {
+      occluders.add(n, rect);
     }
     // 후보 = 주석 밖의 **원자적** 노드. 큰 컨테이너를 넣으면 마커가 항상 그 위에 있어 전부 겹침이 된다.
     if (!rect) continue;
@@ -324,9 +387,34 @@ export function annotationMarkerGapRule(
   // 절대좌표가 전혀 없으면(호출이 includeAbsolute 없이 왔으면) 판정하지 않는다 — 좌표계가 섞이면 전부 오답이다.
   if (!hasAbsolute || markers.length === 0) return [];
 
+  // 화면에 안 보이는 후보는 마커가 덮어도 가리는 정보가 없고, "가장 가까운 요소" 로도 부적절하다.
+  // 실제 사례: 불투명 모달 패널에 완전히 가려진 표 셀이 "마커가 덮고 있다" 로 잡혔다 —
+  // 마커는 패널 위에 있고 패널 위 요소는 하나도 덮지 않았는데도.
+  // 배경: docs/history/014-marker-gap-judged-invisible-nodes.md
+  const paintOrder = new PaintOrder(relations.children);
+  const hiddenCache = new Map<string, boolean>();
+  const isHidden = (c: LintNode, rect: Rect): boolean => {
+    const cached = hiddenCache.get(c.id);
+    if (cached !== undefined) return cached;
+    const ancestors = new Set(relations.ancestors[c.id] || []);
+    let hidden = false;
+    for (const o of occluders.near(rect, 0)) {
+      if (o.node.id === c.id) continue;
+      // 조상은 자식보다 먼저 그려지므로 가리지 못한다. 자손도 제외(그건 다른 규칙의 몫).
+      if (ancestors.has(o.node.id)) continue;
+      if ((relations.ancestors[o.node.id] || []).includes(c.id)) continue;
+      if (!containsRect(o.rect, rect)) continue;
+      if (!paintOrder.isAbove(o.node.id, c.id)) continue;
+      hidden = true;
+      break;
+    }
+    hiddenCache.set(c.id, hidden);
+    return hidden;
+  };
+
   const out: Violation[] = [];
   for (const m of markers) {
-    const near = grid.near(m.rect, orphanRadius);
+    const near = grid.near(m.rect, orphanRadius).filter((c) => !isHidden(c.node, c.rect));
     const markerArea = m.rect.w * m.rect.h;
     const bgArea = markerArea * bgRatio;
     let best: { node: LintNode; gap: number } | null = null;
