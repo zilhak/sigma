@@ -3,7 +3,7 @@ import { createFrameFromJSON, createFrameFromHTML, updateExistingFrame } from '.
 import { extractNodeToJSON } from './extractor';
 import { convertExtractedNodeToHTML } from './extractor';
 import { getTargetPage, getPageById, getAllPages, sendFileInfo, saveFileKey, createPage, renamePage, switchPage, deletePage, reorderPage } from './node-ops';
-import { findNodeWithDetails, getTreeWithFilter } from './node-ops';
+import { findNodeWithDetails, resolvePaths, getTreeWithFilter } from './node-ops';
 import { executeModifyNode } from './node-ops';
 import { deleteFrame } from './node-ops';
 import { isReachable } from './node-ops/removal';
@@ -611,6 +611,21 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
         success: true,
         data: htmlParts.join('\n'),
       });
+      break;
+    }
+
+    // 여러 경로를 한 왕복에 nodeId 로 해석 (부분 실패 허용)
+    case 'resolve-paths': {
+      try {
+        sendResult('resolve-paths-result', resolvePaths(
+          msg.paths as Array<string | string[]>,
+          msg.typeFilter as string | undefined,
+          msg.pageId as string | undefined,
+        ));
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Unknown error';
+        sendError('resolve-paths-result', errMsg);
+      }
       break;
     }
 

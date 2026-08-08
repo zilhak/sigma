@@ -131,7 +131,7 @@ config 하나로 빌트인 규칙 24종(기본 ON 15종 = 기하 8 + 구조/이�
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_find_node` | 경로/이름 검색, 또는 `where`로 속성 조건 검색 | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
+| `sigma_find_node` | 경로/이름 검색(`paths`로 여러 경로 → nodeId 일괄 해석), 또는 `where`로 속성 조건 검색 | `token` | `path`, `paths`, `type`, `where`, `nodeId`, `limit` |
 | `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `omit`(자르기), `keep`(남기기), `filter`(레거시), `limit`, `fields` |
 | `sigma_get_node_info` | 노드 상세 정보 (TEXT 는 `hyperlinks` 포함 — 링크 배선 검증용) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 일괄 조회 | `token`, `nodeIds` | — |
@@ -188,6 +188,21 @@ config 하나로 빌트인 규칙 24종(기본 ON 15종 = 기하 8 + 구조/이�
 sigma_get_tree({ token, depth: "full", fields: "geometry" })
 // → { id, name, type, boundingBox: {x,y,width,height}, absolute: {x,y}, childCount, children: [...] }
 ```
+
+### sigma_find_node 의 `paths` — 여러 경로 → nodeId 일괄 해석
+
+```
+sigma_find_node({ token, paths: ["Design System/Buttons/Primary", "Screens/Home"] })
+→ { results: [{path, nodeId, name, type}, {path, error}], resolved: 1, failed: 1 }
+```
+
+- 왕복 1회. 응답은 id 해석에 필요한 것만 싣는다(`path` 단일 모드처럼 노드 상세를 다 싣지 않는다).
+- **부분 실패 허용** — 실패한 원소에 `path` 를 되울려 어느 경로가 실패했는지 알 수 있다.
+- 다중 매칭은 첫 번째를 돌려주되 `matches` 개수를 함께 싣는다(조용히 고르지 않는다).
+- ⚠️ **nodeId 를 스크립트에 손으로 옮겨 적지 말 것.** 세션이 바뀌면 무효고, 중간 실패 시
+  재실행이 안 되며, 사람이 읽어도 무엇인지 모른다. 로컬 캐시도 답이 아니다 — 문서가 밖에서
+  바뀐 것을 모르고 조용히 엉뚱한 노드를 고친다. 배경:
+  [`docs/history/009-node-ids-were-copied-by-hand.md`](history/009-node-ids-were-copied-by-hand.md)
 
 ### sigma_find_node 의 `where` — 속성 조건 검색
 
@@ -247,7 +262,7 @@ alias가 걸리면 등록·`overwrite` 갱신 응답에 `policyWarnings`가 실�
 |------|------|-----------|-----------|
 | `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 | `token`, `alias`, `description` + (`html` 또는 `htmlPath`) | `htmlPath`(파일에서 HTML 읽기 — 본문이 큰 스펙용, `html`과 상호배타), `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
 | `sigma_list_component_specs` | 스펙 카탈로그 (alias 지정 시 상세) | — | `alias`, `namespace` |
-| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
+| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings). 여러 개는 `instances` 배열 | `token` | `alias` 또는 `instances`(상호배타), `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
 | `sigma_set_component_spec_instance_props` | 기존 인스턴스의 param 재설정 | `token`, `nodeId`, `props` | — |
 | `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/4종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (바인딩된 파일 소유만, 남은 인스턴스 있으면 거부) | `token`, `alias` | `namespace`, `deleteNode`, `allowCrossFile`, `force` |

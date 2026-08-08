@@ -685,6 +685,16 @@ export class FigmaWebSocketServer {
     });
   }
 
+  /** 여러 경로를 한 왕복에 nodeId 로 해석 (부분 실패 허용) */
+  async resolvePaths(
+    paths: Array<string | string[]>,
+    typeFilter?: string,
+    pluginId?: string,
+    pageId?: string
+  ): Promise<{ results: Array<{ path: string; nodeId?: string; name?: string; type?: string; matches?: number; error?: string }> }> {
+    return this.sendCommand('RESOLVE_PATHS', { paths, typeFilter, pageId }, { pluginId });
+  }
+
   /**
    * 트리 구조 조회
    */

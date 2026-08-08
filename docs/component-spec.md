@@ -11,6 +11,7 @@
 조회:  sigma_list_component_specs(namespace?)  → alias/설명/params/size/sizing (카탈로그)
        sigma_list_component_specs(alias)       → HTML 원문 포함 상세
 사용:  sigma_create_component_spec_instance(token, alias, props, x, y, parentId, namespace?, width?, height?)
+       sigma_create_component_spec_instance(token, instances: [{alias, props, x, y, parentId, ...}, ...])  ← 여러 개
        → width/height: 생성 직후 resize (hug 축은 FIXED로 전환 — placeholder 용도)
 수정:  sigma_set_component_spec_instance_props(token, nodeId, props)
        → 기존 인스턴스의 param 재설정 (삭제 후 재생성 불필요, 넘침 시 warnings)

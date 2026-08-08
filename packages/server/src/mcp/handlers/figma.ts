@@ -337,8 +337,33 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
       }
     }
 
+    // paths 모드: 여러 경로를 한 왕복에 nodeId 로 해석(부분 실패 허용).
+    // 배치 전용 도구를 새로 만들지 않고 이 도구가 배열을 받는다 — docs/tool-conventions.md §3.
+    // 배경: docs/history/009-node-ids-were-copied-by-hand.md
+    const paths = args.paths as Array<string | string[]> | undefined;
+    if (paths) {
+      if (path) {
+        return jsonResponse({ error: 'path 와 paths 는 함께 쓸 수 없습니다 — 여러 경로를 해석하려면 paths 만 주세요' });
+      }
+      if (!Array.isArray(paths) || paths.length === 0) {
+        return jsonResponse({ error: 'paths 는 비어 있지 않은 배열이어야 합니다' });
+      }
+      try {
+        const result = await wsServer.resolvePaths(paths, typeFilter, pluginId, pageId);
+        const failed = result.results.filter((r) => r.error).length;
+        return jsonResponse({
+          ...result,
+          resolved: result.results.length - failed,
+          failed,
+        });
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        return jsonResponse({ error: errMsg });
+      }
+    }
+
     if (!path) {
-      return jsonResponse({ error: 'path 또는 where 중 하나가 필요합니다.' });
+      return jsonResponse({ error: 'path · paths · where 중 하나가 필요합니다.' });
     }
 
     try {

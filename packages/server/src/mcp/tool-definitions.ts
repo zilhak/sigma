@@ -371,9 +371,12 @@ position을 생략하면 자동 배치됩니다 (바인딩된 페이지의 기�
   },
   {
     name: 'sigma_find_node',
-    description: `Figma 노드를 찾습니다. **두 가지 방식** 중 하나를 씁니다 (상호배타).
-- \`path\`: 경로/이름으로 특정 노드 하나를 찾음
+    description: `Figma 노드를 찾습니다. **세 가지 방식** 중 하나를 씁니다 (상호배타).
+- \`path\`: 경로/이름으로 특정 노드 하나를 찾음 (상세 정보 포함)
+- \`paths\`: **여러 경로를 한 번에** nodeId 로 해석 (부분 실패 허용, id 해석에 필요한 것만 반환)
 - \`where\`: **속성 조건**으로 맞는 노드를 전부 찾음 (예: width 가 1000 넘는 노드 전부)
+
+⚠️ **nodeId 를 스크립트에 손으로 옮겨 적지 마세요.** 세션이 바뀌면 다시 조회해야 하고, 중간에 실패하면 재실행이 안 되며, 사람이 읽어도 무엇인지 모릅니다. 대신 \`paths\` 로 **매번 싸게 다시 물으세요**(왕복 1회). 로컬 캐시는 문서가 밖에서 바뀐 것을 모르므로 조용히 엉뚱한 노드를 고치게 됩니다.
 
 **바인딩 필수**: 토큰이 바인딩된 페이지 내에서 검색합니다.
 바인딩되지 않은 토큰으로는 사용할 수 없습니다. 먼저 sigma_bind로 대상 페이지를 지정하세요.
@@ -437,12 +440,17 @@ OR 이 필요하면 조건을 나눠 여러 번 호출하세요(쿼리 언어를
         },
         path: {
           type: ['string', 'array'],
-          description: '찾을 노드의 경로 ("A/B/C" 또는 ["A", "B", "C"]). where 와 상호배타',
+          description: '찾을 노드의 경로 ("A/B/C" 또는 ["A", "B", "C"]). paths·where 와 상호배타',
           items: { type: 'string' },
+        },
+        paths: {
+          type: 'array',
+          description: '여러 경로를 한 번에 nodeId 로 해석 (왕복 1회, 부분 실패 허용). 각 원소는 path 와 같은 형식("A/B/C" 또는 ["A","B","C"]). 응답은 results[{path, nodeId, name, type, matches?, error?}] + resolved/failed 개수. path·where 와 상호배타',
+          items: { type: ['string', 'array'], items: { type: 'string' } },
         },
         type: {
           type: 'string',
-          description: '(path 모드) 특정 타입만 필터링 (예: "FRAME", "SECTION", "GROUP")',
+          description: '(path/paths 모드) 특정 타입만 필터링 (예: "FRAME", "SECTION", "GROUP")',
         },
         where: {
           type: 'object',
@@ -2650,12 +2658,29 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
     description:
       '등록된 스펙 컴포넌트의 인스턴스를 생성합니다 (바인딩 필수). ' +
       'Figma 내부를 탐색할 필요 없이 alias + props만으로 삽입됩니다. ' +
-      '예: alias: "ui_badge", props: {text: "완료"}. 사용 가능한 alias와 param은 sigma_list_component_specs로 확인하세요.',
+      '예: alias: "ui_badge", props: {text: "완료"}. 사용 가능한 alias와 param은 sigma_list_component_specs로 확인하세요. ' +
+      '**여러 개를 만들 때는 `instances` 배열을 쓰세요** — 표처럼 셀이 수십 개인 조립에서 인스턴스마다 도구를 부르면 호출이 수십 회로 늡니다. 부분 실패를 허용하며 results[] 로 개별 결과를 돌려줍니다.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         token: { type: 'string', description: '인증 토큰' },
-        alias: { type: 'string', description: '등록된 컴포넌트 alias' },
+        alias: { type: 'string', description: '등록된 컴포넌트 alias. instances 와 상호배타' },
+        instances: {
+          type: 'array',
+          description: '여러 인스턴스를 한 호출로 생성 (부분 실패 허용). 각 원소는 { alias, namespace?, props?, x?, y?, width?, height?, parentId? } — 단일 호출과 같은 인자를 그대로 씁니다. alias 와 상호배타',
+          items: {
+            type: 'object',
+            properties: {
+              alias: { type: 'string', description: '등록된 컴포넌트 alias' },
+              namespace: { type: 'string', description: '(선택) 네임스페이스' },
+              props: { type: 'object', additionalProperties: { type: 'string' }, description: '(선택) 파라미터 값 매핑' },
+              x: { type: 'number' }, y: { type: 'number' },
+              width: { type: 'number' }, height: { type: 'number' },
+              parentId: { type: 'string', description: '(선택) 부모 노드 ID' },
+            },
+            required: ['alias'],
+          },
+        },
         namespace: { type: 'string', description: '(선택) 네임스페이스 — alias가 여러 네임스페이스에 있으면 필수' },
         props: {
           type: 'object',
@@ -2668,7 +2693,8 @@ triggerType을 지정하면 해당 트리거의 리액션만 제거하고, 미�
         height: { type: 'number', description: '(선택) 인스턴스 높이 — 생성 직후 resize' },
         parentId: { type: 'string', description: '(선택) 부모 노드 ID (Auto Layout 프레임에 삽입 가능). parentId로 **COMPONENT 노드**를 주면 그 컴포넌트의 자식으로 삽입돼, 등록 컴포넌트(OneUI 등)를 재사용한 조합 컴포넌트를 만들 수 있습니다 — sigma_create_component로 빈 컴포넌트를 만든 뒤 이 방식으로 실제 인스턴스들을 채우세요. 스펙 HTML 안에 인스턴스를 넣는 것은 불가능하므로, 조립은 이 네이티브 경로로 합니다.' },
       },
-      required: ['token', 'alias'],
+      // alias(단일) / instances(배열) 중 하나 — 상호배타 검증은 핸들러가 한다.
+      required: ['token'],
     },
   },
   {

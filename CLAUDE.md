@@ -286,7 +286,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 
 | 도구 | 설명 | 필수 인자 | 선택 인자 |
 |------|------|-----------|-----------|
-| `sigma_find_node` | 경로/이름으로 노드 검색, 또는 `where`로 속성 조건 검색 (예: width>1000 전부) | `token` | `path`, `type`, `where`, `nodeId`, `limit` |
+| `sigma_find_node` | 경로/이름으로 노드 검색(`paths`로 여러 경로 → nodeId 일괄 해석), 또는 `where`로 속성 조건 검색 (예: width>1000 전부) | `token` | `path`, `paths`, `type`, `where`, `nodeId`, `limit` |
 | `sigma_get_tree` | 문서 계층 구조 탐색 (`fields:"geometry"`=좌표 전용 축약) | `token` | `nodeId`, `path`, `depth`, `omit`(자르기), `keep`(남기기), `filter`(레거시), `limit`, `fields` |
 | `sigma_get_node_info` | 노드 상세 정보 조회 (fills, strokes, text, layout — TEXT 는 `hyperlinks` 포함) | `token`, `nodeId` | — |
 | `sigma_get_nodes_info` | 여러 노드 상세 정보 일괄 조회 | `token`, `nodeIds` | — |
@@ -322,7 +322,7 @@ Figma Plugin의 `code.ts`는 Figma Sandbox에서 실행된다:
 |------|------|-----------|-----------|
 | `sigma_create_component_spec` | 스펙 HTML로 컴포넌트 등록 (검증 위반 시 거부). `overwrite` 갱신 시 응답 `impact` 로 크기 변화·인스턴스 사용처 통지 | `token`, `alias`, `description` + (`html` 또는 `htmlPath`) | `htmlPath`(파일에서 HTML 읽기, `html`과 상호배타 — base64 이미지처럼 본문이 큰 스펙은 인자로 옮기다 깨지면 등록은 통과하고 렌더만 실패), `namespace`, `position`, `overwrite`(in-place 갱신→인스턴스 전파), `validateOnly`(토큰 불필요 dry-run) |
 | `sigma_list_component_specs` | 스펙 카탈로그 조회 (alias 지정 시 HTML 원문 포함 상세) | — | `alias`, `namespace` |
-| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings) | `token`, `alias` | `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
+| `sigma_create_component_spec_instance` | alias + props로 인스턴스 생성 (넘침 시 warnings). **여러 개는 `instances` 배열로** (부분 실패 허용) | `token` | `alias` 또는 `instances`(상호배타), `namespace`, `props`, `x`, `y`, `width`, `height`, `parentId` |
 | `sigma_set_component_spec_instance_props` | 기존 인스턴스의 param 재설정 | `token`, `nodeId`, `props` | — |
 | `sigma_import_spec_preset` | 내장 프리셋 등록 (annotation: anno/4종, wireframe: wire/5종) | `token`, `preset` | `overwrite` |
 | `sigma_delete_component_spec` | 레지스트리에서 스펙 삭제 (Figma 노드는 유지). **바인딩된 파일이 소유한 스펙만** — 다른 파일 것은 거부. `deleteNode` 인데 인스턴스가 남았으면 개수·페이지와 함께 거부 | `token`, `alias` | `namespace`, `deleteNode`, `allowCrossFile`, `force` |

@@ -1,6 +1,6 @@
 export { getStoredFileKey, saveFileKey, getEffectiveFileKey, getAllPages, getPageById, getTargetPage, sendFileInfo, createPage, renamePage, switchPage, deletePage, reorderPage } from './page';
 export type { CreatePageResult, RenamePageResult, SwitchPageResult, DeletePageResult, ReorderPageResult } from './page';
-export { getNodeFullPath, findNodesByPath, serializeTreeNode, findNodeWithDetails, getTreeWithFilter } from './tree';
+export { getNodeFullPath, findNodesByPath, serializeTreeNode, findNodeWithDetails, resolvePaths, getTreeWithFilter } from './tree';
 export type { SerializeContext } from './tree';
 export { executeModifyNode } from './modify';
 export { deleteFrame } from './frames';

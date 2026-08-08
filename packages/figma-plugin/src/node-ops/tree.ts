@@ -268,6 +268,42 @@ function attachChildren(
 }
 
 /**
+ * 여러 경로를 **한 왕복에** nodeId 로 해석한다. 부분 실패 허용.
+ *
+ * 호출자가 nodeId 를 스크립트에 손으로 옮겨 적게 만드는 구조를 없애기 위한 것 —
+ * 캐시가 아니라 "싸게 다시 묻는" 경로다(캐시는 문서가 밖에서 바뀌면 조용히 엉뚱한 노드를 고친다).
+ * 응답은 id 해석에 필요한 것만 싣는다(노드 상세를 다 실으면 배치의 의미가 없다).
+ * 배경: docs/history/009-node-ids-were-copied-by-hand.md
+ */
+export function resolvePaths(
+  paths: Array<string | string[]>,
+  typeFilter?: string,
+  pageId?: string,
+): { results: Array<{ path: string; nodeId?: string; name?: string; type?: string; matches?: number; error?: string }> } {
+  const page = pageId ? getPageById(pageId) : undefined;
+  const results = paths.map((p) => {
+    const label = Array.isArray(p) ? p.join('/') : p;
+    try {
+      const found = findNodesByPath(p, null, page || undefined);
+      const filtered = typeFilter ? found.filter((n) => n.type === typeFilter) : found;
+      if (filtered.length === 0) return { path: label, error: '해당 경로의 노드를 찾을 수 없습니다' };
+      // 다중 매칭을 조용히 첫 번째로 고르지 않는다 — 어느 것을 골랐는지 모른 채 쓰면
+      // "그럴듯하게 틀린 대상" 에 작업하게 된다. 개수를 함께 돌려 호출자가 판단하게 한다.
+      return {
+        path: label,
+        nodeId: filtered[0].id,
+        name: filtered[0].name,
+        type: filtered[0].type,
+        ...(filtered.length > 1 ? { matches: filtered.length } : {}),
+      };
+    } catch (error) {
+      return { path: label, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  return { results };
+}
+
+/**
  * 경로 또는 타입 필터로 노드를 찾아 직렬화된 결과 반환
  */
 export function findNodeWithDetails(

@@ -42,6 +42,75 @@ async function collectSpecPolicyWarnings(
   return checkSpecNamingPolicy(stored.config.componentSpec, target);
 }
 
+/**
+ * 스펙 인스턴스 1개 생성. 스칼라 호출과 배열 호출이 **같은 코드**를 타게 하려고 뺐다 —
+ * 갈라 두면 한쪽에만 검증이 붙어 "배치로 만들면 다르게 동작한다"가 된다.
+ * 실패는 던지지 않고 `{ error }` 로 돌려준다(배열에서 부분 실패를 허용하기 위함).
+ */
+async function createSpecInstance(
+  item: Record<string, unknown>,
+  wsServer: ToolContext['wsServer'],
+  pluginId: string | undefined,
+  pageId: string | undefined,
+): Promise<Record<string, unknown>> {
+  const alias = item.alias as string;
+  if (!alias) return { error: 'alias는 필수입니다' };
+
+  const { record, error } = await resolveSpec(alias, item.namespace as string | undefined);
+  if (error) {
+    // resolveSpec 은 MCP 응답(ToolResult)을 돌려주므로, 배열 원소에 실을 수 있게 본문만 꺼낸다.
+    const text = (error.content?.[0] as { text?: string } | undefined)?.text;
+    return { alias, error: text ? (JSON.parse(text).error as string) : `alias 해석 실패: ${alias}`, ...(text ? JSON.parse(text) : {}) };
+  }
+  const spec = record as ComponentSpecRecord;
+
+  // props 사전 검증 (플러그인 왕복 전에 빠른 거부)
+  const props = (item.props ? item.props : {}) as Record<string, string>;
+  const validNames = new Set(spec.params.map((p) => p.name));
+  const unknown = Object.keys(props).filter((k) => !validNames.has(k));
+  if (unknown.length > 0) {
+    return { alias, error: `알 수 없는 파라미터: ${unknown.join(', ')}`, params: spec.params };
+  }
+
+  try {
+    const result = await wsServer.command('USE_COMPONENT_SPEC', {
+      componentNodeId: spec.componentNodeId,
+      alias,
+      props,
+      position:
+        typeof item.x === 'number' && typeof item.y === 'number'
+          ? { x: item.x as number, y: item.y as number }
+          : undefined,
+      width: item.width as number | undefined,
+      height: item.height as number | undefined,
+      parentId: item.parentId as string | undefined,
+      pageId,
+      // 파일 스코프: 다른 파일에서 등록된 컴포넌트의 오사용 차단
+      expectedFileId: spec.fileId,
+      specFileName: spec.fileName,
+    }, { pluginId });
+
+    // 조용한 변형 감지: 고정폭 컴포넌트에서 긴 텍스트가 줄바꿈되면 높이가 급증한다
+    // (영역 밖 침범이 아니라 플러그인의 넘침 경고에는 안 걸림)
+    // 단, 호출자가 height를 명시했으면 의도된 크기이므로 검사하지 않는다
+    const r = result as { height?: number; warnings?: string[] };
+    const warnings = r.warnings ? [...r.warnings] : [];
+    if (
+      item.height === undefined &&
+      spec.sizing && spec.sizing.horizontal === 'fixed' && spec.size &&
+      typeof r.height === 'number' && r.height > spec.size.height * 1.5
+    ) {
+      warnings.push(
+        `인스턴스 높이가 기본 ${spec.size.height}px에서 ${r.height}px로 늘었습니다 — 긴 텍스트가 줄바꿈된 것으로 보입니다. 더 짧은 값을 쓰거나 스펙 slot에 text-overflow: ellipsis를 고려하세요`
+      );
+    }
+
+    return { ...(result as object), ...(warnings.length > 0 ? { warnings } : {}) };
+  } catch (e) {
+    return { alias, error: e instanceof Error ? e.message : 'Unknown error' };
+  }
+}
+
 export const componentSpecHandlers: Record<
   string,
   (args: Record<string, unknown>, context: ToolContext) => Promise<ToolResult>
@@ -271,69 +340,35 @@ export const componentSpecHandlers: Record<
     const { wsServer } = context;
     const access = validateFigmaAccess(args.token as string, wsServer);
     if (access.error) return access.error;
-
-    const alias = args.alias as string;
-    if (!alias) {
-      return jsonResponse({ error: 'alias는 필수입니다' });
-    }
-    const { record, error } = await resolveSpec(alias, args.namespace as string | undefined);
-    if (error) return error;
-    const spec = record as ComponentSpecRecord;
-
-    // props 사전 검증 (플러그인 왕복 전에 빠른 거부)
-    const props = (args.props ? args.props : {}) as Record<string, string>;
-    const validNames = new Set(spec.params.map((p) => p.name));
-    const unknown = Object.keys(props).filter((k) => !validNames.has(k));
-    if (unknown.length > 0) {
-      return jsonResponse({
-        error: `알 수 없는 파라미터: ${unknown.join(', ')}`,
-        params: spec.params,
-      });
-    }
-
     const { pluginId, pageId } = access;
-    try {
-      const result = await wsServer.command('USE_COMPONENT_SPEC', {
-          componentNodeId: spec.componentNodeId,
-          alias,
-          props,
-          position:
-            typeof args.x === 'number' && typeof args.y === 'number'
-              ? { x: args.x as number, y: args.y as number }
-              : undefined,
-          width: args.width as number | undefined,
-          height: args.height as number | undefined,
-          parentId: args.parentId as string | undefined,
-          pageId,
-          // 파일 스코프: 다른 파일에서 등록된 컴포넌트의 오사용 차단
-          expectedFileId: spec.fileId,
-          specFileName: spec.fileName,
-        }, { pluginId });
 
-      // 조용한 변형 감지: 고정폭 컴포넌트에서 긴 텍스트가 줄바꿈되면 높이가 급증한다
-      // (영역 밖 침범이 아니라 플러그인의 넘침 경고에는 안 걸림)
-      // 단, 호출자가 height를 명시했으면 의도된 크기이므로 검사하지 않는다
-      const r = result as { height?: number; warnings?: string[] };
-      const warnings = r.warnings ? [...r.warnings] : [];
-      if (
-        args.height === undefined &&
-        spec.sizing && spec.sizing.horizontal === 'fixed' && spec.size &&
-        typeof r.height === 'number' && r.height > spec.size.height * 1.5
-      ) {
-        warnings.push(
-          `인스턴스 높이가 기본 ${spec.size.height}px에서 ${r.height}px로 늘었습니다 — 긴 텍스트가 줄바꿈된 것으로 보입니다. 더 짧은 값을 쓰거나 스펙 slot에 text-overflow: ellipsis를 고려하세요`
-        );
+    // 배열 입력 — 표 하나가 셀 수십 개라 인스턴스마다 도구를 부르면 호출이 46회까지 갔다.
+    // 배치 전용 도구를 새로 만들지 않고 이 도구가 배열도 받는다(docs/tool-conventions.md §3).
+    // 배경: docs/history/010-instance-creation-had-no-array-input.md
+    const items = args.instances as Array<Record<string, unknown>> | undefined;
+    if (items) {
+      if (args.alias) {
+        return jsonResponse({ error: 'alias 와 instances 는 함께 쓸 수 없습니다 — 여러 개를 만들려면 instances 만 주세요' });
       }
-
+      if (!Array.isArray(items) || items.length === 0) {
+        return jsonResponse({ error: 'instances 는 비어 있지 않은 배열이어야 합니다' });
+      }
+      // 부분 실패 허용 — 하나가 틀렸다고 나머지를 버리면 재실행 비용이 배치의 이득을 넘는다.
+      const results: Array<Record<string, unknown>> = [];
+      for (let i = 0; i < items.length; i++) {
+        results.push({ index: i, ...(await createSpecInstance(items[i], wsServer, pluginId, pageId)) });
+      }
+      const failed = results.filter((r) => r.error).length;
       return jsonResponse({
-        success: true,
-        ...(result as object),
-        ...(warnings.length > 0 ? { warnings } : {}),
+        success: failed === 0,
+        created: results.length - failed,
+        failed,
+        results,
       });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      return jsonResponse({ error: errorMessage });
     }
+
+    const single = await createSpecInstance(args, wsServer, pluginId, pageId);
+    return jsonResponse(single.error ? single : { success: true, ...single });
   },
 
   async sigma_import_spec_preset(args, context) {
