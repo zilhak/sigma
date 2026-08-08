@@ -78,6 +78,26 @@ export function assertQueryShape(query: NodeQuery, where = 'where'): void {
     if (typeof check.field !== 'string' || check.field === '') {
       throw new QueryShapeError(`${where}.checks 의 항목에 field 가 없습니다.`);
     }
+    // 연산자별 필수 인자. ⚠️ 없으면 **전건 매칭으로 조용히 무너진다** — 특히 regex 는
+    // 배경: docs/history/016-regex-check-without-pattern-matched-everything.md
+    // `new RegExp('')` 이 어떤 문자열에나 맞아서, 빠진 것을 결과만 보고는 알 수 없다.
+    // 실사고: `{op:'regex', field:'characters', value:'…'}` 로 불렀다(진짜 키는 pattern).
+    // `value` 는 equals 의 키라 「모르는 키」 검사에도 안 걸려, 서로 다른 패턴 셋이
+    // 전부 같은 1047건을 돌려줬다. 조건 검색은 틀렸을 때 0건이 아니라 전건으로 실패한다.
+    const missing =
+      check.op === 'regex' ? (typeof check.pattern === 'string' && check.pattern !== '' ? null : 'pattern')
+      : check.op === 'oneOf' ? (Array.isArray(check.values) ? null : 'values')
+      : check.op === 'equals' ? (check.value !== undefined ? null : 'value')
+      : check.op === 'range' ? (check.min !== undefined || check.max !== undefined ? null : 'min 이나 max')
+      : null;
+    if (missing) {
+      throw new QueryShapeError(
+        `${where}.checks 의 op "${check.op}" 에 ${missing} 가 없습니다 — 이대로면 조건이 사라져 **전건**이 매칭됩니다.` +
+        (check.op === 'regex' && check.value !== undefined
+          ? ' regex 의 패턴은 value 가 아니라 pattern 에 넣습니다(예: { op: "regex", field: "characters", pattern: "^tbl_" }).'
+          : '')
+      );
+    }
   }
 }
 

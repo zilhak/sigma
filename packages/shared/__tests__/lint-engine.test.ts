@@ -977,6 +977,31 @@ describe('json-rule.ts — queryNodes (조건 검색, lint 와 같은 부품 재
     expect(() => queryNodes(nodes, { checks: [{ op: 'equals', value: 'x' }] } as unknown as NodeQuery)).toThrow(/field/);
   });
 
+  // 실사고 — `{op:'regex', field:'characters', value:'…'}` 로 불렀다(진짜 키는 pattern).
+  // `value` 는 equals 의 키라 「모르는 키」 검사에 안 걸렸고, pattern 이 없어 `new RegExp('')`
+  // 이 되면서 **서로 다른 패턴 셋이 전부 같은 전건**(1047개)을 돌려줬다. 결과만 보고는 모른다.
+  test('연산자별 필수 인자가 없으면 거부 (전건 매칭으로 무너지지 않게)', () => {
+    expect(() => queryNodes(nodes, { checks: [{ op: 'regex', field: 'name', value: '^a' }] } as unknown as NodeQuery))
+      .toThrow(/pattern 에 넣습니다/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'regex', field: 'name' }] } as unknown as NodeQuery))
+      .toThrow(/pattern 가 없습니다/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'regex', field: 'name', pattern: '' }] } as unknown as NodeQuery))
+      .toThrow(/pattern 가 없습니다/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'oneOf', field: 'type' }] } as unknown as NodeQuery))
+      .toThrow(/values 가 없습니다/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'equals', field: 'name' }] } as unknown as NodeQuery))
+      .toThrow(/value 가 없습니다/);
+    expect(() => queryNodes(nodes, { checks: [{ op: 'range', field: 'width' }] } as unknown as NodeQuery))
+      .toThrow(/min 이나 max 가 없습니다/);
+  });
+
+  // 대조군 — 제대로 준 regex 는 그대로 걸러야 한다(위 거부가 과하게 먹지 않는지).
+  test('regex 는 pattern 으로 정상 동작', () => {
+    expect(queryNodes(nodes, { checks: [{ op: 'regex', field: 'name', pattern: '^zzzz$' }] })).toHaveLength(0);
+    expect(queryNodes(nodes, { checks: [{ op: 'regex', field: 'name', pattern: '.' }] }).length)
+      .toBe(nodes.length);
+  });
+
   test('없는 필드는 매칭 실패로 처리 (range/equals)', () => {
     expect(queryNodes(nodes, { checks: [{ op: 'range', field: 'opacity', min: 0.5 }] })).toHaveLength(0);
     expect(queryNodes(nodes, { checks: [{ op: 'equals', field: 'layoutMode', value: 'NONE' }] }).map((n) => n.id))
