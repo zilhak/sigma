@@ -9,7 +9,7 @@
 import type { TreeNode } from '@sigma/shared';
 import { isEnabled, type LintConfig } from '@sigma/shared/lint';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
-import { extractNodesInfo, type NodeInfoLike } from './enrich.js';
+import { fetchNodesInfoBatched, type NodeInfoLike } from './enrich.js';
 import { listComponentSpecs } from '../storage/component-specs.js';
 
 /**
@@ -191,7 +191,9 @@ export async function collectInstanceComponentNames(
 
   let infos: NodeInfoLike[] = [];
   try {
-    infos = extractNodesInfo(await wsServer.command('GET_NODES_INFO', { nodeIds: candidates }, { pluginId }));
+    // 배치 필수 — 한 번에 다 보내면 응답이 절벽(~18MB)을 넘겨 플러그인이 죽는다.
+    // 배경: docs/history/012-nodes-info-asked-for-a-whole-page-and-killed-the-plugin.md
+    infos = await fetchNodesInfoBatched(candidates, wsServer, pluginId);
   } catch {
     return empty; // 조회 실패 시 판정 없이 진행(안전 기본값)
   }

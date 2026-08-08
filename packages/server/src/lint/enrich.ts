@@ -127,6 +127,46 @@ export function extractNodesInfo(raw: unknown): NodeInfoLike[] {
 }
 
 /**
+ * 한 왕복에 담는 nodeIds 상한.
+ *
+ * ⛔ 이 상한이 없으면 **플러그인이 죽는다.** 페이지 전 노드를 한 번에 요청하면 응답이
+ * ~18MB 부근에서 Figma 플러그인을 무너뜨리고, 재연결하면서 pluginId 가 바뀌어
+ * 같은 파일에서 작업 중인 다른 에이전트의 바인딩까지 끊긴다.
+ *
+ * 4,000 = 실측 2.5MB/2.5s — 절벽(~18.4MB)의 1/7 지점이라 여유가 크다.
+ * **올리거나 없애지 말 것.** 타임아웃을 늘리는 것으로 대체되지도 않는다(시간 문제가 아니다).
+ *
+ * 배경: docs/history/012-nodes-info-asked-for-a-whole-page-and-killed-the-plugin.md
+ */
+const NODES_INFO_BATCH = 4000;
+
+/**
+ * GET_NODES_INFO 를 배치로 나눠 부른다.
+ *
+ * **순차 실행이다 — 병렬(`Promise.all`)로 바꾸지 말 것.** 왕복 수는 같지만 플러그인이 동시에
+ * 여러 응답을 만들어 합산 크기가 위 절벽을 넘는다. 느려서 for 루프인 게 아니라 일부러다.
+ *
+ * 배경: docs/history/012-nodes-info-asked-for-a-whole-page-and-killed-the-plugin.md
+ */
+export async function fetchNodesInfoBatched(
+  nodeIds: string[],
+  wsServer: FigmaWebSocketServer,
+  pluginId: string | undefined,
+): Promise<NodeInfoLike[]> {
+  const out: NodeInfoLike[] = [];
+  for (let i = 0; i < nodeIds.length; i += NODES_INFO_BATCH) {
+    const batch = nodeIds.slice(i, i + NODES_INFO_BATCH);
+    const raw = await wsServer.command('GET_NODES_INFO', { nodeIds: batch }, {
+      pluginId,
+      timeoutMs: 60000,
+      logSuffix: ` (${batch.length} nodes, ${i / NODES_INFO_BATCH + 1}/${Math.ceil(nodeIds.length / NODES_INFO_BATCH)})`,
+    });
+    out.push(...extractNodesInfo(raw));
+  }
+  return out;
+}
+
+/**
  * 상세 조회(GET_NODES_INFO) 왕복은 **그것을 요구하는 규칙이 켜졌을 때만** 한다.
  * 켜진 게 하나도 없으면 null 을 돌려주고 호출부는 TreeNode 만으로 진행한다(왕복 0).
  */
@@ -147,6 +187,5 @@ export async function enrichIfNeeded(
   if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont && !needsMarkerGap) return null;
 
   const nodeIds = collectNodeIds(roots);
-  const nodesInfoRaw = await wsServer.command('GET_NODES_INFO', { nodeIds }, { pluginId });
-  return buildLintNodes(roots, extractNodesInfo(nodesInfoRaw), annotationLayerIds);
+  return buildLintNodes(roots, await fetchNodesInfoBatched(nodeIds, wsServer, pluginId), annotationLayerIds);
 }

@@ -2,7 +2,7 @@ import type { ComponentSpecRecord, ExtractedNode } from '@sigma/shared';
 import type { TreeNode } from '@sigma/shared';
 import { queryNodes, type NodeQuery } from '@sigma/shared/lint';
 import { resolveSpec } from '../spec-resolve.js';
-import { buildLintNodes, collectNodeIds, type NodeInfoLike } from '../../lint/enrich.js';
+import { buildLintNodes, collectNodeIds, fetchNodesInfoBatched, type NodeInfoLike } from '../../lint/enrich.js';
 import * as storage from '../../storage/index.js';
 import { tokenStore } from '../../auth/token.js';
 import {
@@ -298,8 +298,10 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
         const scannedNodes = (tree as { totalCount?: number }).totalCount;
 
         // 기본 필드만 쓰는 조건이면 트리 하나로 끝난다(왕복 없음).
+        // 배치 필수 — 페이지 전 노드를 한 번에 요청하면 응답 절벽(~18MB)에서 플러그인이 죽는다.
+        // 배경: docs/history/012-nodes-info-asked-for-a-whole-page-and-killed-the-plugin.md
         const nodesInfo = queryNeedsNodeInfo(where)
-          ? asNodesInfoArray(await wsServer.command('GET_NODES_INFO', { nodeIds: collectNodeIds(roots) }, { pluginId }))
+          ? await fetchNodesInfoBatched(collectNodeIds(roots), wsServer, pluginId)
           : [];
         const { nodes } = buildLintNodes(roots, nodesInfo);
 
@@ -1748,8 +1750,13 @@ export const figmaHandlers: Record<string, (args: Record<string, unknown>, conte
 
     const { pluginId } = access;
     try {
-      const result = await wsServer.command('GET_NODES_INFO', { nodeIds: args.nodeIds as string[] }, { pluginId });
-      return jsonResponse(result);
+      // 배치 필수 — 한 번에 다 보내면 응답이 절벽(~18MB)을 넘겨 플러그인이 죽는다.
+      // 배경: docs/history/012-nodes-info-asked-for-a-whole-page-and-killed-the-plugin.md
+      // 이 도구는 호출자가 nodeIds 를 그대로 넘기므로 상한이 없으면 그대로 사고가 된다.
+      // 응답 형태는 플러그인 원본({total, succeeded, nodes})을 그대로 유지한다.
+      const nodes = await fetchNodesInfoBatched(args.nodeIds as string[], wsServer, pluginId);
+      const succeeded = nodes.filter((n) => !n.error).length;
+      return jsonResponse({ total: nodes.length, succeeded, nodes });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return jsonResponse({ error: errorMessage });
