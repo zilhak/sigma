@@ -637,7 +637,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
       }
 
       try {
-        const result = findNodeWithDetails(findPath, msg.typeFilter as string | undefined, msg.pageId as string | undefined);
+        const result = await findNodeWithDetails(findPath, msg.typeFilter as string | undefined, msg.pageId as string | undefined);
         sendResult('find-node-result', result);
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -648,7 +648,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
 
     case 'get-tree': {
       try {
-        const result = getTreeWithFilter({
+        const result = await getTreeWithFilter({
           nodeId: msg.nodeId as string | undefined,
           path: msg.path as string | string[] | undefined,
           depth: msg.depth as number | string | undefined,
@@ -659,6 +659,7 @@ figma.ui.onmessage = async (msg: { type: string; [key: string]: unknown }) => {
           pageId: msg.pageId as string | undefined,
           fields: msg.fields as 'all' | 'geometry' | undefined,
           includeAbsolute: msg.includeAbsolute as boolean | undefined,
+          budgetMs: msg.budgetMs as number | undefined,
         });
         figma.ui.postMessage({
           type: 'tree-result',

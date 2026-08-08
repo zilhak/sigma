@@ -295,6 +295,9 @@ export interface GetTreeResult {
   children: TreeNode[];
   /** limit에 의해 결과가 잘렸는지 */
   truncated?: boolean;
+  /** 순회 예산(budgetMs)을 넘겨 중단됐다 — 결과는 부분이다.
+   *  배경: docs/history/015-big-page-lint-killed-the-plugin.md */
+  timedOut?: boolean;
   /** 총 탐색된 노드 수 (keep 모드에선 **매칭 노드만** — 뼈대는 skeletonCount 로 따로 센다) */
   totalCount?: number;
   /** keep 모드에서 경로를 보여주려고 남긴 비매칭 조상 수 */

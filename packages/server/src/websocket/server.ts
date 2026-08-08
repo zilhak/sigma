@@ -728,8 +728,15 @@ export class FigmaWebSocketServer {
     truncated?: boolean;
     totalCount?: number;
     skeletonCount?: number;
+    /** 플러그인이 순회 예산을 넘겨 부분 결과를 돌려줬다. 배경: docs/history/015-….md */
+    timedOut?: boolean;
   }> {
+    // 플러그인 예산은 서버 타임아웃보다 **짧아야** 한다. 그래야 플러그인이 스스로 멈추고
+    // 부분 결과를 보내며, 서버가 먼저 포기해 플러그인만 계속 도는 상태가 안 생긴다.
+    // 그 상태가 정확히 Figma 가 플러그인을 죽이던 조건이었다.
+    const wsTimeout = options.timeoutMs !== undefined ? options.timeoutMs : 60000;
     return this.sendCommand('GET_TREE', {
+      budgetMs: Math.max(1000, wsTimeout - 5000),
       nodeId: options.nodeId,
       path: options.path,
       depth: options.depth,
@@ -742,7 +749,7 @@ export class FigmaWebSocketServer {
       includeAbsolute: options.includeAbsolute,
     }, {
       pluginId,
-      timeoutMs: options.timeoutMs ?? 60000,  // 60초 기본 (트리가 클 수 있음). 호출자가 override 가능.
+      timeoutMs: wsTimeout,  // 60초 기본 (트리가 클 수 있음). 호출자가 override 가능.
       logSuffix: ` (depth: ${options.depth || 1})`,
     });
   }

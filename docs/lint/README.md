@@ -66,6 +66,12 @@ Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기
   false-clean). 순회는 `treeTimeoutMs`(기본 **60000**)로도 끊긴다. 상한에 걸리면 응답에
   `scanTruncated: true` · `scannedNodes` · `scanWarning`을 싣고 **`clean`을 false로 강제**한다.
   이때는 `treeNodeLimit`을 올리거나 `nodeId` 스코프로 섹션별로 나눠 재검사한다.
+- **순회는 주기적으로 Figma 메인 스레드를 양보하고, 시간 예산을 넘기면 부분 결과로 끝낸다.**
+  예전엔 큰 페이지 전수 순회가 스레드를 통째로 점유해 **Figma 가 플러그인을 죽였고**, 그 뒤
+  pluginId 가 계속 바뀌며 같은 파일에서 작업하던 다른 에이전트까지 끊겼다. 예산을 넘기면
+  `scanTimedOut: true` · `scanWarning`을 싣고 **`clean`을 false로 강제**한다(`scanTruncated`와 같은 취급).
+  `treeTimeoutMs`로 예산을 올릴 수 있다. 배경:
+  [`docs/history/015-big-page-lint-killed-the-plugin.md`](../history/015-big-page-lint-killed-the-plugin.md).
 - **0건은 그 자체로 해석되지 않는다 — `coverage`와 `byRule`을 함께 본다.** 응답은 항상
   "무엇을 몇 개 노드에 대해 검사했는가"를 싣는다(옵션이 아니다). 규칙 하나만 궁금할 때
   **총계(`violationCount`)가 아니라 `byRule[id]`를 본다** — inline config가 기본 규칙을 끄지

@@ -88,16 +88,66 @@ export interface SerializeContext {
    * 항상 실으면 큰 페이지에서 payload 만 커지므로, **필요한 호출만** 켜서 값을 치른다.
    */
   includeAbsolute?: boolean;
+  /**
+   * 순회 예산. 큰 페이지의 전수 순회가 **Figma 메인 스레드를 오래 점유**하면 Figma 가
+   * 플러그인을 죽이고 재시작한다 — 실측으로 그 뒤 pluginId 가 1분 간격으로 계속 바뀌며
+   * 같은 파일에서 작업하던 다른 에이전트까지 함께 끊겼다. 그래서 주기적으로 스레드를
+   * 양보하고(`yieldControl`), 예산을 넘기면 **죽는 대신 부분 결과를 돌려준다.**
+   * 배경: docs/history/015-big-page-lint-killed-the-plugin.md
+   */
+  budget?: TraversalBudget;
+}
+
+/** 예산 추적 — 방문 수로 양보 시점을, 시각으로 중단 시점을 정한다. */
+export interface TraversalBudget {
+  /** 이 시각(Date.now 기준)을 넘기면 순회를 멈춘다. undefined 면 무제한 */
+  deadline?: number;
+  /** 마지막 양보 이후 방문한 노드 수 */
+  sinceYield: number;
+  /** 예산 초과로 중단됐는가 */
+  timedOut: boolean;
+}
+
+/** 이 수만큼 방문할 때마다 메인 스레드를 놓아준다. */
+const YIELD_EVERY = 2000;
+
+export function createBudget(budgetMs?: number): TraversalBudget {
+  return {
+    deadline: typeof budgetMs === 'number' && budgetMs > 0 ? Date.now() + budgetMs : undefined,
+    sinceYield: 0,
+    timedOut: false,
+  };
+}
+
+/**
+ * 방문 1건을 기록하고, 필요하면 메인 스레드를 양보한다.
+ * 반환값 false = 예산 소진, 호출자는 즉시 멈춰야 한다.
+ */
+async function tick(budget: TraversalBudget | undefined): Promise<boolean> {
+  if (!budget) return true;
+  if (budget.timedOut) return false;
+  budget.sinceYield++;
+  if (budget.sinceYield < YIELD_EVERY) return true;
+  budget.sinceYield = 0;
+  // setTimeout(0) 은 Figma 플러그인 런타임에서 제공된다. 이 한 줄이 "플러그인이 죽는다"와
+  // "느리지만 끝난다"를 가른다 — 매크로태스크로 넘겨야 호스트가 하트비트를 처리할 수 있다.
+  await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+  if (budget.deadline !== undefined && Date.now() > budget.deadline) {
+    budget.timedOut = true;
+    return false;
+  }
+  return true;
 }
 
 /**
  * SceneNode를 TreeNode로 직렬화
  */
-export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeNode | null {
+export async function serializeTreeNode(node: SceneNode, ctx: SerializeContext): Promise<TreeNode | null> {
   // limit 체크
   if (ctx.limit !== undefined && ctx.nodeCount.value >= ctx.limit) {
     return null;
   }
+  if (!(await tick(ctx.budget))) return null;
 
   // omit: 매칭하면 서브트리째 제외 (블랙리스트 prune)
   if (ctx.omit && matchesSelector(node, ctx.omit)) return null;
@@ -140,7 +190,7 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
       childCount,
     };
     if (abs) geoNode.absolute = { x: abs.x, y: abs.y };
-    attachChildren(node, geoNode, ctx, fullPath, hasChildren);
+    await attachChildren(node, geoNode, ctx, fullPath, hasChildren);
     return finalizeKeep(geoNode, keepMatched, ctx);
   }
 
@@ -202,7 +252,7 @@ export function serializeTreeNode(node: SceneNode, ctx: SerializeContext): TreeN
     if (abs) treeNode.absolute = { x: abs.x, y: abs.y };
   }
 
-  attachChildren(node, treeNode, ctx, fullPath, hasChildren);
+  await attachChildren(node, treeNode, ctx, fullPath, hasChildren);
 
   return finalizeKeep(treeNode, keepMatched, ctx);
 }
@@ -233,13 +283,13 @@ function finalizeKeep(treeNode: TreeNode, keepMatched: boolean, ctx: SerializeCo
 }
 
 /** depth 가 허용하면 자식을 직렬화해 treeNode.children 에 붙인다(limit 공유). */
-function attachChildren(
+async function attachChildren(
   node: SceneNode,
   treeNode: TreeNode,
   ctx: SerializeContext,
   fullPath: string,
   hasChildren: boolean,
-): void {
+): Promise<void> {
   const shouldTraverseChildren = ctx.maxDepth === -1 || ctx.currentDepth < ctx.maxDepth;
   if (!hasChildren || !shouldTraverseChildren) return;
 
@@ -251,7 +301,8 @@ function attachChildren(
       break;
     }
 
-    const serializedChild = serializeTreeNode(child, {
+    if (ctx.budget && ctx.budget.timedOut) break;
+    const serializedChild = await serializeTreeNode(child, {
       ...ctx,
       currentDepth: ctx.currentDepth + 1,
       parentPath: fullPath,
@@ -306,11 +357,11 @@ export function resolvePaths(
 /**
  * 경로 또는 타입 필터로 노드를 찾아 직렬화된 결과 반환
  */
-export function findNodeWithDetails(
+export async function findNodeWithDetails(
   path: string | string[],
   typeFilter?: string,
   pageId?: string
-): FindNodeResult {
+): Promise<FindNodeResult> {
   const page = pageId ? getPageById(pageId) : undefined;
   const foundNodes = findNodesByPath(path, null, page || undefined);
 
@@ -332,7 +383,7 @@ export function findNodeWithDetails(
   // 찾은 노드들을 직렬화 (자식은 포함하지 않음, depth=0)
   const serializedNodes: TreeNode[] = [];
   for (const node of filteredNodes) {
-    const serialized = serializeTreeNode(node, {
+    const serialized = await serializeTreeNode(node, {
       currentDepth: 0,
       maxDepth: 0,
       nodeCount: { value: 0 },
@@ -358,7 +409,7 @@ export function findNodeWithDetails(
 /**
  * 트리 구조를 필터와 함께 조회
  */
-export function getTreeWithFilter(options: {
+export async function getTreeWithFilter(options: {
   nodeId?: string;
   path?: string | string[];
   depth?: number | string;
@@ -370,7 +421,9 @@ export function getTreeWithFilter(options: {
   fields?: TreeFields;
   /** 'all' 모드에서도 절대좌표를 싣는다(컨테이너를 넘나드는 거리 계산용). */
   includeAbsolute?: boolean;
-}): GetTreeResult {
+  /** 순회 예산(ms). 넘기면 죽는 대신 부분 결과 + timedOut 을 돌려준다. */
+  budgetMs?: number;
+}): Promise<GetTreeResult> {
   // filter(레거시 화이트리스트 prune)와 omit/keep 은 의미가 겹쳐 섞으면 결과를 예측할 수 없다.
   // 조용히 한쪽을 무시하면 "인자를 줬는데 아무 일도 안 일어남" 계열이 되므로 거부한다.
   if (options.filter && (options.omit || options.keep)) {
@@ -419,6 +472,7 @@ export function getTreeWithFilter(options: {
   const skeletonCount = { value: 0 };
   const children: TreeNode[] = [];
   const effectiveLimit = options.limit !== undefined ? options.limit : 1000;  // 기본 limit 1000
+  const budget = createBudget(options.budgetMs);
 
   // 탐색 대상 결정
   const targetChildren: readonly SceneNode[] = startNode && 'children' in startNode
@@ -428,7 +482,8 @@ export function getTreeWithFilter(options: {
   for (const child of targetChildren) {
     if (nodeCount.value >= effectiveLimit) break;
 
-    const serialized = serializeTreeNode(child, {
+    if (budget.timedOut) break;
+    const serialized = await serializeTreeNode(child, {
       currentDepth: 0,
       maxDepth,
       filter: options.filter,
@@ -440,6 +495,7 @@ export function getTreeWithFilter(options: {
       parentPath: rootPath || '',
       fields: options.fields,
       includeAbsolute: options.includeAbsolute,
+      budget,
     });
 
     if (serialized) {
@@ -469,6 +525,8 @@ export function getTreeWithFilter(options: {
     children,
     truncated: nodeCount.value >= effectiveLimit,
     totalCount: nodeCount.value,
+    // 예산 소진으로 중단됐으면 결과는 부분이다 — 호출자가 "다 봤다"로 읽으면 안 된다.
+    ...(budget.timedOut ? { timedOut: true } : {}),
     // keep 을 쓴 호출만 — 매칭 노드(totalCount)와 경로 유지용 뼈대를 구분해 준다.
     ...(options.keep ? { skeletonCount: skeletonCount.value } : {}),
   };

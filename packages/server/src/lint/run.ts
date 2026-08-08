@@ -228,11 +228,18 @@ export async function runPageLint(
           configWarning: `이 페이지의 저장된 lint config 를 읽지 못해 ${resolved.source} 로 폴백했습니다 — 그 페이지 전용 규칙(커스텀·opt-in)은 실행되지 않았으므로 "clean" 은 폴백 config 한정입니다. coverage 로 무엇이 돌았는지 확인하세요.` }
       : {}),
     // 트리가 상한에서 잘렸으면 clean 은 신뢰불가(뒤쪽 미검사) — 절대 조용히 clean 으로 보고하지 않는다.
+    // 플러그인이 순회 예산을 넘겨 스스로 멈춘 경우 — 상한(limit)에 걸린 것과 원인은 다르지만
+    // 결과의 성질은 같다(부분 스캔). 그래서 같은 방식으로 clean 을 막고 사유를 구분해 싣는다.
+    // 배경: docs/history/015-big-page-lint-killed-the-plugin.md
+    ...(tree.timedOut
+      ? { scanTimedOut: true, scannedNodes: tree.totalCount,
+          scanWarning: `플러그인 순회가 시간 예산을 넘겨 중단됐습니다(스캔 ${tree.totalCount ?? 0} 노드) — 결과는 부분입니다. treeTimeoutMs 를 올리거나 nodeId/path 로 섹션별로 나눠 돌리세요.` }
+      : {}),
     ...(tree.truncated
       ? { scanTruncated: true, scannedNodes: tree.totalCount, treeNodeLimit: treeLimit,
           scanWarning: `트리가 상한 ${treeLimit} 노드에서 잘려 뒤쪽이 미검사입니다("clean" 은 스캔된 범위 한정). treeNodeLimit 인자로 상한을 올리거나, nodeId 스코프로 섹션별로 나눠 돌리세요.` }
       : {}),
-    clean: violations.length === 0 && !tree.truncated && !resolved.error,
+    clean: violations.length === 0 && !tree.truncated && !tree.timedOut && !resolved.error,
     violationCount: violations.length,
     ...(suppressedCount ? { suppressed: suppressedCount } : {}),
     // 0건이 "깨끗함" 인지 "규칙이 안 돌았음" 인지는 violations 만 봐서는 알 수 없다.
