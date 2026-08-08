@@ -30,12 +30,20 @@ export const lintHandlers: Record<string, (args: Record<string, unknown>, contex
       ? args.configMode : 'merge') as ConfigMode;
 
     const baseResolved = await resolveBaseConfig(args, wsServer, pluginId);
+    // config 가 있는데 못 읽은 것은 configMode 와 무관하게 에러다. 예전엔 uniform 에서만 막아서,
+    // 기본 merge 로는 오타 든 config 가 "config 없음"으로 격하돼 clean:true 가 나왔다 —
+    // 호출자는 자기 설정이 먹은 줄 알고 그 결과를 믿는다.
+    // 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
+    if (baseResolved.error) {
+      return jsonResponse({
+        error: `base config 를 로드할 수 없습니다 (${baseResolved.label}): ${baseResolved.error}`,
+        configSource: baseResolved.label,
+      });
+    }
     // uniform 은 base 필수. per-page/merge 는 base 없어도 페이지 저장 config 로 동작 가능.
     if (configMode === 'uniform' && !baseResolved.config) {
       return jsonResponse({
-        error: baseResolved.error
-          ? `base config 를 로드할 수 없습니다: ${baseResolved.error}`
-          : 'config 가 필요합니다 — inline `config` 객체, `configPath` 파일, 또는 문서 저장 lint config 중 하나.',
+        error: 'config 가 필요합니다 — inline `config` 객체, `configPath` 파일, 또는 문서 저장 lint config 중 하나.',
       });
     }
     const baseConfig = baseResolved.config;

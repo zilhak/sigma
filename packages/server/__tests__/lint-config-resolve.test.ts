@@ -8,6 +8,8 @@
 import { describe, test, expect } from 'bun:test';
 import { mergeConfigs, resolvePageConfig, readStoredConfig } from '../src/lint/resolve-config';
 import { validateLintConfigShape, LintConfigError } from '../src/lint/load-config';
+import { lintHandlers } from '../src/mcp/handlers/lint';
+import { tokenStore } from '../src/auth/token';
 import { renderReportMarkdown, type PageLintResult } from '../src/lint/report';
 import type { Violation } from '@sigma/shared/lint';
 
@@ -250,5 +252,46 @@ describe('validateLintConfigShape — 오타 거부', () => {
 
   test('규칙 값이 객체가 아니면 거부한다', () => {
     expect(() => validateLintConfigShape({ builtins: { hidden_leaf: false } }, 'x')).toThrow(LintConfigError);
+  });
+});
+
+/**
+ * base config 로드 실패는 configMode 와 무관하게 에러여야 한다.
+ * 예전엔 uniform 에서만 막아서, 기본 merge 로는 오타 든 config 가 "config 없음" 으로 격하돼
+ * `clean:true` 가 나왔다 — 오타를 거부해 놓고 그 사실을 응답에서 지우는 꼴이었다.
+ * 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
+ */
+describe('sigma_lint — base config 로드 실패 전파', () => {
+  const ctx = {
+    wsServer: {
+      isFigmaConnected: () => true,
+      getPluginById: () => ({ pluginId: 'p1' }),
+      async getPageData() { return { value: null }; },
+      async command() { return {}; },
+    },
+  } as never;
+
+  async function run(args: Record<string, unknown>) {
+    const token = tokenStore.createToken();
+    tokenStore.bindToken(token, 'p1', 'page1', 'f.fig', 'Page');
+    const res = await lintHandlers.sigma_lint({ token, ...args }, ctx) as { content: Array<{ text: string }> };
+    return JSON.parse(res.content[0].text);
+  }
+
+  test('기본 모드(merge)에서도 오타 config 는 에러다 — clean 으로 넘어가지 않는다', async () => {
+    const r = await run({ config: { rules: {} } });
+    expect(r.error).toContain('base config 를 로드할 수 없습니다');
+    expect(r.error).toContain('"rules"');
+    expect(r.clean).toBeUndefined();
+  });
+
+  test('규칙 id 오타도 같다', async () => {
+    const r = await run({ config: { builtins: { child_overflowss: { enabled: false } } }, configMode: 'merge' });
+    expect(r.error).toContain('child_overflowss');
+  });
+
+  test('파라미터 오타도 같다', async () => {
+    const r = await run({ config: { builtins: { frame_padding: { paddin: 30 } } }, configMode: 'per-page' });
+    expect(r.error).toContain('"paddin"');
   });
 });
