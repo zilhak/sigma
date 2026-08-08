@@ -14,6 +14,9 @@
  */
 
 export interface SpecNamingRule {
+  /** 사람이 읽는 메모. 검증만 통과하고 동작에는 쓰이지 않는다.
+   *  배경: docs/history/013-strict-config-left-no-room-for-notes.md */
+  $comment?: string | string[];
   /** alias 에 적용할 정규식 (예: "^table$", "^btn_") */
   aliasPattern?: string;
   /** 스펙 HTML 에 적용할 정규식 (예: "<svg" — 아이콘을 새로 그렸는지) */

@@ -295,3 +295,78 @@ describe('sigma_lint — base config 로드 실패 전파', () => {
     expect(r.error).toContain('"paddin"');
   });
 });
+
+/**
+ * `$comment` — 엄격 검증(011)이 걷어낸 "사유 메모" 자리를 JSON Schema 관례로 돌려준다.
+ * 여기서 지키는 불변식: **자리를 주되 느슨해지지 않는다.** 오타는 여전히 전부 거부돼야 한다.
+ * 배경: docs/history/013-strict-config-left-no-room-for-notes.md
+ */
+describe('validateLintConfigShape — $comment', () => {
+  test('최상위·규칙·custom·componentSpec.warn 네 자리 모두에서 허용된다', () => {
+    expect(() => validateLintConfigShape({
+      $comment: '이 파일 전용 config',
+      builtins: { fully_occluded_sibling: { enabled: true, $comment: '2026-08-06 재활성화 — 옛 크래시는 f811436 에서 고쳐졌다' } },
+      custom: [{ id: 'r1', select: { type: 'TEXT' }, check: { op: 'exists', field: 'characters' }, $comment: '확정 오타 블록리스트' }],
+      componentSpec: { warn: [{ aliasPattern: '^icon_', message: 'x', $comment: '아이콘 창작 금지' }] },
+    }, 'x')).not.toThrow();
+  });
+
+  test('문자열 배열도 받는다', () => {
+    expect(() => validateLintConfigShape({ $comment: ['줄1', '줄2'] }, 'x')).not.toThrow();
+  });
+
+  test('문자열이 아니면 거부한다 (조용히 통과시키지 않는다)', () => {
+    expect(() => validateLintConfigShape({ $comment: 123 }, 'x')).toThrow(/문자열/);
+    expect(() => validateLintConfigShape(
+      { builtins: { hidden_leaf: { $comment: { a: 1 } } } }, 'x',
+    )).toThrow(/문자열/);
+  });
+
+  /** positive control — 자리를 넓히다 검증이 통째로 느슨해지는 것이 이 변경의 유일한 위험이다. */
+  test('진짜 오타는 여전히 전부 거부된다', () => {
+    expect(() => validateLintConfigShape({ _note: 'x' }, 'x')).toThrow(LintConfigError);
+    expect(() => validateLintConfigShape({ builtin: {} }, 'x')).toThrow(LintConfigError);
+    expect(() => validateLintConfigShape({ builtins: { foo: {} } }, 'x')).toThrow(LintConfigError);
+    expect(() => validateLintConfigShape({ builtins: { card_overlap: { gaps: 1 } } }, 'x')).toThrow(LintConfigError);
+    // `_` 접두 전체를 허용했다면 통과했을 오타
+    expect(() => validateLintConfigShape({ builtins: { hidden_leaf: { _enabled: false } } }, 'x')).toThrow(LintConfigError);
+  });
+
+  test('거부 메시지가 "그럼 어디에 쓰나" 를 알려준다', () => {
+    expect(() => validateLintConfigShape({ _note: 'x' }, 'x')).toThrow(/\$comment/);
+    expect(() => validateLintConfigShape({ builtins: { frame_padding: { _why: 'x' } } }, 'x')).toThrow(/\$comment/);
+  });
+
+  test('$comment 는 동작에 쓰이지 않는다 — 붙은 config 와 안 붙은 config 의 병합 결과가 같다', () => {
+    const withC = validateLintConfigShape(
+      { builtins: { section_gap: { gap: 80, $comment: '메모' } } }, 'x');
+    const without = validateLintConfigShape(
+      { builtins: { section_gap: { gap: 80 } } }, 'x');
+    expect(mergeConfigs(null, withC).builtins!.section_gap!.gap)
+      .toEqual(mergeConfigs(null, without).builtins!.section_gap!.gap);
+  });
+});
+
+/**
+ * 페이지 저장 config 를 못 읽었을 때 조용히 base 로 내려앉지 않는다.
+ * 실측: 한 파일의 37페이지 중 16페이지가 이 경로로 "규칙이 하나도 안 돈 위반 0건" 을
+ * `clean:true` 로 보고했다. scanTruncated 와 같은 취급(clean 금지)으로 맞춘다.
+ * 배경: docs/history/013-strict-config-left-no-room-for-notes.md
+ */
+describe('resolvePageConfig — 저장 config 로드 실패', () => {
+  test('오타 든 저장 config 는 error 를 달고 base 로 폴백한다 (조용히 삼키지 않는다)', async () => {
+    const server = stubServer({ p1: JSON.stringify({ _note: '메모', builtins: {} }) });
+    const r = await resolvePageConfig(server, 'p1', 'merge', { builtins: {} }, undefined);
+    expect(r.source).toBe('base');
+    expect(r.error).toContain('_note');
+  });
+
+  test('$comment 로 고친 저장 config 는 정상 병합된다', async () => {
+    const server = stubServer({ p1: JSON.stringify({ $comment: '메모', builtins: { raw_node: { enabled: true } } }) });
+    const r = await resolvePageConfig(server, 'p1', 'merge', { builtins: { section_gap: { gap: 80 } } }, undefined);
+    expect(r.error).toBeUndefined();
+    expect(r.source).toBe('merged');
+    expect(r.config!.builtins!.raw_node!.enabled).toBe(true);
+    expect(r.config!.builtins!.section_gap!.gap).toBe(80);
+  });
+});

@@ -79,6 +79,9 @@ export type BuiltinRuleId =
 export interface BuiltinRuleConfig {
   /** 생략하면 기본 ON (opt-out 모델 — 8개 기하 규칙의 기존 동작을 그대로 유지하기 위함) */
   enabled?: boolean;
+  /** 사람이 읽는 메모. 검증만 통과하고 동작에는 쓰이지 않는다.
+   *  배경: docs/history/013-strict-config-left-no-room-for-notes.md */
+  $comment?: string | string[];
   [param: string]: unknown;
 }
 
@@ -99,6 +102,9 @@ export interface JsonCheck {
 
 export interface MatchRule {
   id: string;
+  /** 사람이 읽는 메모. 검증만 통과하고 동작에는 쓰이지 않는다.
+   *  배경: docs/history/013-strict-config-left-no-room-for-notes.md */
+  $comment?: string | string[];
   kind?: 'match';
   select: { type?: string; namePattern?: string };
   check: JsonCheck;
@@ -108,6 +114,9 @@ export interface MatchRule {
 
 export interface PredicateRule {
   id: string;
+  /** 사람이 읽는 메모. 검증만 통과하고 동작에는 쓰이지 않는다.
+   *  배경: docs/history/013-strict-config-left-no-room-for-notes.md */
+  $comment?: string | string[];
   kind: 'predicate';
   /** `export default function(node, ctx) { return null 또는 {message} }` 형태의 JS 소스 */
   code: string;
@@ -118,6 +127,9 @@ export interface PredicateRule {
 export type CustomRuleRecord = MatchRule | PredicateRule;
 
 export interface LintConfig {
+  /** 사람이 읽는 메모. 검증만 통과하고 동작에는 쓰이지 않는다.
+   *  배경: docs/history/013-strict-config-left-no-room-for-notes.md */
+  $comment?: string | string[];
   builtins?: BuiltinsConfig;
   custom?: CustomRuleRecord[];
   /**

@@ -176,10 +176,17 @@ export async function runPageLint(
 
   const resolved = await resolvePageConfig(wsServer, pageId || 'document', configMode, baseConfig, pluginId);
   if (!resolved.config) {
+    // config 가 "없다" 와 "있는데 못 읽었다" 는 다르다. 후자를 clean:true 로 보고하면
+    // 규칙이 하나도 안 돈 결과가 "깨끗함" 으로 읽힌다 — 실제로 한 파일의 37페이지 중
+    // 16페이지가 그 상태로 "위반 0건" 보고를 냈다.
+    // 배경: docs/history/013-strict-config-left-no-room-for-notes.md
     return {
-      clean: true, scope: nodeId || path || '(page root)', configMode,
+      clean: !resolved.error, scope: nodeId || path || '(page root)', configMode,
       skipped: 'no config', configSource: resolved.source,
-      ...(resolved.error ? { configError: resolved.error } : {}),
+      ...(resolved.error
+        ? { configError: resolved.error, configUnreadable: true,
+            configWarning: '저장된 lint config 를 읽지 못해 이 페이지는 아무 규칙도 검사하지 않았습니다 — "위반 0건" 이 아니라 "검사 안 됨" 입니다. config 를 고친 뒤 다시 돌리세요.' }
+        : {}),
       note: 'per-page 모드인데 이 페이지에 저장된 lint config 도 base 도 없어 건너뜁니다.',
     };
   }
@@ -214,13 +221,18 @@ export async function runPageLint(
       : {}),
     configMode,
     configSource: resolved.source,
-    ...(resolved.error ? { configError: resolved.error } : {}),
+    // config 를 못 읽고 base 로 폴백한 실행은 "그 페이지 규칙" 이 안 돈 것이다 —
+    // scanTruncated 와 같은 취급으로 clean 을 막는다. 배경: docs/history/013-….md
+    ...(resolved.error
+      ? { configError: resolved.error, configUnreadable: true,
+          configWarning: `이 페이지의 저장된 lint config 를 읽지 못해 ${resolved.source} 로 폴백했습니다 — 그 페이지 전용 규칙(커스텀·opt-in)은 실행되지 않았으므로 "clean" 은 폴백 config 한정입니다. coverage 로 무엇이 돌았는지 확인하세요.` }
+      : {}),
     // 트리가 상한에서 잘렸으면 clean 은 신뢰불가(뒤쪽 미검사) — 절대 조용히 clean 으로 보고하지 않는다.
     ...(tree.truncated
       ? { scanTruncated: true, scannedNodes: tree.totalCount, treeNodeLimit: treeLimit,
           scanWarning: `트리가 상한 ${treeLimit} 노드에서 잘려 뒤쪽이 미검사입니다("clean" 은 스캔된 범위 한정). treeNodeLimit 인자로 상한을 올리거나, nodeId 스코프로 섹션별로 나눠 돌리세요.` }
       : {}),
-    clean: violations.length === 0 && !tree.truncated,
+    clean: violations.length === 0 && !tree.truncated && !resolved.error,
     violationCount: violations.length,
     ...(suppressedCount ? { suppressed: suppressedCount } : {}),
     // 0건이 "깨끗함" 인지 "규칙이 안 돌았음" 인지는 violations 만 봐서는 알 수 없다.

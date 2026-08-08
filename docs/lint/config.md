@@ -15,6 +15,26 @@ base config는 아래 순서로 결정된다:
 `docker-compose.yml`에서 바인드 마운트된 `~/.sigma`(컨테이너 `/root/.sigma`, `SIGMA_DATA_DIR`로
 오버라이드 가능) 하위에 두는 것을 권장한다(예: `~/.sigma/lint-configs/my-project.json`).
 
+### 로드 실패는 조용히 넘어가지 않는다
+
+| 출처 | 실패 시 |
+|---|---|
+| inline `config` · `configPath` | **호출 자체가 에러** (`configMode` 무관). 응답에 출처 라벨이 실린다 |
+| 페이지 저장 config | base 로 **폴백하되** `configError` · `configUnreadable: true` · `configWarning` 을 싣고 **`clean` 을 false 로 강제** |
+
+폴백을 유지하는 이유는 `scope:"file"` 전 페이지 순회가 한 페이지 때문에 멈추면 안 되기 때문이고,
+`clean` 을 막는 이유는 그 페이지 전용 규칙(커스텀·opt-in)이 하나도 안 돈 결과이기 때문이다.
+`coverage.customRan` / `builtinOptInOff` 로 무엇이 빠졌는지 확인한다.
+
+## 스키마 — `$comment`
+
+네 자리(최상위 · `builtins.<rule>` · `custom[]` · `componentSpec.warn[]`)에서 `$comment` 를
+쓸 수 있다. 값은 문자열 또는 문자열 배열이며 **검증만 통과하고 동작에는 쓰이지 않는다.**
+
+`_note`·`_why` 처럼 임의로 만든 키는 오타 검사에 걸려 **거부된다.** `_` 접두를 통째로 허용하면
+`_enabled` 같은 오타가 조용히 통과하기 때문이다. 자세한 경위는
+[`docs/history/013`](../history/013-strict-config-left-no-room-for-notes.md).
+
 ## 두 개의 직교 축
 
 - **`scope`**: `page`(기본, 바인딩된 1페이지) | `file`(파일의 전 페이지 순회, read-only)

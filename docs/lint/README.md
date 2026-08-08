@@ -35,6 +35,23 @@ Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기
   왔다 — 설정이 먹은 줄 알고 "위반 0건"을 믿게 되는 가장 나쁜 형태였다.
   배경: [`docs/history/011-lint-config-typos-were-silently-ignored.md`](../history/011-lint-config-typos-were-silently-ignored.md).
   규칙에 파라미터를 추가하면 `packages/shared/src/lint/engine.ts` 의 `BUILTIN_RULE_PARAMS` 에도 넣는다.
+- **사유 메모는 `$comment` 에 둔다.** 최상위 · `builtins.<rule>` · `custom[]` · `componentSpec.warn[]`
+  어디서나 쓸 수 있고(문자열 또는 문자열 배열), **검증만 통과하며 동작에는 쓰이지 않는다.**
+  `_note`·`_why` 같은 임의 키는 위 오타 검사에 걸려 거부된다 — `_` 접두를 통째로 허용하면
+  `_enabled` 같은 오타가 되살아나기 때문이다.
+  ```jsonc
+  { "$comment": "이 파일 전용. 페이지별 노브는 page-stored config 에",
+    "builtins": { "fully_occluded_sibling": {
+      "enabled": true,
+      "$comment": "2026-08-06 재활성화 — 옛 크래시는 f811436 에서 고쳐졌다. 결함 3건 검출" } } }
+  ```
+  규칙을 **왜** 껐는지는 값 옆에 남긴다. "오탐이 많아서 껐다"는 메모에는 유효기간이 있어서,
+  숫자와 함께 적어 두지 않으면 원인이 고쳐진 뒤에도 옛 이유로 계속 꺼져 있는다.
+  배경: [`docs/history/013-strict-config-left-no-room-for-notes.md`](../history/013-strict-config-left-no-room-for-notes.md).
+- **config 를 못 읽은 실행은 `clean` 을 주장하지 않는다.** 페이지 저장 config 로드가 실패하면
+  base 로 폴백하되 `configUnreadable: true` · `configWarning` 을 싣고 **`clean` 을 false 로 강제**한다
+  (`scanTruncated` 와 같은 취급). 그 페이지 전용 규칙(커스텀·opt-in)이 하나도 안 돈 결과를
+  "위반 0건"으로 읽으면 안 되기 때문이다.
 - **빌트인 규칙은 미기재 시 기본 ON**(opt-out 모델). 기존 `sigma_layout_lint` 시절 기하 8종이
   항상 켜져 있던 동작을 보존하기 위함이다. **단 9종은 opt-in**이라 명시해야 켜진다
   ([rules/README.md](rules/README.md) 참조).

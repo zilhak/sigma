@@ -10,6 +10,33 @@ import { ALL_BUILTIN_RULE_IDS, BUILTIN_RULE_PARAMS, type LintConfig } from '@sig
 /** config 최상위에 허용되는 키. 이 밖의 키는 오타로 보고 거부한다. */
 const TOP_LEVEL_KEYS = ['builtins', 'custom', 'componentSpec'];
 
+/**
+ * 어느 깊이에서나 허용되는 메모 키(JSON Schema 관례). 검증만 통과시키고 **동작에는 일절 쓰지 않는다.**
+ *
+ * 규칙을 켜고 끈 이유를 값 옆에 적어 두는 관례가 실제로 사고를 막아 왔다 —
+ * "오탐이 많아서 껐다" 는 메모에는 유효기간이 있어서, 원인이 고쳐진 뒤에도 옛 이유로
+ * 계속 꺼져 있는 일이 반복됐다. 엄격 검증(011)이 그 메모까지 함께 걷어내는 바람에
+ * 설정과 사유가 다른 파일로 갈라졌고, 그래서 자리를 돌려준다.
+ *
+ * ⚠️ `_` 접두 전체를 허용하지 않는 이유: `_enabled` 같은 오타가 조용히 통과한다.
+ * **`$comment` 한 개만** 허용하는 것이 엄격함을 유지하면서 자리를 주는 방법이다.
+ * 배경: docs/history/013-strict-config-left-no-room-for-notes.md
+ */
+const COMMENT_KEY = '$comment';
+
+/** 거부 메시지마다 붙는 대안 안내. 우회하지 않게 "그럼 어디에 쓰나" 를 함께 준다. */
+const COMMENT_HINT = `메모는 "${COMMENT_KEY}"(문자열 또는 문자열 배열)에 두세요 — 어느 깊이에서나 허용되고 동작에는 쓰이지 않습니다.`;
+
+/** `$comment` 가 있으면 형태만 검사한다(문자열 또는 문자열 배열). */
+function checkCommentValue(value: unknown, where: string, path: string): void {
+  if (value === undefined) return;
+  const ok = typeof value === 'string'
+    || (Array.isArray(value) && value.every((v) => typeof v === 'string'));
+  if (!ok) {
+    throw new LintConfigError(`${where}.${COMMENT_KEY} 는 문자열 또는 문자열 배열이어야 합니다: ${path}`);
+  }
+}
+
 export class LintConfigError extends Error {}
 
 export async function loadLintConfig(configPath: string): Promise<LintConfig> {
@@ -50,11 +77,13 @@ function validateShape(parsed: unknown, path: string): LintConfig {
   // 모르는 키를 조용히 무시하면 "설정을 줬는데 아무 일도 안 일어남" 이 된다. 실제로
   // `{"rules":{...}}` 오타가 통과해 전 규칙 기본값으로 돌면서 응답은 성공으로 왔다.
   // 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
-  const unknownTop = Object.keys(obj).filter((k) => TOP_LEVEL_KEYS.indexOf(k) === -1);
+  checkCommentValue(obj[COMMENT_KEY], 'config', path);
+  const unknownTop = Object.keys(obj)
+    .filter((k) => k !== COMMENT_KEY && TOP_LEVEL_KEYS.indexOf(k) === -1);
   if (unknownTop.length > 0) {
     throw new LintConfigError(
       `config 최상위에 모르는 키가 있습니다: ${unknownTop.map((k) => `"${k}"`).join(', ')} — `
-      + `조용히 무시하면 설정이 반영된 것처럼 보이므로 거부합니다. 허용: ${TOP_LEVEL_KEYS.join(', ')} (${path})`
+      + `조용히 무시하면 설정이 반영된 것처럼 보이므로 거부합니다. 허용: ${TOP_LEVEL_KEYS.join(', ')} (${path}). ${COMMENT_HINT}`
     );
   }
 
@@ -94,12 +123,14 @@ function validateBuiltins(builtins: Record<string, unknown>, path: string): void
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
       throw new LintConfigError(`config.builtins.${id} 는 객체여야 합니다: ${path}`);
     }
+    checkCommentValue((value as Record<string, unknown>)[COMMENT_KEY], `config.builtins.${id}`, path);
     const accepted = BUILTIN_RULE_PARAMS[id as keyof typeof BUILTIN_RULE_PARAMS];
-    const unknown = Object.keys(value).filter((k) => k !== 'enabled' && accepted.indexOf(k) === -1);
+    const unknown = Object.keys(value)
+      .filter((k) => k !== 'enabled' && k !== COMMENT_KEY && accepted.indexOf(k) === -1);
     if (unknown.length > 0) {
       throw new LintConfigError(
         `config.builtins.${id} 가 모르는 파라미터를 받았습니다: ${unknown.map((k) => `"${k}"`).join(', ')} — `
-        + `사용 가능: ${['enabled', ...accepted].join(', ')} (${path})`
+        + `사용 가능: ${['enabled', ...accepted].join(', ')} (${path}). ${COMMENT_HINT}`
       );
     }
   }
@@ -128,6 +159,7 @@ function validateComponentSpecPolicy(value: unknown, path: string): void {
       throw new LintConfigError(`config.componentSpec.warn[${i}] 는 객체여야 합니다: ${path}`);
     }
     const e = entry as Record<string, unknown>;
+    checkCommentValue(e[COMMENT_KEY], `config.componentSpec.warn[${i}]`, path);
     // 선택 문자열 필드는 "있으면 비어 있지 않은 문자열" 로만 본다. 여기서 안 막으면 숫자·빈
     // 문자열이 통과한 뒤 policy.ts 의 new RegExp 에서야 문제가 된다(등록 시점이라 늦다).
     for (const key of ['aliasPattern', 'htmlPattern', 'unlessDescription', 'namespace'] as const) {
@@ -151,6 +183,7 @@ function validateCustomEntry(entry: unknown, index: number, path: string): void 
     throw new LintConfigError(`config.custom[${index}] 는 객체여야 합니다: ${path}`);
   }
   const e = entry as Record<string, unknown>;
+  checkCommentValue(e[COMMENT_KEY], `config.custom[${index}]`, path);
   if (typeof e.id !== 'string' || !e.id) {
     throw new LintConfigError(`config.custom[${index}].id 는 필수 문자열입니다: ${path}`);
   }
