@@ -5,7 +5,10 @@
  */
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
-import type { LintConfig } from '@sigma/shared/lint';
+import { ALL_BUILTIN_RULE_IDS, BUILTIN_RULE_PARAMS, type LintConfig } from '@sigma/shared/lint';
+
+/** config 최상위에 허용되는 키. 이 밖의 키는 오타로 보고 거부한다. */
+const TOP_LEVEL_KEYS = ['builtins', 'custom', 'componentSpec'];
 
 export class LintConfigError extends Error {}
 
@@ -44,10 +47,22 @@ function validateShape(parsed: unknown, path: string): LintConfig {
   }
   const obj = parsed as Record<string, unknown>;
 
+  // 모르는 키를 조용히 무시하면 "설정을 줬는데 아무 일도 안 일어남" 이 된다. 실제로
+  // `{"rules":{...}}` 오타가 통과해 전 규칙 기본값으로 돌면서 응답은 성공으로 왔다.
+  // 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
+  const unknownTop = Object.keys(obj).filter((k) => TOP_LEVEL_KEYS.indexOf(k) === -1);
+  if (unknownTop.length > 0) {
+    throw new LintConfigError(
+      `config 최상위에 모르는 키가 있습니다: ${unknownTop.map((k) => `"${k}"`).join(', ')} — `
+      + `조용히 무시하면 설정이 반영된 것처럼 보이므로 거부합니다. 허용: ${TOP_LEVEL_KEYS.join(', ')} (${path})`
+    );
+  }
+
   if (obj.builtins !== undefined) {
     if (typeof obj.builtins !== 'object' || obj.builtins === null || Array.isArray(obj.builtins)) {
       throw new LintConfigError(`config.builtins 는 객체여야 합니다: ${path}`);
     }
+    validateBuiltins(obj.builtins as Record<string, unknown>, path);
   }
 
   if (obj.custom !== undefined) {
@@ -60,6 +75,34 @@ function validateShape(parsed: unknown, path: string): LintConfig {
   if (obj.componentSpec !== undefined) validateComponentSpecPolicy(obj.componentSpec, path);
 
   return obj as LintConfig;
+}
+
+/**
+ * config.builtins — 규칙 id 와 규칙별 파라미터 이름을 카탈로그(`BUILTIN_RULE_PARAMS`)와 대조한다.
+ * id 오타(`child_overflowss`)든 파라미터 오타(`paddin`)든 결과는 같다 — 그 설정이 통째로
+ * 무시된 채 기본값으로 돌고, 응답은 성공으로 온다. 둘 다 여기서 막는다.
+ */
+function validateBuiltins(builtins: Record<string, unknown>, path: string): void {
+  for (const [id, value] of Object.entries(builtins)) {
+    if (ALL_BUILTIN_RULE_IDS.indexOf(id as never) === -1) {
+      throw new LintConfigError(
+        `config.builtins 에 없는 규칙 id: "${id}" — 오타를 조용히 무시하면 규칙이 안 켜진 채 "위반 0건" 으로 보입니다. `
+        + `사용 가능: ${ALL_BUILTIN_RULE_IDS.join(', ')} (${path})`
+      );
+    }
+    if (value === undefined) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new LintConfigError(`config.builtins.${id} 는 객체여야 합니다: ${path}`);
+    }
+    const accepted = BUILTIN_RULE_PARAMS[id as keyof typeof BUILTIN_RULE_PARAMS];
+    const unknown = Object.keys(value).filter((k) => k !== 'enabled' && accepted.indexOf(k) === -1);
+    if (unknown.length > 0) {
+      throw new LintConfigError(
+        `config.builtins.${id} 가 모르는 파라미터를 받았습니다: ${unknown.map((k) => `"${k}"`).join(', ')} — `
+        + `사용 가능: ${['enabled', ...accepted].join(', ')} (${path})`
+      );
+    }
+  }
 }
 
 /**

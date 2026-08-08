@@ -199,3 +199,56 @@ describe('config.componentSpec 형태검증 (스펙 등록 정책)', () => {
     expect(validateLintConfigShape({ builtins: {} }, 'test').componentSpec).toBeUndefined();
   });
 });
+
+/**
+ * config 오타 거부 — 모르는 키를 조용히 무시하면 "설정을 줬는데 아무 일도 안 일어남" 이 된다.
+ * 실측: `{"rules":{...}}` 와 `builtins.child_overflowss` 가 둘 다 통과해 전 규칙 기본값으로 돌면서
+ * 응답은 성공으로 왔다. 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
+ */
+describe('validateLintConfigShape — 오타 거부', () => {
+  test('최상위 모르는 키를 거부한다 (rules 는 builtins 의 흔한 오타)', () => {
+    expect(() => validateLintConfigShape({ rules: {} }, 'x')).toThrow(LintConfigError);
+    expect(() => validateLintConfigShape({ rules: {} }, 'x')).toThrow(/"rules"/);
+  });
+
+  test('허용된 최상위 키 셋은 그대로 통과한다', () => {
+    expect(() => validateLintConfigShape(
+      { builtins: {}, custom: [], componentSpec: {} }, 'x',
+    )).not.toThrow();
+  });
+
+  test('없는 규칙 id 를 거부하고 사용 가능한 id 를 알려준다', () => {
+    expect(() => validateLintConfigShape(
+      { builtins: { child_overflowss: { enabled: false } } }, 'x',
+    )).toThrow(/child_overflowss/);
+    expect(() => validateLintConfigShape(
+      { builtins: { child_overflowss: { enabled: false } } }, 'x',
+    )).toThrow(/child_overflow,/);
+  });
+
+  test('규칙별 모르는 파라미터를 거부하고 acceptedArgs 를 알려준다', () => {
+    expect(() => validateLintConfigShape(
+      { builtins: { frame_padding: { paddin: 30 } } }, 'x',
+    )).toThrow(/"paddin"/);
+    expect(() => validateLintConfigShape(
+      { builtins: { frame_padding: { paddin: 30 } } }, 'x',
+    )).toThrow(/enabled, padding/);
+  });
+
+  test('enabled 는 전 규칙에서 받는다', () => {
+    for (const id of ['hidden_leaf', 'card_overlap', 'font_not_default'] as const) {
+      expect(() => validateLintConfigShape({ builtins: { [id]: { enabled: true } } }, 'x')).not.toThrow();
+    }
+  });
+
+  test('올바른 파라미터는 통과한다', () => {
+    expect(() => validateLintConfigShape(
+      { builtins: { frame_padding: { padding: 30 }, section_gap: { gap: 100 }, raw_node: { enabled: true, types: ['FRAME'] } } },
+      'x',
+    )).not.toThrow();
+  });
+
+  test('규칙 값이 객체가 아니면 거부한다', () => {
+    expect(() => validateLintConfigShape({ builtins: { hidden_leaf: false } }, 'x')).toThrow(LintConfigError);
+  });
+});

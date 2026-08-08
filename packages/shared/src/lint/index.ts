@@ -34,6 +34,7 @@ export type {
 } from './types';
 export {
   ALL_BUILTIN_RULE_IDS,
+  BUILTIN_RULE_PARAMS,
   collectFixableViolations,
   mergeFixesBySection,
   runBuiltinRules,

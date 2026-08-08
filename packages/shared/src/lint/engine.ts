@@ -60,6 +60,46 @@ export const ALL_BUILTIN_RULE_IDS: BuiltinRuleId[] = [
   'fully_occluded_sibling',
 ];
 
+/**
+ * 규칙별로 받는 파라미터 이름. `enabled` 는 전 규칙 공통이라 여기 적지 않는다.
+ * config 검증(`server/src/lint/load-config.ts`)이 이 목록에 없는 키를 **거부**한다.
+ *
+ * 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
+ * 규칙에 파라미터를 추가하면 **여기에도 넣을 것** — 안 넣으면 그 파라미터를 준 config 가
+ * 거부된다(유닛테스트가 id 누락은 잡지만 키 누락은 못 잡는다).
+ */
+export const BUILTIN_RULE_PARAMS: Record<BuiltinRuleId, string[]> = {
+  // 기하 8종 — 파라미터는 lintLayout 이 두 개만 받는다(나머지는 켜고 끄기만).
+  outside_section: [],
+  section_overlap: [],
+  section_gap: ['gap'],
+  card_overlap: [],
+  frame_padding: ['padding'],
+  instance_orphan: [],
+  component_needs_frame: [],
+  child_overflow: [],
+  // 구조/이름/가시성 6종
+  stray_pixel: ['includeInsideInstances'],
+  default_name: ['includeInsideInstances', 'includeVectors'],
+  empty_container: ['includeInsideInstances'],
+  hidden_leaf: [],
+  fill_sizing_orphan: [],
+  component_description_empty: [],
+  // opt-in
+  raw_node: ['types', 'checkInsideComponent', 'exemptNamePattern'],
+  annotation_layer: [],
+  instance_default_name: [],
+  origin_anchor: ['tolerance'],
+  content_spread: ['maxGap'],
+  // sizingByAlias 는 여기 없다 — 서버가 스펙 레지스트리에서 계산해 **항상 덮어쓰므로**
+  // (server/src/lint/run.ts) 사용자가 줘도 무시된다. 받는 척하면 그게 곧 조용한 무시다.
+  instance_resized_from_spec: ['tolerance', 'growthRatio', 'smallMaster', 'flagShrink'],
+  annotation_marker_pair: ['markerAlias', 'legendAlias', 'requireHyperlink', 'symbolPattern'],
+  annotation_marker_gap: ['markerAlias', 'maxGap', 'orphanRadius', 'backgroundAreaRatio', 'minCoverRatio'],
+  font_not_default: ['family', 'allow', 'flagMixed'],
+  fully_occluded_sibling: [],
+};
+
 export function isEnabled(builtins: BuiltinsConfig, id: BuiltinRuleId): boolean {
   const cfg = builtins[id];
   return !cfg || cfg.enabled !== false;

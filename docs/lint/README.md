@@ -28,6 +28,13 @@ Figma 문서를 config 하나로 검사하는 시스템. **빌트인 24종**(기
 - **config는 매 호출 시 전달** — 서버는 config를 저장하지 않는다. Figma 파일/프로젝트마다 다른
   규칙을 쓸 수 있도록, "이 Figma 파일엔 이 config"라는 매핑을 서버가 관리하지 않고 호출자가
   매번 명시한다. 출처 3순위는 [config.md](config.md).
+- **config 의 오타는 거부된다 — 조용히 무시하지 않는다.** 최상위 키(`builtins`/`custom`/
+  `componentSpec`), 규칙 id, 규칙별 파라미터 이름을 모두 카탈로그와 대조한다. 하나라도 모르는
+  키면 에러이고 사용 가능한 이름을 함께 알려준다. 예전엔 `{"rules":{…}}`(→ `builtins` 오타)나
+  `builtins.child_overflowss` 가 그대로 통과해 **전 규칙 기본값으로 돌면서 응답은 성공**으로
+  왔다 — 설정이 먹은 줄 알고 "위반 0건"을 믿게 되는 가장 나쁜 형태였다.
+  배경: [`docs/history/011-lint-config-typos-were-silently-ignored.md`](../history/011-lint-config-typos-were-silently-ignored.md).
+  규칙에 파라미터를 추가하면 `packages/shared/src/lint/engine.ts` 의 `BUILTIN_RULE_PARAMS` 에도 넣는다.
 - **빌트인 규칙은 미기재 시 기본 ON**(opt-out 모델). 기존 `sigma_layout_lint` 시절 기하 8종이
   항상 켜져 있던 동작을 보존하기 위함이다. **단 9종은 opt-in**이라 명시해야 켜진다
   ([rules/README.md](rules/README.md) 참조).

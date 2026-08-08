@@ -7,7 +7,7 @@
  */
 import { describe, test, expect } from 'bun:test';
 import {
-  runBuiltinRules, emptyCoverage, ALL_BUILTIN_RULE_IDS, ENGINE_EXTERNAL_RULE_IDS,
+  runBuiltinRules, emptyCoverage, ALL_BUILTIN_RULE_IDS, ENGINE_EXTERNAL_RULE_IDS, BUILTIN_RULE_PARAMS,
 } from '../src/lint/engine';
 import type { BuiltinRuleId } from '../src/lint/types';
 import type { TreeNode } from '../src/types';
@@ -99,5 +99,33 @@ describe('runBuiltinRules coverage', () => {
     const withoutCov = runBuiltinRules(dirty, {}, { isPageRoot: true });
     const withCov = runBuiltinRules(dirty, {}, { isPageRoot: true }, emptyCoverage());
     expect(withCov).toEqual(withoutCov);
+  });
+});
+
+/**
+ * BUILTIN_RULE_PARAMS — config 검증(server/src/lint/load-config.ts)이 이 목록으로 오타를 거부한다.
+ * 목록이 카탈로그와 어긋나면 **멀쩡한 config 가 거부되거나 오타가 통과한다** — 둘 다 조용히 틀린다.
+ * 배경: docs/history/011-lint-config-typos-were-silently-ignored.md
+ */
+describe('BUILTIN_RULE_PARAMS', () => {
+  test('24종 전부 항목이 있다 (규칙을 추가하고 파라미터 등록을 빠뜨리면 여기서 걸린다)', () => {
+    expect(Object.keys(BUILTIN_RULE_PARAMS).sort()).toEqual([...ALL_BUILTIN_RULE_IDS].sort());
+  });
+
+  test('enabled 는 전 규칙 공통이라 목록에 넣지 않는다', () => {
+    for (const params of Object.values(BUILTIN_RULE_PARAMS)) {
+      expect(params).not.toContain('enabled');
+    }
+  });
+
+  test('엔진이 실제로 읽는 파라미터가 선언돼 있다', () => {
+    // 엔진 소스에서 읽는 키를 직접 확인한다 — 선언만 늘고 구현이 안 따라오는 것을 막는다.
+    expect(BUILTIN_RULE_PARAMS.frame_padding).toContain('padding');
+    expect(BUILTIN_RULE_PARAMS.section_gap).toContain('gap');
+    expect(BUILTIN_RULE_PARAMS.default_name).toContain('includeVectors');
+    expect(BUILTIN_RULE_PARAMS.origin_anchor).toContain('tolerance');
+    expect(BUILTIN_RULE_PARAMS.content_spread).toContain('maxGap');
+    // 서버가 항상 덮어쓰는 값은 "받는 척" 하지 않는다.
+    expect(BUILTIN_RULE_PARAMS.instance_resized_from_spec).not.toContain('sizingByAlias');
   });
 });
