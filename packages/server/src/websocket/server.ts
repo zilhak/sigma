@@ -6,6 +6,13 @@ const CHUNK_SIZE = 1024 * 1024;
 const CHUNK_THRESHOLD = 1024 * 1024; // 1MB 이상이면 청킹
 
 /**
+ * 플러그인 → 서버 수신 메시지가 이 크기를 넘으면 크기를 로그에 남긴다.
+ * 이 방향은 아직 청킹이 없어(012 「남은 것」) 통짜 한 메시지로 온다 — 절벽이 어디인지
+ * 사후에 따지려면 실제로 얼마가 왔는지가 남아 있어야 한다.
+ */
+const LARGE_MESSAGE_LOG_THRESHOLD = 1024 * 1024;
+
+/**
  * 페이지 정보
  */
 export interface PageInfo {
@@ -123,18 +130,31 @@ export class FigmaWebSocketServer {
 
     ws.on('message', (data) => {
       try {
-        const message = JSON.parse(data.toString());
+        const text = data.toString();
+        const message = JSON.parse(text);
+        // 큰 응답은 크기를 남긴다. 012 에서 `GET_NODES_INFO` 에 **개수**가 안 남아 1차 진단이
+        // 통째로 빗나갔고, 015 두 번째 사고에서는 **크기**가 안 남아 트리 응답이 몇 MB 인지를
+        // 표본에서 환산해야 했다. 절벽이 크기에 있는 이상 크기는 로그에 있어야 한다.
+        if (text.length >= LARGE_MESSAGE_LOG_THRESHOLD) {
+          const mb = (Buffer.byteLength(text, 'utf-8') / 1024 / 1024).toFixed(2);
+          console.log(`[WebSocket] Large response from ${plugin.id}: ${message.type} ${mb}MB`);
+        }
         this.handleMessage(ws, message);
       } catch (error) {
         console.error('[WebSocket] Message parse error:', error);
       }
     });
 
-    ws.on('close', () => {
+    // ⚠️ code·reason 을 반드시 받는다. 예전엔 `() => {}` 라 로그가 "Plugin disconnected" 한 줄뿐이었고,
+    // 그래서 **정상 종료(1000/1001 = Figma 가 플러그인을 내림)인지, 비정상 절단(1006)인지,
+    // 크기 위반(1009)인지 구분할 방법이 없었다.** 015 두 번째 사고를 이 한 줄이 없어서 못 닫았다.
+    ws.on('close', (code, reason) => {
       const closingPlugin = this.plugins.get(ws);
       if (closingPlugin) {
         this.pluginsById.delete(closingPlugin.id);
-        console.log(`[WebSocket] Plugin disconnected (id: ${closingPlugin.id})`);
+        const why = reason && reason.length > 0 ? `, reason: ${reason.toString()}` : '';
+        const lived = Math.round((Date.now() - closingPlugin.connectedAt.getTime()) / 1000);
+        console.log(`[WebSocket] Plugin disconnected (id: ${closingPlugin.id}, code: ${code}${why}, lived: ${lived}s)`);
       }
       this.plugins.delete(ws);
     });
