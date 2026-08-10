@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { ExtractedNode } from '@sigma/shared';
+import type { ExtractedNode, TreeNode } from '@sigma/shared';
 
 // 1MB 청크 크기
 const CHUNK_SIZE = 1024 * 1024;
@@ -743,7 +743,10 @@ export class FigmaWebSocketServer {
     pageName: string;
     rootNodeId: string | null;
     rootNodePath?: string;
-    rootNode?: { id: string; name: string; type: string; boundingBox: { x: number; y: number; width: number; height: number } };
+    rootNode?: Omit<TreeNode, 'children' | 'fullPath'>;
+    /** 시작 노드가 INSTANCE 안쪽인가 — 인스턴스 내부 면제를 시작 노드에도 걸기 위한 판정.
+     *  배경: docs/history/019-scope-root-skipped-by-name-rules.md */
+    rootNodeInsideInstance?: boolean;
     children: unknown[];
     truncated?: boolean;
     totalCount?: number;

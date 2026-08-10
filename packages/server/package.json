@@ -1,6 +1,6 @@
 {
   "name": "@sigma/server",
-  "version": "1.65",
+  "version": "1.66",
   "type": "module",
   "main": "src/index.ts",
   "bin": {

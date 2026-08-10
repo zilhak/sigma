@@ -140,6 +140,75 @@ async function tick(budget: TraversalBudget | undefined): Promise<boolean> {
 }
 
 /**
+ * 노드의 meta 정보를 만든다.
+ *
+ * ⚠️ 자식뿐 아니라 **스코프 루트(rootNode)에도 같은 것을 실어야 한다.** meta 가 없으면 그 노드를
+ * 보는 규칙이 값을 `undefined` 로 읽고, `component_description_empty` 는 "description 비어있음"
+ * 오탐을, `hidden_leaf` 는 침묵을 낸다. 그래서 인라인이 아니라 함수로 뺐다.
+ * 배경: docs/history/019-scope-root-skipped-by-name-rules.md
+ */
+function buildNodeMeta(node: SceneNode): TreeNode['meta'] {
+  const meta: TreeNode['meta'] = {
+    visible: node.visible,
+    locked: node.locked,
+  };
+
+  // 오토레이아웃 가능한 모든 타입(FRAME/COMPONENT/COMPONENT_SET/INSTANCE — BaseFrameMixin 상속)의 layoutMode.
+  // INSTANCE 누락 시 인스턴스 내부의 정상 FILL 자식이 fill_sizing_orphan 오탐으로 잡힘(실측 발견).
+  if ('layoutMode' in node) {
+    const frameNode = node as FrameNode;
+    meta.layoutMode = frameNode.layoutMode;
+  }
+
+  // TEXT의 characters
+  if (node.type === 'TEXT') {
+    const textNode = node as TextNode;
+    const chars = textNode.characters;
+    meta.characters = chars.length > 100 ? chars.slice(0, 100) + '...' : chars;
+  }
+
+  // 오토레이아웃 자식으로 참여 가능한 모든 타입(FRAME/TEXT/RECTANGLE 등 — LayoutMixin 상속)
+  if ('layoutSizingHorizontal' in node) {
+    const layoutNode = node as FrameNode;
+    meta.layoutSizingHorizontal = layoutNode.layoutSizingHorizontal;
+    meta.layoutSizingVertical = layoutNode.layoutSizingVertical;
+  }
+
+  // COMPONENT/COMPONENT_SET의 description
+  if (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') {
+    meta.description = (node as ComponentNode).description;
+  }
+
+  // 자식이 없어도 fill 로 무언가를 그리는 컨테이너가 있다(이미지 프레임이 대표적) —
+  // empty_container 가 "비어있음"을 자식 수만으로 판정하면 이런 노드를 오탐한다.
+  if ('fills' in node) {
+    const fills = (node as GeometryMixin).fills;
+    if (fills !== figma.mixed && Array.isArray(fills)) {
+      meta.hasVisibleFill = fills.some((f) => f.visible !== false && (f.opacity ?? 1) > 0);
+    }
+  }
+
+  return meta;
+}
+
+/**
+ * 이 노드가 INSTANCE **안쪽**에 있는가(자기 자신은 제외).
+ *
+ * ⚠️ lint 는 스코프 시작 노드의 **조상을 볼 수 없다**(트리에 자식만 담겨 온다). 그래서 인스턴스
+ * 내부를 면제하는 규칙(default_name·stray_pixel·empty_container)이 스코프 루트에 대해서만
+ * 면제를 못 걸고, 스펙이 만든 "Frame" 래퍼를 위반으로 올린다. 조상을 아는 것은 플러그인뿐이라
+ * 여기서 판정해 실어 보낸다. 배경: docs/history/019-scope-root-skipped-by-name-rules.md
+ */
+function isInsideInstance(node: SceneNode): boolean {
+  let current: BaseNode | null = node.parent;
+  while (current && current.type !== 'PAGE' && current.type !== 'DOCUMENT') {
+    if (current.type === 'INSTANCE') return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+/**
  * SceneNode를 TreeNode로 직렬화
  */
 export async function serializeTreeNode(node: SceneNode, ctx: SerializeContext): Promise<TreeNode | null> {
@@ -194,46 +263,7 @@ export async function serializeTreeNode(node: SceneNode, ctx: SerializeContext):
     return finalizeKeep(geoNode, keepMatched, ctx);
   }
 
-  // meta 정보 구성
-  const meta: TreeNode['meta'] = {
-    visible: node.visible,
-    locked: node.locked,
-  };
-
-  // 오토레이아웃 가능한 모든 타입(FRAME/COMPONENT/COMPONENT_SET/INSTANCE — BaseFrameMixin 상속)의 layoutMode.
-  // INSTANCE 누락 시 인스턴스 내부의 정상 FILL 자식이 fill_sizing_orphan 오탐으로 잡힘(실측 발견).
-  if ('layoutMode' in node) {
-    const frameNode = node as FrameNode;
-    meta.layoutMode = frameNode.layoutMode;
-  }
-
-  // TEXT의 characters
-  if (node.type === 'TEXT') {
-    const textNode = node as TextNode;
-    const chars = textNode.characters;
-    meta.characters = chars.length > 100 ? chars.slice(0, 100) + '...' : chars;
-  }
-
-  // 오토레이아웃 자식으로 참여 가능한 모든 타입(FRAME/TEXT/RECTANGLE 등 — LayoutMixin 상속)
-  if ('layoutSizingHorizontal' in node) {
-    const layoutNode = node as FrameNode;
-    meta.layoutSizingHorizontal = layoutNode.layoutSizingHorizontal;
-    meta.layoutSizingVertical = layoutNode.layoutSizingVertical;
-  }
-
-  // COMPONENT/COMPONENT_SET의 description
-  if (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') {
-    meta.description = (node as ComponentNode).description;
-  }
-
-  // 자식이 없어도 fill 로 무언가를 그리는 컨테이너가 있다(이미지 프레임이 대표적) —
-  // empty_container 가 "비어있음"을 자식 수만으로 판정하면 이런 노드를 오탐한다.
-  if ('fills' in node) {
-    const fills = (node as GeometryMixin).fills;
-    if (fills !== figma.mixed && Array.isArray(fills)) {
-      meta.hasVisibleFill = fills.some((f) => f.visible !== false && (f.opacity ?? 1) > 0);
-    }
-  }
+  const meta = buildNodeMeta(node);
 
   // TreeNode 구성
   const treeNode: TreeNode = {
@@ -509,6 +539,8 @@ export async function getTreeWithFilter(options: {
     rootNodeId: startNode ? startNode.id : null,
     rootNodePath: rootPath,
     // 스코프 노드 자신의 기하 정보 — lint 가 "자식이 이 컨테이너 안에 있는가"를 판정하는 데 쓴다.
+    // meta 도 자식과 같은 것을 싣는다 — 이게 없으면 스코프 루트를 보는 규칙이 값을 못 읽어
+    // component_description_empty 가 전건 오탐을 낸다. 배경: docs/history/019-scope-root-skipped-by-name-rules.md
     rootNode: startNode
       ? {
           id: startNode.id,
@@ -520,8 +552,12 @@ export async function getTreeWithFilter(options: {
             width: 'width' in startNode ? startNode.width : 0,
             height: 'height' in startNode ? startNode.height : 0,
           },
+          childCount: 'children' in startNode ? (startNode as FrameNode).children.length : 0,
+          ...(options.fields === 'geometry' ? {} : { meta: buildNodeMeta(startNode) }),
         }
       : undefined,
+    // 시작 노드의 **조상**은 트리에 없다 — 인스턴스 내부 면제를 스코프 루트에도 걸려면 이 판정이 필요하다.
+    ...(startNode && isInsideInstance(startNode) ? { rootNodeInsideInstance: true } : {}),
     children,
     truncated: nodeCount.value >= effectiveLimit,
     totalCount: nodeCount.value,

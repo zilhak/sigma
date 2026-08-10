@@ -177,7 +177,11 @@ export async function fetchNodesInfoBatched(
  */
 export function scopeRootWithChildren(scopeRoot: TreeNode | undefined, roots: TreeNode[]): TreeNode[] {
   if (!scopeRoot) return roots;
-  return [{ ...scopeRoot, childCount: roots.length, children: roots }];
+  // ⚠️ childCount 는 **플러그인이 준 실제 자식 수**를 그대로 둔다. roots 는 omit/keep/limit 으로
+  // 걸러진 뒤라, roots.length 로 덮으면 자식이 전부 걸러진 컨테이너가 `empty_container` 오탐이 된다.
+  // 구버전 플러그인은 rootNode 에 childCount 를 안 실으므로 그때만 roots.length 로 채운다.
+  const childCount = typeof scopeRoot.childCount === 'number' ? scopeRoot.childCount : roots.length;
+  return [{ ...scopeRoot, childCount, children: roots }];
 }
 
 /**

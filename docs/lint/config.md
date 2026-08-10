@@ -54,9 +54,9 @@ base config는 아래 순서로 결정된다:
 
 ## 서브트리 검사 (`nodeId` / `path`)
 
-`scope: "page"`에서 `nodeId`(또는 `path`)를 주면 **그 노드의 자식들**이 검사 대상이 된다.
-이때 **검사 시작 노드 자신이 컨테이너로 인식된다** — 서버가 `get_tree`의 `rootNode`(시작 노드의
-type·크기)를 엔진에 `scopeRoot`로 넘기기 때문이다. 그래서 서브트리 검사도 페이지 전체 검사와
+`scope: "page"`에서 `nodeId`(또는 `path`)를 주면 **그 노드와 그 자식들**이 검사 대상이 된다.
+이때 **검사 시작 노드 자신이 컨테이너로도 인식된다** — 서버가 `get_tree`의 `rootNode`(시작 노드의
+type·크기·meta)를 엔진에 `scopeRoot`로 넘기기 때문이다. 그래서 서브트리 검사도 페이지 전체 검사와
 **같은 판정**을 받는다:
 
 | 시작 노드 | 자식에 적용되는 규칙 |
@@ -65,6 +65,17 @@ type·크기)를 엔진에 `scopeRoot`로 넘기기 때문이다. 그래서 서�
 | FRAME/COMPONENT/GROUP/INSTANCE | `child_overflow` (프레임 규칙). 직속 INSTANCE는 이미 래퍼 안이므로 `instance_orphan` 아님 |
 | (없음 = 페이지 전체) | `outside_section` 포함 페이지 규칙 |
 
+- **시작 노드 자신도 검사 대상이다** — 단, **자기만 보고 판정되는 규칙**에 한한다:
+  `default_name`·`empty_container`·`stray_pixel`·`hidden_leaf`·`component_description_empty`·
+  `instance_default_name`·`annotation_layer`. 예전에는 자식만 봐서, 프레임 하나를 `nodeId`로
+  찍으면 그 프레임의 기본 이름·빈 컨테이너 상태를 놓치면서도 `byRule`에는 `0`이 실렸다
+  (= 안 돈 걸 돌았다고 보고). 배경: [`docs/history/019`](../history/019-scope-root-skipped-by-name-rules.md)
+- ⛔ **`fill_sizing_orphan`·`raw_node`는 시작 노드를 판정하지 않는다.** 둘 다 **부모/조상**을
+  봐야 하는데 시작 노드의 부모는 트리 밖이라, 넣으면 "부모 없음(루트)"·"INSTANCE 조상 없음"으로
+  잘못 읽혀 정상 노드가 위반이 된다. 이 둘로 어떤 노드를 판정하려면 **그 부모를** `nodeId`로 준다.
+- **시작 노드가 INSTANCE 안쪽이면** `default_name`·`stray_pixel`·`empty_container`·
+  `instance_default_name`은 그 노드를 건너뛴다(인스턴스 내부 면제). 조상 판정은 플러그인이
+  `rootNodeInsideInstance`로 실어 준다. 스펙 자체를 감사할 때는 규칙에 `includeInsideInstances: true`.
 - **`outside_section`은 진짜 페이지 루트에서만 돈다.** 서브트리의 자식은 "섹션 밖"이 아니라
   "그 컨테이너 안"이므로, 여기서 이 규칙을 돌리면 정상 자식이 전부 위반으로 잡힌다.
 - **페이지 루트 전용 2종**([`content_spread`](rules/content-spread.md)·[`origin_anchor`](rules/origin-anchor.md))은

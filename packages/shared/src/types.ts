@@ -289,8 +289,14 @@ export interface GetTreeResult {
   /** 탐색 시작점 경로 (path로 지정했을 때) */
   rootNodePath?: string;
   /** 탐색 시작점 노드 자신의 정보 (nodeId/path 로 스코프를 좁혔을 때만). children 은 이 노드의 자식이므로,
-   *  스코프 검사에서 "자식이 이 컨테이너 안에 있는가"를 판정하려면 이 값이 필요하다. */
-  rootNode?: { id: string; name: string; type: string; boundingBox: { x: number; y: number; width: number; height: number } };
+   *  스코프 검사에서 "자식이 이 컨테이너 안에 있는가"를 판정하려면 이 값이 필요하다.
+   *  `children` 은 담지 않는다(형제 필드로 따로 온다) — 그래서 TreeNode 자체가 아니라 이 모양이다.
+   *  ⚠️ `meta`·`childCount` 를 뺐다가 스코프 루트를 보는 규칙이 전부 오탐/침묵했다.
+   *  배경: docs/history/019-scope-root-skipped-by-name-rules.md */
+  rootNode?: Omit<TreeNode, 'children' | 'fullPath'>;
+  /** 시작 노드가 INSTANCE 안쪽인가. 조상은 트리에 담기지 않아 lint 가 스스로 알 수 없으므로
+   *  플러그인이 판정해 준다 — 인스턴스 내부를 면제하는 규칙이 시작 노드에도 면제를 걸기 위함. */
+  rootNodeInsideInstance?: boolean;
   /** 자식 노드들 */
   children: TreeNode[];
   /** limit에 의해 결과가 잘렸는지 */

@@ -156,6 +156,9 @@ export interface BuiltinRuleContext {
    *  자식이므로, 이걸 넘겨야 자식이 "페이지 직속"으로 오인되지 않고(outside_section 오탐) 컨테이너
    *  밖으로 나갔는지도 판정된다(child_overflow). 페이지 전체 검사에선 undefined. */
   scopeRoot?: TreeNode;
+  /** scopeRoot 가 INSTANCE 안쪽인가(`get_tree` 의 `rootNodeInsideInstance`). 조상은 트리 밖이라
+   *  규칙이 스스로 판정할 수 없다 — 이게 true 면 인스턴스 내부를 면제하는 규칙에서 scopeRoot 를 뺀다. */
+  scopeRootInsideInstance?: boolean;
   /** 스펙 스탬프(pluginData `sigma-spec`)가 찍힌 COMPONENT id — 그 **안쪽**은 스펙 HTML 소관이라
    *  이름·소수좌표·빈프레임 규칙에서 제외한다. 인스턴스만 제외하면 마스터 페이지에서 같은 오탐이
    *  그대로 남아(OneUI 452 · SEC 마스터 1851 등 100% COMPONENT 내부) 페이지 config 로 규칙을
@@ -175,6 +178,23 @@ export function runBuiltinRules(
 ): Violation[] {
   const out: Violation[] = [];
   const layerIds = new Set(ctx.annotationLayerIds || []);
+
+  /**
+   * **노드 자신만 보고 판정되는 규칙**이 쓰는 검사 대상. `ctx.scopeRoot` 는 이미 자식(roots)이
+   * 붙은 "시작 노드 + 서브트리 전부" 다(server 의 `scopeContainer`).
+   *
+   * ⚠️ `roots` 는 스코프 루트의 **자식들**이라, 이걸 그대로 쓰면 `nodeId` 로 찍은 노드 자신이
+   * 검사에서 빠진다. 그런데 커버리지는 "규칙이 돌았다"로 기록되므로 `byRule` 에 0 이 실려
+   * **안 돈 걸 돌았다고 보고한다**(실측: 프레임을 부모 스코프에서 재면 default_name 1건,
+   * 그 프레임 자신을 스코프로 주면 0건).
+   *
+   * ⛔ **부모/조상 문맥이 필요한 규칙에는 쓰지 않는다.** 스코프 루트의 부모는 트리 밖이라
+   * `fill_sizing_orphan` 은 "부모 없음(루트)"으로, `raw_node` 는 "INSTANCE 조상 없음"으로
+   * 잘못 읽어 정상 노드를 위반으로 만든다. 그 둘은 `roots` 를 그대로 쓴다.
+   * 배경: docs/history/019-scope-root-skipped-by-name-rules.md
+   */
+  const selfRoots = ctx.scopeRoot ? [ctx.scopeRoot] : roots;
+
   /** opt-out 규칙: 켜졌으면 ran, 껐으면 disabled */
   const markOptOut = (id: BuiltinRuleId, on: boolean) => {
     if (coverage) (on ? coverage.ran : coverage.disabled).push(id);
@@ -219,14 +239,28 @@ export function runBuiltinRules(
     includeInsideInstances: (builtins[id] as { includeInsideInstances?: boolean } | undefined)?.includeInsideInstances === true,
     specMasterIds: specMasters,
   });
-  if (markOptOut('stray_pixel', isEnabled(builtins, 'stray_pixel'))) out.push(...strayPixelRule(roots, instScope('stray_pixel')));
-  if (markOptOut('default_name', isEnabled(builtins, 'default_name'))) out.push(...defaultNameRule(roots, { ...instScope('default_name'), includeVectors: (builtins.default_name as { includeVectors?: boolean } | undefined)?.includeVectors === true }));
-  if (markOptOut('empty_container', isEnabled(builtins, 'empty_container'))) out.push(...emptyContainerRule(roots, instScope('empty_container')));
-  if (markOptOut('hidden_leaf', isEnabled(builtins, 'hidden_leaf'))) out.push(...hiddenLeafRule(roots));
+
+  /**
+   * 위 세 규칙(+instance_default_name)이 쓰는 검사 대상. 면제는 **조상**을 보고 정해지는데 스코프
+   * 루트의 조상은 트리 밖이라, 스코프 루트가 인스턴스 안쪽이면 규칙이 면제를 못 걸고 스펙이 만든
+   * "Frame" 래퍼를 그대로 위반으로 올린다(실측: 통합 기획 파일 한 페이지에 그런 노드가 7870개).
+   * 그래서 그때만 스코프 루트를 뺀다 — 조상 판정은 플러그인이 `rootNodeInsideInstance` 로 준다.
+   * `includeInsideInstances: true`(스펙 자체를 감사할 때)면 애초에 면제가 없으므로 그대로 넣는다.
+   */
+  const exemptRoots = (id: BuiltinRuleId) =>
+    ctx.scopeRootInsideInstance === true && !instScope(id).includeInsideInstances ? roots : selfRoots;
+  if (markOptOut('stray_pixel', isEnabled(builtins, 'stray_pixel'))) out.push(...strayPixelRule(exemptRoots('stray_pixel'), instScope('stray_pixel')));
+  if (markOptOut('default_name', isEnabled(builtins, 'default_name'))) out.push(...defaultNameRule(exemptRoots('default_name'), { ...instScope('default_name'), includeVectors: (builtins.default_name as { includeVectors?: boolean } | undefined)?.includeVectors === true }));
+  if (markOptOut('empty_container', isEnabled(builtins, 'empty_container'))) out.push(...emptyContainerRule(exemptRoots('empty_container'), instScope('empty_container')));
+  if (markOptOut('hidden_leaf', isEnabled(builtins, 'hidden_leaf'))) out.push(...hiddenLeafRule(selfRoots));
+  // ⛔ fill_sizing_orphan 만 roots — 부모를 봐야 판정되므로 스코프 루트를 넣으면 그 노드가
+  //    "부모 없음(루트)" 으로 읽혀 정상 FILL 노드가 위반이 된다(selfRoots 주석 참조).
   if (markOptOut('fill_sizing_orphan', isEnabled(builtins, 'fill_sizing_orphan'))) out.push(...fillSizingOrphanRule(roots));
-  if (markOptOut('component_description_empty', isEnabled(builtins, 'component_description_empty'))) out.push(...componentDescriptionEmptyRule(roots));
+  if (markOptOut('component_description_empty', isEnabled(builtins, 'component_description_empty'))) out.push(...componentDescriptionEmptyRule(selfRoots));
 
   // raw_node 만 opt-in: 미기재/enabled≠true 면 실행 안 함(다른 빌트인의 opt-out 기본 ON 과 반대).
+  // ⛔ roots — 조상에 INSTANCE/COMPONENT 가 있으면 면제하는 규칙이라, 조상이 트리 밖인
+  //    스코프 루트를 넣으면 인스턴스 안의 정상 프레임이 "raw" 로 잡힌다(selfRoots 주석 참조).
   if (markOptIn('raw_node', builtins.raw_node?.enabled === true)) out.push(...rawNodeRule(roots, builtins.raw_node as RawNodeConfig));
 
   // annotation_layer 도 opt-in: 켜진 페이지에서 모든 SECTION 은 기획 레이어를 직속 자식으로 가져야 한다.
@@ -234,12 +268,13 @@ export function runBuiltinRules(
   // scopeRoot 로 오므로, roots 만 보면 "레이어가 없어도 0건" 이 된다.
   // 배경: docs/history/017-scope-root-was-never-linted.md
   if (markOptIn('annotation_layer', builtins.annotation_layer?.enabled === true)) {
-    out.push(...annotationLayerRule(ctx.scopeRoot ? [ctx.scopeRoot] : roots, layerIds));
+    out.push(...annotationLayerRule(selfRoots, layerIds));
   }
 
   // instance_default_name 도 opt-in: 인스턴스 이름이 마스터 컴포넌트 이름 그대로면 위반.
+  // 스코프 루트가 인스턴스 안쪽이면 그건 **중첩 인스턴스**라 이 규칙의 대상이 아니다(exemptRoots).
   if (markOptIn('instance_default_name', builtins.instance_default_name?.enabled === true)) {
-    out.push(...instanceDefaultNameRule(roots, ctx.instanceComponentNames || new Map()));
+    out.push(...instanceDefaultNameRule(exemptRoots('instance_default_name'), ctx.instanceComponentNames || new Map()));
   }
 
   // 페이지 루트 전용 2종(opt-in) — 서브트리 스코프에선 좌표 기준이 달라져 아예 실행하지 않는다.

@@ -69,6 +69,8 @@ function fixesToOps(fixes: LayoutFix[]): Array<{ nodeId: string; method: string;
  * `scopeRoot` — nodeId/path 로 좁혔을 때의 시작 노드 자신(get_tree 의 rootNode). roots 는 이 노드의
  * 자식이므로, 넘겨야 자식이 "페이지 직속"으로 오인되지 않고(outside_section 오탐) 컨테이너 밖으로
  * 나갔는지도 판정된다(child_overflow). 구버전 플러그인이면 undefined 로 와서 페이지 전용 규칙만 꺼진다.
+ * `scopeRootInsideInstance` — 그 시작 노드가 INSTANCE 안쪽인지(get_tree 가 조상을 보고 판정해 준다).
+ * 인스턴스 내부를 면제하는 규칙이 시작 노드에도 면제를 걸기 위한 값이다.
  */
 async function runLintOnRoots(
   config: LintConfig,
@@ -77,14 +79,20 @@ async function runLintOnRoots(
   pluginId: string | undefined,
   isPageRoot: boolean,
   scopeRoot?: TreeNode,
+  scopeRootInsideInstance?: boolean,
 ): Promise<{ violations: Violation[]; coverage: RuleCoverage; customRan: string[] }> {
   const hasCustom = (config.custom || []).length > 0;
   // 기하 규칙에 넘길 컨테이너 — page 스코프면 undefined 여야 한다(자세한 사유는 scopeContainer).
   const scopeRootFull = scopeContainer(scopeRoot, roots);
+  // 컨텍스트 수집은 **스코프 루트를 포함한** 트리로 한다 — 엔진이 그 노드도 검사하므로(engine 의
+  // selfRoots), 여기서 빼면 판정 근거만 없는 채로 규칙이 돈다: 스코프 루트가 INSTANCE 면
+  // instance_default_name 이 마스터 이름을 못 얻어 침묵하고, 스펙 마스터면 스탬프를 못 읽어
+  // 그 안쪽 스펙 산물이 이름·좌표 오탐으로 쏟아진다. 배경: docs/history/019-scope-root-skipped-by-name-rules.md
+  const contextRoots = scopeRootFull ? [scopeRootFull] : roots;
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom, scopeRoot);
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds, scopeRoot);
-  const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);
-  const specMasterIds = await collectSpecMasterIds(config.builtins, roots, wsServer, pluginId);
+  const instanceComponentNames = await collectInstanceComponentNames(config.builtins, contextRoots, wsServer, pluginId);
+  const specMasterIds = await collectSpecMasterIds(config.builtins, contextRoots, wsServer, pluginId);
   const defaultFontFamily = await resolveDefaultFontFamily(config.builtins, wsServer, pluginId);
   const sizingByAlias = await resolveSpecSizing(config.builtins);
 
@@ -103,7 +111,7 @@ async function runLintOnRoots(
   };
 
   const violations = [
-    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, specMasterIds, isPageRoot, scopeRoot: scopeRootFull }, coverage),
+    ...runBuiltinRules(roots, config.builtins || {}, { annotationLayerIds, instanceComponentNames, specMasterIds, isPageRoot, scopeRoot: scopeRootFull, scopeRootInsideInstance }, coverage),
     ...(markEnrichRule('fully_occluded_sibling', isEnabled(config.builtins || {}, 'fully_occluded_sibling'), false)
       ? fullyOccludedSiblingRule(enriched!.nodes, enriched!.relations.children)
       : []),
@@ -234,7 +242,7 @@ export async function runPageLint(
   const tree = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout, includeAbsolute }, pluginId);
   const roots = tree.children as TreeNode[];
   const scopeRoot = tree.rootNode as TreeNode | undefined;
-  const ran = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot, scopeRoot);
+  const ran = await runLintOnRoots(config, roots, wsServer, pluginId, isPageRoot, scopeRoot, tree.rootNodeInsideInstance);
   const { violations, suppressedCount } = await suppressViolations(ran.violations, wsServer, pluginId);
   const failedCustom = customFailures(violations);
 
@@ -307,7 +315,7 @@ export async function runPageLint(
     : { skipped: true, reason: '자동수정 대상 없음' };
 
   const after = await wsServer.getTree({ nodeId, path, depth: 'full', pageId, limit: treeLimit, timeoutMs: treeTimeout, includeAbsolute }, pluginId);
-  const afterRan = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot, after.rootNode as TreeNode | undefined);
+  const afterRan = await runLintOnRoots(config, after.children as TreeNode[], wsServer, pluginId, isPageRoot, after.rootNode as TreeNode | undefined, after.rootNodeInsideInstance);
   const afterViolations = (await suppressViolations(afterRan.violations, wsServer, pluginId)).violations;
 
   return {
