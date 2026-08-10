@@ -51,7 +51,7 @@ export const lintHandlers: Record<string, (args: Record<string, unknown>, contex
     try {
       const result = scope === 'file'
         ? await runFileLint(args, wsServer, pluginId, configMode, baseConfig, baseResolved.label)
-        : await runPageLint(args, wsServer, pluginId, pageId, configMode, baseConfig);
+        : await runPageLint(args, wsServer, pluginId, pageId, configMode, baseConfig, baseResolved.label);
       return jsonResponse(result);
     } catch (error) {
       return jsonResponse({ error: error instanceof Error ? error.message : String(error) });

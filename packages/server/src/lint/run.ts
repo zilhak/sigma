@@ -164,6 +164,30 @@ function customFailures(violations: Violation[]): Array<{ rule: string; error: s
     .map((v) => ({ rule: v.rule, error: v.error as string }));
 }
 
+/**
+ * base 가 어디서 왔는지를 응답에 싣는다 — 파일 스코프 리포트에만 있던 정보다.
+ *
+ * ⛔ 없으면 **의도한 base 로 돌았는지를 응답만으로 확인할 수 없다.** `configPath` 를 빠뜨리면
+ * base 는 문서 저장 config 가 되는데, 그 문서 base 에 커스텀 규칙이 없으면 파일 base 의 커스텀이
+ * 통째로 빠진 채 "위반 0" 이 나온다 — 실사고: 그 상태로 여러 페이지를 "깨끗함" 으로 기록했고,
+ * 짝 검사 대조군이 발화하지 않아 **도구가 안 고쳐졌다고 오해**했다.
+ * `coverage.customRan` 으로 간접 추론은 됐지만, 그건 "무엇이 돌았나" 지 "왜 안 돌았나" 가 아니다.
+ */
+export function baseProvenance(
+  baseLabel: string | undefined,
+  baseConfig: LintConfig | null,
+): Record<string, unknown> {
+  if (!baseLabel) return {};
+  const out: Record<string, unknown> = { baseConfig: baseLabel };
+  if (baseLabel === 'document-stored' && !(baseConfig?.custom || []).length) {
+    out.baseWarning =
+      'base 를 주지 않아 문서 저장 lint config 를 base 로 썼는데 거기엔 커스텀 규칙이 없습니다 — '
+      + '파일 base(configPath)의 커스텀 규칙은 이 실행에서 돌지 않았습니다. '
+      + '무엇이 돌았는지는 coverage.customRan 을 보세요.';
+  }
+  return out;
+}
+
 /** scope=page — 바인딩된 페이지 1개. apply(자동수정) 지원. */
 export async function runPageLint(
   args: Record<string, unknown>,
@@ -172,6 +196,11 @@ export async function runPageLint(
   pageId: string | undefined,
   configMode: ConfigMode,
   baseConfig: LintConfig | null,
+  /** base 가 어디서 왔는지(`inline`/파일 경로/`document-stored`/`none`). 파일 스코프 리포트에만
+   *  싣고 있었는데, 그래서 **의도한 base 로 돌았는지를 응답만으로 확인할 수 없었다** —
+   *  `configPath` 를 빠뜨리면 문서 저장 base(이 파일은 `custom: []`)로 조용히 돌아
+   *  파일 base 의 커스텀 규칙이 통째로 빠진 채 "0건" 이 된다. */
+  baseLabel?: string,
 ): Promise<Record<string, unknown>> {
   const nodeId = args.nodeId as string | undefined;
   const path = args.path as string | string[] | undefined;
@@ -186,6 +215,7 @@ export async function runPageLint(
     return {
       clean: !resolved.error, scope: nodeId || path || '(page root)', configMode,
       skipped: 'no config', configSource: resolved.source,
+      ...baseProvenance(baseLabel, baseConfig),
       ...(resolved.error
         ? { configError: resolved.error, configUnreadable: true,
             configWarning: '저장된 lint config 를 읽지 못해 이 페이지는 아무 규칙도 검사하지 않았습니다 — "위반 0건" 이 아니라 "검사 안 됨" 입니다. config 를 고친 뒤 다시 돌리세요.' }
@@ -224,6 +254,7 @@ export async function runPageLint(
       : {}),
     configMode,
     configSource: resolved.source,
+    ...baseProvenance(baseLabel, baseConfig),
     // config 를 못 읽고 base 로 폴백한 실행은 "그 페이지 규칙" 이 안 돈 것이다 —
     // scanTruncated 와 같은 취급으로 clean 을 막는다. 배경: docs/history/013-….md
     ...(resolved.error
