@@ -181,6 +181,19 @@ export function scopeRootWithChildren(scopeRoot: TreeNode | undefined, roots: Tr
 }
 
 /**
+ * 기하 규칙에 넘길 **컨테이너**. 스코프 시작 노드가 있을 때만 그 노드(자식 붙인 것)이고,
+ * page 스코프면 **반드시 undefined** 다.
+ *
+ * ⛔ `scopeRootWithChildren(...)[0]` 을 무조건 쓰면 page 스코프에서 `roots[0]`(첫 섹션)이
+ * 컨테이너가 되어 **그 섹션을 자기 자신의 자식으로** 검사한다 — "섹션이 자기 섹션 밖으로 나감"
+ * 이라는 말이 안 되는 위반이 나오고(실측: 기획 4페이지 전부), kind 가 'page' 가 아니게 되어
+ * `outside_section` 이 통째로 죽는다. 실제로 그렇게 넣었다가 같은 날 되돌렸다.
+ */
+export function scopeContainer(scopeRoot: TreeNode | undefined, roots: TreeNode[]): TreeNode | undefined {
+  return scopeRoot ? scopeRootWithChildren(scopeRoot, roots)[0] : undefined;
+}
+
+/**
  * 상세 조회(GET_NODES_INFO) 왕복은 **그것을 요구하는 규칙이 켜졌을 때만** 한다.
  * 켜진 게 하나도 없으면 null 을 돌려주고 호출부는 TreeNode 만으로 진행한다(왕복 0).
  */

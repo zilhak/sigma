@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { TreeNode } from '@sigma/shared';
-import { scopeRootWithChildren, collectNodeIds } from '../src/lint/enrich.js';
+import { scopeRootWithChildren, scopeContainer, collectNodeIds } from '../src/lint/enrich.js';
 
 /**
  * `get_tree` 의 rootNode 는 **자식이 없는 껍데기**로 온다(id/name/type/boundingBox 뿐).
@@ -34,5 +34,20 @@ describe('scopeRootWithChildren — 시작 노드 + 서브트리 전부', () => 
 
   it('scopeRoot 가 없으면(page 스코프) roots 를 그대로 쓴다', () => {
     expect(scopeRootWithChildren(undefined, roots)).toBe(roots);
+  });
+
+  /**
+   * ⛔ page 스코프에서 컨테이너를 잘못 주면 기하 규칙이 **첫 섹션을 자기 자신의 자식으로**
+   * 검사한다("섹션이 자기 섹션 밖으로 나감"). kind 도 'page' 가 아니게 되어 outside_section 이
+   * 통째로 죽는다. 실제로 그렇게 넣었다가 기획 4페이지에서 잡혀 같은 날 되돌렸다.
+   */
+  it('scopeContainer — page 스코프면 컨테이너가 없다', () => {
+    expect(scopeContainer(undefined, roots)).toBeUndefined();
+  });
+
+  it('scopeContainer — 노드 스코프면 시작 노드에 자식을 붙여 준다', () => {
+    const c = scopeContainer(shallowRoot, roots);
+    expect(c?.id).toBe('s1');
+    expect(c?.children).toBe(roots);
   });
 });

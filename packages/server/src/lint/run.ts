@@ -15,7 +15,7 @@ import {
   type Violation, type LintConfig, type LayoutFix, type RuleCoverage, type BuiltinRuleId,
 } from '@sigma/shared/lint';
 import type { FigmaWebSocketServer } from '../websocket/server.js';
-import { enrichIfNeeded, scopeRootWithChildren } from './enrich.js';
+import { enrichIfNeeded, scopeContainer } from './enrich.js';
 import { runCustomRulesFromEnriched } from './run-custom-rule.js';
 import { resolvePageConfig, type ConfigMode } from './resolve-config.js';
 import { writeLintReport, type PageLintResult } from './report.js';
@@ -79,9 +79,8 @@ async function runLintOnRoots(
   scopeRoot?: TreeNode,
 ): Promise<{ violations: Violation[]; coverage: RuleCoverage; customRan: string[] }> {
   const hasCustom = (config.custom || []).length > 0;
-  // rootNode 는 자식 없는 껍데기라 그대로 쓰면 서브트리를 잃는다 — roots 를 붙여 되살린 뒤
-  // "시작 노드도 검사 대상" 이 필요한 경로(커스텀 enrich, annotation_layer)에 넘긴다.
-  const scopeRootFull = scopeRootWithChildren(scopeRoot, roots)[0];
+  // 기하 규칙에 넘길 컨테이너 — page 스코프면 undefined 여야 한다(자세한 사유는 scopeContainer).
+  const scopeRootFull = scopeContainer(scopeRoot, roots);
   const annotationLayerIds = await collectAnnotationLayerIds(config.builtins, roots, wsServer, pluginId, hasCustom, scopeRoot);
   const enriched = await enrichIfNeeded(config, roots, wsServer, pluginId, annotationLayerIds, scopeRoot);
   const instanceComponentNames = await collectInstanceComponentNames(config.builtins, roots, wsServer, pluginId);

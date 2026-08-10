@@ -93,3 +93,19 @@ const scopeRoot = tree.rootNode as TreeNode | undefined;   // ← 기하 규칙�
 ⚠️ 이때 base config 를 안 주면(`configPath`·`config` 없이) base 는 **문서 저장 `lint`** 가 되는데
 그 파일의 문서 base 는 `custom: []` 이라 **커스텀 규칙이 페이지 저장분만 돌았다** — 대조군이
 발화하지 않아 하마터면 "아직 안 고쳐졌다" 로 읽을 뻔했다. 판별은 응답의 `customRan` 이다.
+
+## 두 번째로 틀린 곳 — page 스코프에 컨테이너를 줘 버렸다
+
+`scopeRootWithChildren(scopeRoot, roots)[0]` 을 **무조건** 컨테이너로 넘겼는데,
+`scopeRoot` 가 없으면(page 스코프) 그 헬퍼는 `roots` 를 그대로 돌려주므로 `[0]` 은 **첫 섹션**이다.
+그 섹션이 자기 자신의 컨테이너가 되어:
+
+- `child_overflow` 가 *"섹션 X 가 섹션 X 밖으로 나감"* 이라는 말이 안 되는 위반을 냈다
+  (실측: 기획 4페이지 전부 — 초과치가 그 섹션의 음수 페이지 좌표와 정확히 일치했다).
+- `kind` 가 `'page'` 가 아니게 되어 **`outside_section` 이 통째로 안 돌았다**.
+
+`scopeContainer(scopeRoot, roots)` 로 갈랐다 — 있으면 자식 붙인 시작 노드, 없으면 **undefined**.
+회귀 테스트는 두 방향을 다 잡는다(`lint-scope-root.test.ts`).
+
+⭐ 이 두 번의 실수는 형태가 같다 — **"시작 노드도 검사 대상" 과 "시작 노드가 컨테이너" 를 한 값으로
+처리하려다** 한 번은 서브트리를 잃고, 한 번은 없는 컨테이너를 만들었다. 둘은 다른 개념이다.
