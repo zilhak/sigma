@@ -230,7 +230,12 @@ export function runBuiltinRules(
   if (markOptIn('raw_node', builtins.raw_node?.enabled === true)) out.push(...rawNodeRule(roots, builtins.raw_node as RawNodeConfig));
 
   // annotation_layer 도 opt-in: 켜진 페이지에서 모든 SECTION 은 기획 레이어를 직속 자식으로 가져야 한다.
-  if (markOptIn('annotation_layer', builtins.annotation_layer?.enabled === true)) out.push(...annotationLayerRule(roots, layerIds));
+  // ⚠️ 스코프 루트 자신도 봐야 한다 — 섹션 하나를 nodeId 로 검사하면 그 섹션은 roots 가 아니라
+  // scopeRoot 로 오므로, roots 만 보면 "레이어가 없어도 0건" 이 된다.
+  // 배경: docs/history/017-scope-root-was-never-linted.md
+  if (markOptIn('annotation_layer', builtins.annotation_layer?.enabled === true)) {
+    out.push(...annotationLayerRule(ctx.scopeRoot ? [ctx.scopeRoot] : roots, layerIds));
+  }
 
   // instance_default_name 도 opt-in: 인스턴스 이름이 마스터 컴포넌트 이름 그대로면 위반.
   if (markOptIn('instance_default_name', builtins.instance_default_name?.enabled === true)) {

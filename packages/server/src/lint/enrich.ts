@@ -167,6 +167,20 @@ export async function fetchNodesInfoBatched(
 }
 
 /**
+ * `get_tree` 의 `rootNode` 는 **자식이 없는 껍데기**다(id/name/type/boundingBox 뿐 — 자식은
+ * 형제 필드 `children` 으로 따로 온다). 그래서 검사 대상을 `[scopeRoot]` 로 바꾸면 시작 노드는
+ * 얻지만 **서브트리를 통째로 잃는다** — 실측으로, 커스텀 규칙이 SECTION 하나만 보고 그 안의
+ * 마커·범례를 못 봐 짝 검사가 계속 0건이었고 `annotation_layer` 는 "레이어 없음" 오탐을 냈다.
+ *
+ * roots(= scopeRoot 의 자식)를 도로 붙여 **시작 노드 + 서브트리 전부**를 만든다.
+ * 배경: docs/history/017-scope-root-was-never-linted.md
+ */
+export function scopeRootWithChildren(scopeRoot: TreeNode | undefined, roots: TreeNode[]): TreeNode[] {
+  if (!scopeRoot) return roots;
+  return [{ ...scopeRoot, childCount: roots.length, children: roots }];
+}
+
+/**
  * 상세 조회(GET_NODES_INFO) 왕복은 **그것을 요구하는 규칙이 켜졌을 때만** 한다.
  * 켜진 게 하나도 없으면 null 을 돌려주고 호출부는 TreeNode 만으로 진행한다(왕복 0).
  */
@@ -176,6 +190,9 @@ export async function enrichIfNeeded(
   wsServer: FigmaWebSocketServer,
   pluginId: string | undefined,
   annotationLayerIds?: Iterable<string>,
+  /** nodeId/path 스코프의 시작 노드 자신. 주면 이 노드도 검사 대상에 넣는다.
+   *  배경: docs/history/017-scope-root-was-never-linted.md */
+  scopeRoot?: TreeNode,
 ): Promise<BuildLintNodesResult | null> {
   const needsCustom = (config.custom || []).length > 0;
   const needsOcclusion = isEnabled(config.builtins || {}, 'fully_occluded_sibling');
@@ -186,6 +203,11 @@ export async function enrichIfNeeded(
   const needsMarkerGap = config.builtins?.annotation_marker_gap?.enabled === true;
   if (!needsCustom && !needsOcclusion && !needsSpecSize && !needsMarkerPair && !needsFont && !needsMarkerGap) return null;
 
-  const nodeIds = collectNodeIds(roots);
-  return buildLintNodes(roots, await fetchNodesInfoBatched(nodeIds, wsServer, pluginId), annotationLayerIds);
+  // ⚠️ 스코프 루트 자신을 빼면 그 노드를 대상으로 하는 규칙이 **조용히 0건**이 된다.
+  // 실측: 섹션을 nodeId 로 검사할 때 `n.type==='SECTION'` 인 커스텀 규칙(anno-pair-orphan)이
+  // 대상 0개라 짝이 어긋나도 아무 말이 없었다 — 같은 섹션을 page 스코프로 재면 1건 나온다.
+  // 배경: docs/history/017-scope-root-was-never-linted.md
+  const base = scopeRootWithChildren(scopeRoot, roots);
+  const nodeIds = collectNodeIds(base);
+  return buildLintNodes(base, await fetchNodesInfoBatched(nodeIds, wsServer, pluginId), annotationLayerIds);
 }

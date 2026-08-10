@@ -1068,6 +1068,20 @@ describe('기획 레이어 (annotation-layer) — 면제 + annotation_layer 규�
     expect(rs).toContain('annotation_layer');
   });
 
+  // 배경: docs/history/017-scope-root-was-never-linted.md
+  // 섹션 하나를 nodeId 로 검사하면 그 섹션은 roots 가 아니라 scopeRoot 로 온다.
+  // roots 만 보던 시절엔 레이어가 없어도 **조용히 0건**이었다.
+  test('annotation_layer 규칙 ON — 스코프 루트가 그 섹션이어도 검사한다', () => {
+    const sec = node('s', 'p', 'SECTION', [0, 0, 800, 600], [node('f', 'scr', 'FRAME', [20, 20, 400, 400])]);
+    const roots = sec.children!;                       // nodeId 스코프에서 서버가 넘기는 모양
+    const withRoot = runBuiltinRules(roots, { annotation_layer: { enabled: true } }, { scopeRoot: sec })
+      .map((v) => v.rule);
+    expect(withRoot).toContain('annotation_layer');
+    // 대조군 — scopeRoot 를 안 주면 섹션이 검사 대상에 없어 0건(옛 동작)
+    const withoutRoot = runBuiltinRules(roots, { annotation_layer: { enabled: true } }).map((v) => v.rule);
+    expect(withoutRoot).not.toContain('annotation_layer');
+  });
+
   test('annotation_layer 규칙 ON + 레이어 주입 — 존재 강제 통과 & 면제 동시', () => {
     const vs = runBuiltinRules(withLayer(), { annotation_layer: { enabled: true } }, { annotationLayerIds: ['L'] });
     const rs = vs.map((v) => v.rule);
