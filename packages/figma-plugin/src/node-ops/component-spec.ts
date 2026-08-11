@@ -562,9 +562,48 @@ export async function useComponentSpec(
 }
 
 /**
- * 텍스트 넘침 감지: **고정(fixed) 축에서만** 텍스트가 인스턴스 영역을 벗어나면 경고.
- * hug 축은 인스턴스가 함께 늘어나므로 검사하지 않는다 (재계산 과도기의 오탐 방지).
- * ellipsis/wrap slot은 각각 …처리/줄바꿈되어 안 넘친다.
+ * 절삭된 텍스트의 «잘리지 않았을 때의 폭» 을 잰다. 원본은 읽기만 한다 —
+ * 측정용 노드를 따로 만들어 재고 즉시 지운다.
+ *
+ * 원본의 autoResize/layoutSizing 을 잠깐 바꿔 재는 방법도 있으나, 인스턴스 자식이라
+ * 오버라이드가 생기고 되돌리기에 실패하면 레이아웃이 깨진다 — 그래서 택하지 않았다.
+ * 혼합 스타일(figma.mixed)이면 재지 않고 null 을 준다 (경고를 지어내지 않는다).
+ *
+ * 배경: docs/history/021-truncated-text-was-never-reported.md
+ */
+async function measureNaturalWidth(t: TextNode): Promise<number | null> {
+  const font = t.fontName;
+  const size = t.fontSize;
+  if (font === figma.mixed || size === figma.mixed) return null;
+  let probe: TextNode | null = null;
+  try {
+    await figma.loadFontAsync(font as FontName);
+    probe = figma.createText();
+    probe.fontName = font as FontName;
+    probe.fontSize = size as number;
+    if (t.letterSpacing !== figma.mixed) probe.letterSpacing = t.letterSpacing;
+    if (t.textCase !== figma.mixed) probe.textCase = t.textCase;
+    if (t.textDecoration !== figma.mixed) probe.textDecoration = t.textDecoration;
+    probe.textAutoResize = 'WIDTH_AND_HEIGHT';
+    probe.characters = t.characters;
+    return probe.width;
+  } catch {
+    return null;
+  } finally {
+    probe?.remove();
+  }
+}
+
+/**
+ * 텍스트 넘침·절삭 감지.
+ *
+ * - **넘침**: **고정(fixed) 축에서만** 텍스트가 인스턴스 영역을 벗어나면 경고.
+ *   hug 축은 인스턴스가 함께 늘어나므로 검사하지 않는다 (재계산 과도기의 오탐 방지).
+ * - **절삭**: ellipsis slot 은 `FILL` + `maxLines=1` 이라 **구조적으로 못 넘친다** — 대신
+ *   조용히 잘린다. 「안 넘치니 검사 불필요」는 참이지만 위험한 참이라, 여기서 따로 잰다.
+ *   이 검사가 없으면 잘림에는 어떤 자동 신호도 없다(lint 는 트리에 자연 폭이 없어 원리적으로 못 잡는다).
+ *   배경: docs/history/021-truncated-text-was-never-reported.md
+ *
  * setProperties 직후에는 Auto Layout 재계산이 끝나지 않아 bounds가 낡으므로
  * 잠시 양보해 레이아웃을 플러시한 뒤 측정한다.
  */
@@ -579,6 +618,21 @@ async function collectTextOverflowWarnings(instance: InstanceNode): Promise<stri
     for (const t of texts) {
       const b = t.absoluteBoundingBox;
       if (!b) continue;
+
+      // 절삭: 잘린 텍스트는 영역을 넘지 않으므로 아래 넘침 검사가 영원히 통과시킨다.
+      if (t.textTruncation === 'ENDING') {
+        const natural = await measureNaturalWidth(t);
+        if (natural != null && natural > t.width + 1) {
+          const slot = t.getPluginData(SLOT_MARK_KEY);
+          const which = slot ? `param "${slot}"의 값` : `텍스트 "${t.characters.slice(0, 20)}"`;
+          warnings.push(
+            `${which}이 ${Math.round(natural - t.width)}px 넘쳐 …로 잘립니다 — 화면에는 앞부분만 보이고 ` +
+              `뒤는 읽을 수 없습니다. 값을 줄이거나, 긴 설명은 wrap slot(white-space: normal)으로 옮기세요`
+          );
+        }
+        continue;
+      }
+
       const overX = horizontalFixed
         ? Math.round(b.x + b.width - (instBounds.x + instBounds.width))
         : 0;
