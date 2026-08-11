@@ -39,7 +39,8 @@ export const authHandlers: Record<string, (args: Record<string, unknown>, contex
     // 플러그인 존재 확인
     const bindPlugin = wsServer.getPluginById(bindPluginId);
     if (!bindPlugin) {
-      return jsonResponse({ error: `플러그인(${bindPluginId})이 연결되어 있지 않습니다` });
+      // 죽은 뒤 재바인딩을 시도하는 경로가 정확히 여기다 — 정황을 같이 준다 (020).
+      return jsonResponse({ error: `플러그인(${bindPluginId})이 연결되어 있지 않습니다. ${wsServer.describePluginLoss(bindPluginId)}` });
     }
 
     // 페이지 정보 조회
@@ -134,7 +135,7 @@ export const authHandlers: Record<string, (args: Record<string, unknown>, contex
     const listPagesPlugin = wsServer.getPluginById(listPagesPluginId);
 
     if (!listPagesPlugin) {
-      return jsonResponse({ error: `플러그인(${listPagesPluginId})이 연결되어 있지 않습니다` });
+      return jsonResponse({ error: `플러그인(${listPagesPluginId})이 연결되어 있지 않습니다. ${wsServer.describePluginLoss(listPagesPluginId)}` });
     }
 
     const pluginsInfo = wsServer.getPluginsInfo();

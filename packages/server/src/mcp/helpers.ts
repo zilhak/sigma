@@ -87,8 +87,10 @@ export function validateFigmaAccess(
   }
 
   // Figma 연결 확인
+  // ⚠️ 「연결되어 있지 않습니다」로 끝내지 말 것 — 그건 "아직 안 켰다" 와 "죽었다" 를 구분하지 못한다.
+  // 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
   if (!wsServer.isFigmaConnected()) {
-    return { error: jsonResponse({ error: 'Figma Plugin이 연결되어 있지 않습니다' }) };
+    return { error: jsonResponse({ error: `Figma Plugin이 연결되어 있지 않습니다. ${wsServer.describePluginLoss()}` }) };
   }
 
   // ⚠️ 바인딩이 **없으면** 대상이 "첫 번째 플러그인 + 현재 열린 페이지"로 정해진다.
@@ -113,7 +115,7 @@ export function validateFigmaAccess(
     if (!targetPlugin) {
       return {
         error: jsonResponse({
-          error: `바인딩된 플러그인(${pluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.`,
+          error: `바인딩된 플러그인(${pluginId})이 연결되어 있지 않습니다. ${wsServer.describePluginLoss(pluginId)}`,
         }),
       };
     }

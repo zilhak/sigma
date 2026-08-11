@@ -97,11 +97,26 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
     const storageStats = await storage.getFullStorageStats();
     const tokenStatus = tokenStore.getStatus();
 
+    // 죽은 플러그인의 정황은 서버 로그에만 있었고, 그건 에이전트가 볼 수 없는 자리다 (020).
+    const recentDisconnects = wsServer.getRecentDisconnects().map((d) => ({
+      pluginId: d.pluginId,
+      at: new Date(d.at).toISOString(),
+      closeCode: d.code,
+      reason: d.reason,
+      livedSec: d.livedSec,
+      commands: d.commands,
+      bytesInMB: Number((d.bytesIn / 1024 / 1024).toFixed(1)),
+      lastCommandType: d.lastCommandType,
+      msSinceLastCommand: d.msSinceLastCommand,
+      fileName: d.fileName,
+    }));
+
     return jsonResponse({
       server: 'running',
       figma: figmaStatus,
       storage: storageStats,
       tokens: tokenStatus,
+      ...(recentDisconnects.length > 0 ? { recentDisconnects } : {}),
       timestamp: new Date().toISOString(),
     });
   },
@@ -125,7 +140,7 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
       const targetPlugin = wsServer.getPluginById(saveImportPluginId);
       if (!targetPlugin) {
         return jsonResponse({
-          error: `바인딩된 플러그인(${saveImportPluginId})이 연결되어 있지 않습니다. sigma_bind로 다시 바인딩하세요.`,
+          error: `바인딩된 플러그인(${saveImportPluginId})이 연결되어 있지 않습니다. ${wsServer.describePluginLoss(saveImportPluginId)}`,
         });
       }
     }

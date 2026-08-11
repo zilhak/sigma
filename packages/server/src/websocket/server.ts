@@ -13,6 +13,19 @@ const CHUNK_THRESHOLD = 1024 * 1024; // 1MB 이상이면 청킹
 const LARGE_MESSAGE_LOG_THRESHOLD = 1024 * 1024;
 
 /**
+ * 이만큼의 명령마다 그 플러그인 인스턴스의 누적 통계를 한 줄 남긴다.
+ * 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
+ *
+ * 죽는 순간의 한 줄만으로는 «갑자기 죽었나, 서서히 나빠지다 죽었나» 를 가릴 수 없다.
+ * 020 의 사망은 부하 스파이크 없이 3시간·5.5만 명령 뒤에 왔고, 그 궤적(왕복시간이
+ * 늘고 있었는지)이 로그에 없어 추정으로 남았다. 이 주기 로그가 그 궤적이다.
+ */
+const LIFETIME_LOG_EVERY = 2000;
+
+/** 사후 진단용으로 들고 있는 최근 종료 기록 수 (메모리 유계). */
+const DISCONNECT_HISTORY = 8;
+
+/**
  * 페이지 정보
  */
 export interface PageInfo {
@@ -38,6 +51,48 @@ interface FigmaFileInfo {
 }
 
 /**
+ * 한 플러그인 인스턴스가 살아 있는 동안의 누적 사용량.
+ * 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
+ */
+interface PluginStats {
+  commands: number;
+  byType: Map<string, number>;
+  /** 플러그인 → 서버 수신 누적 바이트 */
+  bytesIn: number;
+  rttTotalMs: number;
+  rttCount: number;
+  /** 직전 LIFETIME_LOG_EVERY 구간의 왕복시간 (구간마다 초기화 — 궤적을 보려면 누적 평균으로는 안 된다) */
+  windowRttMs: number;
+  windowRttCount: number;
+  lastCommandType?: string;
+  lastCommandAt?: number;
+}
+
+/**
+ * 종료 기록 → 사람이 읽는 안내 문장. 순수 함수라 유닛테스트가 가능하다.
+ * 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
+ */
+export function formatPluginLossHint(record: PluginDisconnectRecord | undefined, now: number): string {
+  const restart = 'Figma 에서 Sigma 플러그인을 다시 실행한 뒤, sigma_list_plugins 로 새 pluginId 를 받아 sigma_bind 로 다시 바인딩하세요 (재연결마다 pluginId 가 바뀝니다).';
+  if (!record) return restart;
+
+  const agoMin = Math.round((now - record.at) / 60000);
+  const when = agoMin < 1 ? '방금' : `${agoMin}분 전`;
+  // code 1001(going away) = Figma 가 플러그인을 내렸다. 런타임이 abort 된 뒤의 정리도 이 코드로
+  // 온다(020 실측). 1006 은 비정상 절단. 둘 다 «죽었을 수 있다» 를 말해야 하는 경우다.
+  const died = record.code === 1001 || record.code === 1006
+    ? ' 플러그인 런타임이 죽었을 수 있습니다 (Figma 콘솔에 "Plugin runtime aborted" 가 있으면 확정입니다).'
+    : '';
+  const lived = record.livedSec >= 3600
+    ? `${(record.livedSec / 3600).toFixed(1)}시간`
+    : `${Math.round(record.livedSec / 60)}분`;
+  return (
+    `플러그인(${record.pluginId})이 ${when} 끊겼습니다 — close code ${record.code}` +
+    `${record.reason ? ` (${record.reason})` : ''}, 수명 ${lived}, 처리한 명령 ${record.commands}건.${died} ${restart}`
+  );
+}
+
+/**
  * 플러그인 (내부용)
  */
 interface Plugin {
@@ -46,6 +101,28 @@ interface Plugin {
   type: 'figma-plugin' | 'unknown';
   connectedAt: Date;
   fileInfo?: FigmaFileInfo;
+  stats: PluginStats;
+}
+
+/**
+ * 끊긴 플러그인의 부검 기록.
+ *
+ * 이걸 들고 있는 이유는 로그가 아니라 **오류 메시지** 때문이다. 플러그인이 죽으면 호출자가
+ * 보는 것은 «연결되어 있지 않습니다» 뿐이고, 그건 "아직 안 켰다" 와 구분되지 않는다.
+ * 죽은 정황(언제·close code·얼마나 살았고 몇 개를 처리했나)을 그 자리에서 같이 보여준다.
+ */
+export interface PluginDisconnectRecord {
+  pluginId: string;
+  at: number;
+  code: number;
+  reason?: string;
+  livedSec: number;
+  commands: number;
+  bytesIn: number;
+  lastCommandType?: string;
+  /** 마지막 명령을 보내고 끊기기까지 (ms). 짧을수록 «그 명령을 처리하다 죽었다» 에 가깝다. */
+  msSinceLastCommand?: number;
+  fileName?: string;
 }
 
 /**
@@ -88,6 +165,9 @@ interface PendingCommand {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
+  /** 왕복시간 집계용 (020). 없으면 집계만 건너뛴다. */
+  pluginId?: string;
+  sentAt?: number;
 }
 
 export class FigmaWebSocketServer {
@@ -96,6 +176,8 @@ export class FigmaWebSocketServer {
   private pluginsById: Map<string, Plugin> = new Map();  // ID로 플러그인 조회
   private pendingCommands: Map<string, PendingCommand> = new Map();
   private pingInterval: ReturnType<typeof setInterval> | null = null;
+  /** 최근 종료 기록 (최신이 앞). 최대 DISCONNECT_HISTORY 개 — 020 */
+  private disconnects: PluginDisconnectRecord[] = [];
 
   constructor(port: number) {
     this.wss = new WebSocketServer({ port });
@@ -123,6 +205,15 @@ export class FigmaWebSocketServer {
       ws,
       type: 'unknown',
       connectedAt: new Date(),
+      stats: {
+        commands: 0,
+        byType: new Map(),
+        bytesIn: 0,
+        rttTotalMs: 0,
+        rttCount: 0,
+        windowRttMs: 0,
+        windowRttCount: 0,
+      },
     };
 
     this.plugins.set(ws, plugin);
@@ -131,6 +222,7 @@ export class FigmaWebSocketServer {
     ws.on('message', (data) => {
       try {
         const text = data.toString();
+        plugin.stats.bytesIn += Buffer.byteLength(text, 'utf-8');
         const message = JSON.parse(text);
         // 큰 응답은 크기를 남긴다. 012 에서 `GET_NODES_INFO` 에 **개수**가 안 남아 1차 진단이
         // 통째로 빗나갔고, 015 두 번째 사고에서는 **크기**가 안 남아 트리 응답이 몇 MB 인지를
@@ -152,9 +244,7 @@ export class FigmaWebSocketServer {
       const closingPlugin = this.plugins.get(ws);
       if (closingPlugin) {
         this.pluginsById.delete(closingPlugin.id);
-        const why = reason && reason.length > 0 ? `, reason: ${reason.toString()}` : '';
-        const lived = Math.round((Date.now() - closingPlugin.connectedAt.getTime()) / 1000);
-        console.log(`[WebSocket] Plugin disconnected (id: ${closingPlugin.id}, code: ${code}${why}, lived: ${lived}s)`);
+        this.recordDisconnect(closingPlugin, code, reason && reason.length > 0 ? reason.toString() : undefined);
       }
       this.plugins.delete(ws);
     });
@@ -167,6 +257,79 @@ export class FigmaWebSocketServer {
       }
       this.plugins.delete(ws);
     });
+  }
+
+  /**
+   * 종료를 로그와 기록 양쪽에 남긴다.
+   * 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
+   *
+   * ⚠️ 여기서 남기는 항목을 줄이지 말 것. 020 의 사망은 «마지막 명령이 무거워서» 가 아니라
+   * «이 인스턴스가 오래 살아서» 쪽이었는데, 그 판단에 필요한 것(수명·누적 명령 수·누적 수신량·
+   * 마지막 명령과의 간격)이 전부 로그 밖에 있어서 컨테이너 로그를 5.5만 줄 세어야 했다.
+   */
+  private recordDisconnect(plugin: Plugin, code: number, reason?: string): void {
+    const now = Date.now();
+    const s = plugin.stats;
+    const record: PluginDisconnectRecord = {
+      pluginId: plugin.id,
+      at: now,
+      code,
+      reason,
+      livedSec: Math.round((now - plugin.connectedAt.getTime()) / 1000),
+      commands: s.commands,
+      bytesIn: s.bytesIn,
+      lastCommandType: s.lastCommandType,
+      msSinceLastCommand: s.lastCommandAt !== undefined ? now - s.lastCommandAt : undefined,
+      fileName: plugin.fileInfo?.fileName,
+    };
+    this.disconnects.unshift(record);
+    if (this.disconnects.length > DISCONNECT_HISTORY) this.disconnects.length = DISCONNECT_HISTORY;
+
+    const why = reason ? `, reason: ${reason}` : '';
+    const last = record.lastCommandType
+      ? `, last: ${record.lastCommandType} ${record.msSinceLastCommand}ms ago`
+      : '';
+    const pending = this.countPendingFor(plugin.id);
+    console.log(
+      `[WebSocket] Plugin disconnected (id: ${plugin.id}, code: ${code}${why}, lived: ${record.livedSec}s, ` +
+      `commands: ${s.commands}, in: ${(s.bytesIn / 1024 / 1024).toFixed(1)}MB, avg rtt: ${this.avgRtt(s)}ms${last}, pending: ${pending})`
+    );
+    if (s.byType.size > 0) {
+      const top = [...s.byType.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+        .map(([type, n]) => `${type}×${n}`).join(' ');
+      console.log(`[WebSocket]   ↳ lifetime commands (id: ${plugin.id}): ${top}`);
+    }
+  }
+
+  private avgRtt(s: PluginStats): number {
+    return s.rttCount > 0 ? Math.round(s.rttTotalMs / s.rttCount) : 0;
+  }
+
+  private countPendingFor(pluginId: string): number {
+    let n = 0;
+    for (const pending of this.pendingCommands.values()) {
+      if (pending.pluginId === pluginId) n++;
+    }
+    return n;
+  }
+
+  /**
+   * 최근에 죽은 플러그인의 정황을 사람이 읽는 문장으로 만든다.
+   *
+   * 「연결되어 있지 않습니다」만으로는 **아직 안 켠 것**과 **죽은 것**이 구분되지 않는다.
+   * 020 에서 플러그인은 하루 넘게 재연결되지 않았고, 그 사이 호출자가 볼 수 있는 단서는
+   * 서버 컨테이너 로그뿐이었다. 그건 에이전트가 볼 수 없는 자리다.
+   */
+  describePluginLoss(pluginId?: string): string {
+    const record = pluginId
+      ? this.disconnects.find((d) => d.pluginId === pluginId)
+      : this.disconnects[0];
+    return formatPluginLossHint(record, Date.now());
+  }
+
+  /** 최근 종료 기록 (진단·상태 조회용) */
+  getRecentDisconnects(): PluginDisconnectRecord[] {
+    return [...this.disconnects];
   }
 
   private handleMessage(ws: WebSocket, message: { type: string; [key: string]: unknown }) {
@@ -320,18 +483,27 @@ export class FigmaWebSocketServer {
     const targetPlugin = this.resolveTargetPlugin(options?.pluginId);
     if (!targetPlugin) {
       if (options?.pluginId) {
-        throw new Error(`지정된 플러그인(${options.pluginId})이 연결되어 있지 않습니다`);
+        throw new Error(`지정된 플러그인(${options.pluginId})이 연결되어 있지 않습니다. ${this.describePluginLoss(options.pluginId)}`);
       }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+      throw new Error(`Figma Plugin이 연결되어 있지 않습니다. ${this.describePluginLoss()}`);
     }
 
     const commandId = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const timeoutMs = options?.timeoutMs ?? 30000;
+    const sentAt = Date.now();
+    this.countCommand(targetPlugin, commandType, sentAt);
 
     return new Promise<T>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingCommands.delete(commandId);
-        reject(new Error('Figma Plugin 응답 시간 초과'));
+        // 타임아웃 시점의 플러그인 생사는 진단에 결정적이다 — 012 는 «느리다» 로 보고된 것이
+        // 사실 «이미 죽었다» 였고, 그 착각이 처방을 통째로 틀리게 했다.
+        const alive = this.getPluginById(targetPlugin.id) !== null;
+        reject(new Error(
+          alive
+            ? `Figma Plugin 응답 시간 초과 (${commandType}, ${timeoutMs}ms)`
+            : `Figma Plugin 응답 시간 초과 (${commandType}, ${timeoutMs}ms) — 기다리는 동안 플러그인 연결이 끊겼습니다. ${this.describePluginLoss(targetPlugin.id)}`
+        ));
       }, timeoutMs);
 
       this.pendingCommands.set(commandId, {
@@ -339,6 +511,8 @@ export class FigmaWebSocketServer {
         resolve: resolve as (result: unknown) => void,
         reject,
         timeout,
+        pluginId: targetPlugin.id,
+        sentAt,
       });
 
       // payload에서 예약 필드(type, commandId) 제거 — 덮어쓰기 방지
@@ -378,6 +552,28 @@ export class FigmaWebSocketServer {
   }
 
   /**
+   * 명령 1건을 그 인스턴스의 수명 통계에 반영하고, 주기마다 궤적을 남긴다.
+   * 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
+   */
+  private countCommand(plugin: Plugin, commandType: string, sentAt: number): void {
+    const s = plugin.stats;
+    s.commands++;
+    s.byType.set(commandType, (s.byType.get(commandType) ?? 0) + 1);
+    s.lastCommandType = commandType;
+    s.lastCommandAt = sentAt;
+
+    if (s.commands % LIFETIME_LOG_EVERY !== 0) return;
+    const livedSec = Math.round((sentAt - plugin.connectedAt.getTime()) / 1000);
+    const windowRtt = s.windowRttCount > 0 ? Math.round(s.windowRttMs / s.windowRttCount) : 0;
+    console.log(
+      `[WebSocket] Plugin lifetime (id: ${plugin.id}, commands: ${s.commands}, lived: ${livedSec}s, ` +
+      `in: ${(s.bytesIn / 1024 / 1024).toFixed(1)}MB, avg rtt: ${this.avgRtt(s)}ms, recent rtt: ${windowRtt}ms)`
+    );
+    s.windowRttMs = 0;
+    s.windowRttCount = 0;
+  }
+
+  /**
    * 커맨드 결과 메시지 공통 처리
    * commandId로 pendingCommand를 찾아 resolve/reject 수행
    */
@@ -390,6 +586,18 @@ export class FigmaWebSocketServer {
 
     clearTimeout(pending.timeout);
     this.pendingCommands.delete(commandId);
+
+    // 왕복시간 집계 (020) — 죽기 전에 응답이 느려지고 있었는지가 「서서히 나빠졌나」의 유일한 관측점이다.
+    if (pending.pluginId !== undefined && pending.sentAt !== undefined) {
+      const plugin = this.pluginsById.get(pending.pluginId);
+      if (plugin) {
+        const rtt = Date.now() - pending.sentAt;
+        plugin.stats.rttTotalMs += rtt;
+        plugin.stats.rttCount++;
+        plugin.stats.windowRttMs += rtt;
+        plugin.stats.windowRttCount++;
+      }
+    }
 
     // DELETE_RESULT는 성공 시 변환된 형태로 반환
     if (message.type === 'DELETE_RESULT') {
@@ -458,9 +666,9 @@ export class FigmaWebSocketServer {
     const targetPlugin = this.resolveTargetPlugin(pluginId);
     if (!targetPlugin) {
       if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다. ${this.describePluginLoss(pluginId)}`);
       }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+      throw new Error(`Figma Plugin이 연결되어 있지 않습니다. ${this.describePluginLoss()}`);
     }
 
     // 전송할 페이로드 결정
@@ -506,6 +714,11 @@ export class FigmaWebSocketServer {
 
     console.log(`[WebSocket] Sending ${totalChunks} chunks for command ${commandId} (format: ${format})`);
 
+    // 청킹 경로도 같은 수명 통계에 실린다 — 여기만 빠지면 disconnect 로그의 pending·명령 수가 거짓이 된다 (020).
+    const chunkPlugin = this.plugins.get(ws);
+    const sentAt = Date.now();
+    if (chunkPlugin) this.countCommand(chunkPlugin, 'CREATE_FRAME(chunked)', sentAt);
+
     return new Promise<CreateFrameResult>((resolve, reject) => {
       // 대용량 데이터는 타임아웃을 길게 설정 (60초)
       const timeout = setTimeout(() => {
@@ -518,6 +731,8 @@ export class FigmaWebSocketServer {
         resolve: (result: unknown) => resolve(result as CreateFrameResult),
         reject,
         timeout,
+        pluginId: chunkPlugin?.id,
+        sentAt,
       });
 
       // 1. CHUNK_START 전송
@@ -581,9 +796,9 @@ export class FigmaWebSocketServer {
     const targetPlugin = this.resolveTargetPlugin(pluginId);
     if (!targetPlugin) {
       if (pluginId) {
-        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다`);
+        throw new Error(`지정된 플러그인(${pluginId})이 연결되어 있지 않습니다. ${this.describePluginLoss(pluginId)}`);
       }
-      throw new Error('Figma Plugin이 연결되어 있지 않습니다');
+      throw new Error(`Figma Plugin이 연결되어 있지 않습니다. ${this.describePluginLoss()}`);
     }
 
     // 페이로드 결정
@@ -629,6 +844,11 @@ export class FigmaWebSocketServer {
 
     console.log(`[WebSocket] Sending ${totalChunks} update chunks for command ${commandId}`);
 
+    // 청킹 경로도 같은 수명 통계에 실린다 (020) — createFrameChunked 와 같은 이유.
+    const chunkPlugin = this.plugins.get(ws);
+    const sentAt = Date.now();
+    if (chunkPlugin) this.countCommand(chunkPlugin, 'UPDATE_FRAME(chunked)', sentAt);
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingCommands.delete(commandId);
@@ -640,6 +860,8 @@ export class FigmaWebSocketServer {
         resolve: resolve as (result: unknown) => void,
         reject,
         timeout,
+        pluginId: chunkPlugin?.id,
+        sentAt,
       });
 
       // 1. CHUNK_START with operation='update'
