@@ -11,6 +11,16 @@ export const SERVER_MSG = {
   PING: 'PING',
 } as const;
 
+// UI → 서버(WebSocket) 응답 청킹 메시지 타입.
+// 서버→플러그인 방향의 CHUNK_* 와 **이름을 따로 둔다** — 한 소켓에 두 방향이 흐르므로
+// 같은 이름을 쓰면 어느 쪽 스트림인지 구분할 수 없다.
+// 배경: docs/history/021-plugin-to-server-had-no-chunking.md
+export const RESPONSE_CHUNK_MSG = {
+  START: 'RESPONSE_CHUNK_START',
+  CHUNK: 'RESPONSE_CHUNK',
+  END: 'RESPONSE_CHUNK_END',
+} as const;
+
 // 플러그인(code.ts) → UI 메시지 타입 상수
 // 플러그인(code.ts) → UI 메시지 중 **브리지가 특별 처리하는 것만** 나열한다.
 // 그 밖의 *-result 는 bridge-plugin 의 default 패스스루가 {commandId,success,result,error} 로

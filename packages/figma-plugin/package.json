@@ -1,6 +1,6 @@
 {
   "name": "@sigma/figma-plugin",
-  "version": "1.51",
+  "version": "1.52",
   "type": "module",
   "scripts": {
     "dev": "bun run build --watch",

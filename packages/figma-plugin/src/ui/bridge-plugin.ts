@@ -1,4 +1,4 @@
-import { PLUGIN_MSG } from './constants';
+import { PLUGIN_MSG, RESPONSE_CHUNK_MSG } from './constants';
 import {
   getWs,
   getIsConnected, getFileInfo, setFileInfo,
@@ -6,12 +6,58 @@ import {
   type FileInfo, type SelectionNode,
 } from './ui-state';
 
+/**
+ * 이 크기(문자 수)를 넘는 응답은 나눠 보낸다. 서버→플러그인 방향의 CHUNK_THRESHOLD 와 같은 1MB.
+ *
+ * ⚠️ 이 값을 크게 올리지 말 것. 서버(Bun)의 WebSocket 수신 상한은 **16MB 고정**이고
+ * `ws` 의 `maxPayload` 로는 올릴 수 없다(실측). 넘으면 서버가 프레임을 거부하며 **소켓을 끊고**,
+ * 플러그인은 code 1006 "Connection ended" 만 보고 이유를 알지 못한 채 재연결한다
+ * (= pluginId 회전 → 모든 에이전트의 바인딩 무효).
+ * 여기 단위는 **문자 수**이고 상한은 **바이트**다 — 한글은 UTF-8 에서 3배가 되므로
+ * 1MB 문자 = 최대 3MB 바이트. 그래서 1MB 는 상한 대비 5배 이상의 여유를 남긴 값이다.
+ * 배경: docs/history/021-plugin-to-server-had-no-chunking.md
+ */
+const RESPONSE_CHUNK_SIZE = 1024 * 1024;
+
+let responseStreamSeq = 0;
+
 // 서버(WebSocket)로 메시지 전송 헬퍼
 function sendToServer(data: Record<string, unknown>) {
   const ws = getWs();
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(data));
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  const json = JSON.stringify(data);
+  if (json.length <= RESPONSE_CHUNK_SIZE) {
+    ws.send(json);
+    return;
   }
+
+  // 스트림 키는 commandId 를 쓴다 — 동시 명령이 겹쳐도 서버가 각 스트림을 따로 모은다.
+  // commandId 가 없는 메시지(FILE_INFO 등)도 커질 수 있으므로 그때는 자체 키를 만든다.
+  responseStreamSeq++;
+  const streamId = typeof data.commandId === 'string' && data.commandId
+    ? data.commandId
+    : `stream-${Date.now()}-${responseStreamSeq}`;
+  const totalChunks = Math.ceil(json.length / RESPONSE_CHUNK_SIZE);
+
+  ws.send(JSON.stringify({
+    type: RESPONSE_CHUNK_MSG.START,
+    streamId,
+    totalChunks,
+    messageType: data.type,
+    totalLength: json.length,
+  }));
+  for (let i = 0; i < totalChunks; i++) {
+    ws.send(JSON.stringify({
+      type: RESPONSE_CHUNK_MSG.CHUNK,
+      streamId,
+      index: i,
+      data: json.slice(i * RESPONSE_CHUNK_SIZE, (i + 1) * RESPONSE_CHUNK_SIZE),
+    }));
+  }
+  ws.send(JSON.stringify({ type: RESPONSE_CHUNK_MSG.END, streamId }));
+
+  log(`대용량 응답 분할 전송: ${data.type} ${(json.length / 1024 / 1024).toFixed(1)}MB → ${totalChunks}청크`, 'info');
 }
 
 // 플러그인(code.ts) → UI 메시지 핸들러

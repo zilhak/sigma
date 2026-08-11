@@ -26,6 +26,35 @@ const LIFETIME_LOG_EVERY = 2000;
 const DISCONNECT_HISTORY = 8;
 
 /**
+ * 플러그인 → 서버 응답 청킹 (`RESPONSE_CHUNK_*`).
+ * 배경: docs/history/021-plugin-to-server-had-no-chunking.md
+ *
+ * ⚠️ **서버→플러그인 방향의 `CHUNK_*` 와 다른 이름이다.** 한 소켓에 두 방향이 흐르므로
+ * 이름을 공유하면 어느 쪽 스트림인지 구분할 수 없다.
+ */
+const RESPONSE_CHUNK_START = 'RESPONSE_CHUNK_START';
+const RESPONSE_CHUNK = 'RESPONSE_CHUNK';
+const RESPONSE_CHUNK_END = 'RESPONSE_CHUNK_END';
+
+/**
+ * 조립 상한. 넘으면 스트림을 버리고 그 명령을 **에러로 끝낸다**.
+ *
+ * 청킹이 생겼다고 무한히 받아도 되는 것은 아니다 — 이 값이 없으면 깨진 스트림 하나가
+ * 서버 힙을 계속 먹는다. 조용히 버리지 않고 pending 을 깨우는 것이 핵심이다
+ * (012: 응답이 안 오면 60초 타임아웃이 «느리다» 로 잘못 보고한다).
+ */
+const RESPONSE_ASSEMBLY_LIMIT = 256 * 1024 * 1024;
+
+interface ResponseStream {
+  streamId: string;
+  messageType?: string;
+  totalChunks: number;
+  parts: Map<number, string>;
+  bytes: number;
+  startedAt: number;
+}
+
+/**
  * 페이지 정보
  */
 export interface PageInfo {
@@ -102,6 +131,8 @@ interface Plugin {
   connectedAt: Date;
   fileInfo?: FigmaFileInfo;
   stats: PluginStats;
+  /** 조립 중인 응답 스트림 (streamId 별). 소켓이 닫히면 통째로 버려진다 — 021 */
+  responseStreams: Map<string, ResponseStream>;
 }
 
 /**
@@ -214,6 +245,7 @@ export class FigmaWebSocketServer {
         windowRttMs: 0,
         windowRttCount: 0,
       },
+      responseStreams: new Map(),
     };
 
     this.plugins.set(ws, plugin);
@@ -224,6 +256,10 @@ export class FigmaWebSocketServer {
         const text = data.toString();
         plugin.stats.bytesIn += Buffer.byteLength(text, 'utf-8');
         const message = JSON.parse(text);
+
+        // 응답 청킹은 handleMessage 앞에서 걷어낸다 — 조립이 끝나야 비로소 하나의 메시지다 (021).
+        if (this.handleResponseChunk(plugin, message)) return;
+
         // 큰 응답은 크기를 남긴다. 012 에서 `GET_NODES_INFO` 에 **개수**가 안 남아 1차 진단이
         // 통째로 빗나갔고, 015 두 번째 사고에서는 **크기**가 안 남아 트리 응답이 몇 MB 인지를
         // 표본에서 환산해야 했다. 절벽이 크기에 있는 이상 크기는 로그에 있어야 한다.
@@ -257,6 +293,87 @@ export class FigmaWebSocketServer {
       }
       this.plugins.delete(ws);
     });
+  }
+
+  /**
+   * 플러그인 → 서버 응답 청킹을 조립한다. 이 메시지를 소화했으면 true.
+   * 배경: docs/history/021-plugin-to-server-had-no-chunking.md
+   *
+   * ⚠️ **실패는 반드시 pending 을 깨워서 끝낸다.** 조용히 버리면 호출자는 60초를 기다린 뒤
+   * «응답 시간 초과» 만 보고, 그건 012 에서 «느리다» 로 오진했던 바로 그 모양이다.
+   */
+  private handleResponseChunk(plugin: Plugin, message: { type?: string; [key: string]: unknown }): boolean {
+    const streamId = message.streamId as string | undefined;
+    if (message.type === RESPONSE_CHUNK_START) {
+      if (!streamId) return true;
+      plugin.responseStreams.set(streamId, {
+        streamId,
+        messageType: message.messageType as string | undefined,
+        totalChunks: (message.totalChunks as number) || 0,
+        parts: new Map(),
+        bytes: 0,
+        startedAt: Date.now(),
+      });
+      return true;
+    }
+
+    if (message.type === RESPONSE_CHUNK) {
+      if (!streamId) return true;
+      const stream = plugin.responseStreams.get(streamId);
+      if (!stream) {
+        console.warn(`[WebSocket] Orphan response chunk from ${plugin.id} (stream: ${streamId})`);
+        return true;
+      }
+      const part = (message.data as string) || '';
+      stream.parts.set((message.index as number) || 0, part);
+      stream.bytes += Buffer.byteLength(part, 'utf-8');
+      if (stream.bytes > RESPONSE_ASSEMBLY_LIMIT) {
+        plugin.responseStreams.delete(streamId);
+        const mb = (stream.bytes / 1024 / 1024).toFixed(1);
+        console.error(`[WebSocket] Response stream too large from ${plugin.id}: ${stream.messageType} ${mb}MB — dropped`);
+        this.failPending(streamId, `플러그인 응답이 조립 상한(${RESPONSE_ASSEMBLY_LIMIT / 1024 / 1024}MB)을 넘었습니다 (${stream.messageType}, ${mb}MB). 범위를 좁혀 다시 호출하세요.`);
+      }
+      return true;
+    }
+
+    if (message.type === RESPONSE_CHUNK_END) {
+      if (!streamId) return true;
+      const stream = plugin.responseStreams.get(streamId);
+      if (!stream) return true;
+      plugin.responseStreams.delete(streamId);
+
+      if (stream.parts.size !== stream.totalChunks) {
+        console.error(`[WebSocket] Response stream incomplete from ${plugin.id}: ${stream.parts.size}/${stream.totalChunks}`);
+        this.failPending(streamId, `플러그인 응답 청크가 누락됐습니다 (${stream.parts.size}/${stream.totalChunks})`);
+        return true;
+      }
+
+      let assembled = '';
+      for (let i = 0; i < stream.totalChunks; i++) assembled += stream.parts.get(i) ?? '';
+
+      const mb = (stream.bytes / 1024 / 1024).toFixed(2);
+      const ms = Date.now() - stream.startedAt;
+      console.log(`[WebSocket] Reassembled response from ${plugin.id}: ${stream.messageType} ${mb}MB in ${stream.totalChunks} chunks (${ms}ms)`);
+
+      try {
+        this.handleMessage(plugin.ws, JSON.parse(assembled));
+      } catch (error) {
+        console.error(`[WebSocket] Response stream parse error from ${plugin.id}:`, error);
+        this.failPending(streamId, `플러그인 응답을 조립했으나 파싱에 실패했습니다: ${error}`);
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  /** streamId 는 commandId 와 같으므로(응답 청킹) 그대로 pending 을 깨울 수 있다 — 021 */
+  private failPending(commandId: string, reason: string): void {
+    const pending = this.pendingCommands.get(commandId);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    this.pendingCommands.delete(commandId);
+    pending.reject(new Error(reason));
   }
 
   /**
