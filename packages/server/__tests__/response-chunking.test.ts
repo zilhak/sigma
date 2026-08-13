@@ -136,6 +136,46 @@ describe('플러그인 → 서버 응답 청킹', () => {
     expect(elapsed).toBeGreaterThan(TIMEOUT);   // 총 경과가 타임아웃을 넘겼는데도 성공했다
   }, 30000);
 
+  // 배경: docs/history/023 — 처음엔 해당 streamId 만 연장했더니 실측에서 4개 중 1개만 살았다.
+  // 플러그인은 스트림을 순차로 밀기 때문에, 뒤 순번은 «조용한» 게 아니라 «줄 서 있는» 것이다.
+  it('형제 스트림이 흐르는 동안 아직 차례가 안 온 명령도 죽지 않는다', async () => {
+    const h = await connect(19856);
+
+    const TIMEOUT = 1200;
+    const ids: string[] = [];
+
+    h.client.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type !== 'GET_TREE') return;
+      ids.push(msg.commandId);
+      if (ids.length < 2) return;      // 둘 다 받은 뒤에 순차로 응답한다
+
+      const send = (commandId: string, tag: string, startAt: number) => {
+        const json = JSON.stringify({ type: 'GET_TREE_RESULT', commandId, success: true, result: { tag } });
+        const size = Math.ceil(json.length / 4);
+        setTimeout(() => h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK_START', streamId: commandId, totalChunks: 4, messageType: 'GET_TREE_RESULT' })), startAt);
+        for (let i = 0; i < 4; i++) {
+          setTimeout(() => {
+            h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK', streamId: commandId, index: i, data: json.slice(i * size, (i + 1) * size) }));
+            if (i === 3) h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK_END', streamId: commandId }));
+          }, startAt + (i + 1) * 400);
+        }
+      };
+
+      // A: 0.4~1.6초에 흐른다. B: A 가 끝난 뒤 2.0초부터 — B 자신의 타임아웃(1.2초)은 이미 지났다.
+      send(ids[0], 'A', 0);
+      send(ids[1], 'B', 2000);
+    });
+
+    const [a, b] = await Promise.all([
+      h.server.command<{ tag: string }>('GET_TREE', {}, { pluginId: h.pluginId, timeoutMs: TIMEOUT }),
+      h.server.command<{ tag: string }>('GET_TREE', {}, { pluginId: h.pluginId, timeoutMs: TIMEOUT }),
+    ]);
+
+    expect(a.tag).toBe('A');
+    expect(b.tag).toBe('B');   // 자기 청크는 타임아웃 한참 뒤에 왔지만 A 의 트래픽이 살려 뒀다
+  }, 30000);
+
   it('청크가 멈추면 원래 타임아웃 그대로 발화한다 — 무한 대기가 되지 않는다', async () => {
     const h = await connect(19855);
 

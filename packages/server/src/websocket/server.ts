@@ -256,6 +256,8 @@ interface PendingCommand {
   fireTimeout?: () => void;
   hardDeadline?: number;
   extensions?: number;
+  /** 「연장이 실제로 살려냈다」 로그를 한 번만 남기기 위한 표시 */
+  loggedRescue?: boolean;
 }
 
 export class FigmaWebSocketServer {
@@ -367,7 +369,7 @@ export class FigmaWebSocketServer {
     const streamId = message.streamId as string | undefined;
     if (message.type === RESPONSE_CHUNK_START) {
       if (!streamId) return true;
-      this.extendPendingWhileStreaming(streamId, plugin);
+      this.extendPendingWhileStreaming(plugin);
       plugin.responseStreams.set(streamId, {
         streamId,
         messageType: message.messageType as string | undefined,
@@ -386,7 +388,7 @@ export class FigmaWebSocketServer {
         console.warn(`[WebSocket] Orphan response chunk from ${plugin.id} (stream: ${streamId})`);
         return true;
       }
-      this.extendPendingWhileStreaming(streamId, plugin);
+      this.extendPendingWhileStreaming(plugin);
       const part = (message.data as string) || '';
       stream.parts.set((message.index as number) || 0, part);
       stream.bytes += Buffer.byteLength(part, 'utf-8');
@@ -435,21 +437,49 @@ export class FigmaWebSocketServer {
    *
    * ⚠️ 이것을 «타임아웃을 늘리는 우회» 로 읽지 말 것. 늘리는 게 아니라 **재는 대상을 바꾼다** —
    * 총 경과가 아니라 침묵 시간이다. 청크가 멈추면 원래 타임아웃 그대로 발화한다.
+   *
+   * ⚠️ **그 스트림 하나가 아니라 그 플러그인의 대기 명령 전부를 연장한다.** 처음엔 해당
+   * `streamId` 만 연장했는데, 실측에서 4개 중 **1개만 살았다**:
+   * ```
+   * 10:01:34.60  GET_TREE ×4 전송           → 각자 60초 타임아웃 = 10:02:34.6
+   * 10:02:32.61  1번 CHUNK_START → 연장 → 생존
+   * 10:02:34.6   2·3·4번 타임아웃 발화       ← 아직 자기 청크 차례가 아니었다
+   * 10:02:40.6~41.0  2·3·4번 응답 도착 — 이미 거절된 뒤
+   * ```
+   * 플러그인은 `sendToServer` 에서 한 스트림의 청크를 통째로 밀어내므로 스트림이 **순차**다.
+   * 즉 «그 명령이 조용하다» 는 그 명령이 막혔다는 증거가 아니라 **형제 뒤에 줄 서 있다**는 뜻이고,
+   * 타임아웃이 실제로 재려는 것은 «플러그인이 살아 있나» 다. 청크가 흐르는 동안 그 플러그인의
+   * 대기 명령은 전부 살아 있다. (명령별 절대 상한 `hardDeadline` 은 각자 그대로 적용된다.)
    */
-  private extendPendingWhileStreaming(streamId: string, plugin: Plugin): void {
-    const pending = this.pendingCommands.get(streamId);
-    if (!pending || !pending.fireTimeout || pending.timeoutMs === undefined) return;
-    if (pending.hardDeadline !== undefined && Date.now() >= pending.hardDeadline) return;
+  private extendPendingWhileStreaming(plugin: Plugin): void {
+    const now = Date.now();
+    for (const pending of this.pendingCommands.values()) {
+      if (pending.pluginId !== plugin.id) continue;
+      if (!pending.fireTimeout || pending.timeoutMs === undefined) continue;
+      if (pending.hardDeadline !== undefined && now >= pending.hardDeadline) continue;
+      this.refreshOne(pending, plugin, now);
+    }
+  }
 
+  private refreshOne(pending: PendingCommand, plugin: Plugin, now: number): void {
+    if (!pending.fireTimeout || pending.timeoutMs === undefined) return;
     clearTimeout(pending.timeout);
     pending.timeout = setTimeout(pending.fireTimeout, pending.timeoutMs);
     pending.extensions = (pending.extensions ?? 0) + 1;
 
-    // 첫 연장만 남긴다 — 청크마다 찍으면 로그가 묻힌다. «느린 게 정상 범위인지» 를 보려면
-    // 연장이 시작됐다는 사실과 그때의 경과가 있으면 된다(총 연장 횟수는 실패 시 오류에 실린다).
-    if (pending.extensions === 1) {
-      const waited = pending.sentAt !== undefined ? Date.now() - pending.sentAt : 0;
-      console.log(`[WebSocket] Response streaming from ${plugin.id}: ${pending.commandType} — 타임아웃 연장 시작 (${waited}ms 경과)`);
+    // ⚠️ **연장이 실제로 살려낸 경우에만** 남긴다 — 「경과 > 원래 타임아웃」.
+    // 연장 자체는 1MB 넘는 모든 응답에서 일상적으로 일어나므로(청크가 흐르면 무조건 걸린다),
+    // 첫 연장마다 찍으면 «이 줄이 떴다» 가 아무것도 뜻하지 않게 된다. 실측에서 정상 호출인
+    // N=1(21초 경과 / 타임아웃 60초)도 이 줄을 찍었다. 022 가 «축이 하나라 안 찍힘» 을
+    // 고친 것의 반대 실패다 — 너무 찍혀서 진짜 신호가 묻히는 쪽.
+    const waited = pending.sentAt !== undefined ? now - pending.sentAt : 0;
+    if (waited > pending.timeoutMs && !pending.loggedRescue) {
+      pending.loggedRescue = true;
+      console.log(
+        `[WebSocket] Response still streaming from ${plugin.id}: ${pending.commandType} — ` +
+        `원래 타임아웃(${pending.timeoutMs}ms)을 넘겼으나 응답이 오는 중이라 기다립니다 ` +
+        `(${waited}ms 경과, 연장 ${pending.extensions}회, 상한 ${pending.hardDeadline !== undefined ? pending.hardDeadline - (pending.sentAt ?? 0) : '?'}ms)`
+      );
     }
   }
 
