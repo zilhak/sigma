@@ -109,6 +109,9 @@ export const managementHandlers: Record<string, (args: Record<string, unknown>, 
       lastCommandType: d.lastCommandType,
       msSinceLastCommand: d.msSinceLastCommand,
       fileName: d.fileName,
+      peakPending: d.peakPending,
+      peakPendingAt: d.peakPendingAt !== undefined ? new Date(d.peakPendingAt).toISOString() : undefined,
+      avgRttMs: d.avgRttMs,
     }));
 
     return jsonResponse({

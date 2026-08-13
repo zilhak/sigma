@@ -13,14 +13,21 @@ const CHUNK_THRESHOLD = 1024 * 1024; // 1MB 이상이면 청킹
 const LARGE_MESSAGE_LOG_THRESHOLD = 1024 * 1024;
 
 /**
- * 이만큼의 명령마다 그 플러그인 인스턴스의 누적 통계를 한 줄 남긴다.
- * 배경: docs/history/020-plugin-vm-aborted-after-a-long-lived-session.md
+ * 인스턴스 누적 통계("궤적")를 남기는 주기. **셋 중 먼저 오는 것**에 발화한다.
+ * 배경: docs/history/020-…(궤적이 필요한 이유) · docs/history/022-…(왜 셋인가)
  *
  * 죽는 순간의 한 줄만으로는 «갑자기 죽었나, 서서히 나빠지다 죽었나» 를 가릴 수 없다.
- * 020 의 사망은 부하 스파이크 없이 3시간·5.5만 명령 뒤에 왔고, 그 궤적(왕복시간이
- * 늘고 있었는지)이 로그에 없어 추정으로 남았다. 이 주기 로그가 그 궤적이다.
+ *
+ * ⚠️ **명령 수 하나로 두면 안 된다.** 처음엔 2000 명령마다로만 뒀는데, 020 의
+ * 5.5만 명령 마라톤을 기준으로 잡은 값이라 2026-08-13 사망(**1,270 명령 만에** 죽음)
+ * 에서는 **한 줄도 찍히지 않았다.** 그 인스턴스는 명령은 적었지만 10분 동안 576MB 를
+ * 받아냈다 — 즉 부하의 축이 «횟수» 가 아니라 «양» 인 경우가 실재한다.
+ * 시간 조건은 둘 다 느린 경우의 바닥이다(명령이 아예 없으면 발화하지 않는다 —
+ * 이 판정은 명령을 보낼 때만 돌기 때문이다. 놀고 있는 플러그인은 로그를 만들지 않는다).
  */
-const LIFETIME_LOG_EVERY = 2000;
+const LIFETIME_LOG_EVERY_COMMANDS = 2000;
+const LIFETIME_LOG_EVERY_BYTES = 100 * 1024 * 1024;
+const LIFETIME_LOG_EVERY_MS = 5 * 60 * 1000;
 
 /** 사후 진단용으로 들고 있는 최근 종료 기록 수 (메모리 유계). */
 const DISCONNECT_HISTORY = 8;
@@ -90,11 +97,36 @@ interface PluginStats {
   bytesIn: number;
   rttTotalMs: number;
   rttCount: number;
-  /** 직전 LIFETIME_LOG_EVERY 구간의 왕복시간 (구간마다 초기화 — 궤적을 보려면 누적 평균으로는 안 된다) */
+  /** 직전 궤적 구간의 왕복시간 (구간마다 초기화 — 궤적을 보려면 누적 평균으로는 안 된다) */
   windowRttMs: number;
   windowRttCount: number;
   lastCommandType?: string;
   lastCommandAt?: number;
+  /** 궤적 로그 발화 판정용 기준점 (셋 중 먼저 오는 것) */
+  lastLifetimeLogAt: number;
+  lastLifetimeLogCommands: number;
+  lastLifetimeLogBytes: number;
+  /**
+   * 동시에 처리 중이던 명령의 **최고치**. 022 사망의 사인에 가장 가까운 숫자가
+   * `pending: 6` 이었는데, 그건 죽는 순간의 값이라 «언제 어디까지 갔나» 를 알 수 없었다.
+   */
+  peakPending: number;
+  peakPendingAt?: number;
+}
+
+/**
+ * 궤적 로그를 지금 남겨야 하는가. 순수 함수라 유닛테스트가 가능하다.
+ * 배경: docs/history/022-lifetime-log-never-fired-and-peak-was-invisible.md
+ */
+export function shouldLogLifetime(
+  s: Pick<PluginStats, 'commands' | 'bytesIn' | 'lastLifetimeLogAt' | 'lastLifetimeLogCommands' | 'lastLifetimeLogBytes'>,
+  now: number,
+): boolean {
+  return (
+    s.commands - s.lastLifetimeLogCommands >= LIFETIME_LOG_EVERY_COMMANDS ||
+    s.bytesIn - s.lastLifetimeLogBytes >= LIFETIME_LOG_EVERY_BYTES ||
+    now - s.lastLifetimeLogAt >= LIFETIME_LOG_EVERY_MS
+  );
 }
 
 /**
@@ -154,6 +186,11 @@ export interface PluginDisconnectRecord {
   /** 마지막 명령을 보내고 끊기기까지 (ms). 짧을수록 «그 명령을 처리하다 죽었다» 에 가깝다. */
   msSinceLastCommand?: number;
   fileName?: string;
+  /** 살아 있는 동안의 동시 처리 최고치와 그 시각 — 022 */
+  peakPending: number;
+  peakPendingAt?: number;
+  /** 평균 왕복시간 (ms). 정상 40ms 대가 1000ms 를 넘었다면 그 자체가 신호다. */
+  avgRttMs: number;
 }
 
 /**
@@ -244,6 +281,10 @@ export class FigmaWebSocketServer {
         rttCount: 0,
         windowRttMs: 0,
         windowRttCount: 0,
+        lastLifetimeLogAt: Date.now(),
+        lastLifetimeLogCommands: 0,
+        lastLifetimeLogBytes: 0,
+        peakPending: 0,
       },
       responseStreams: new Map(),
     };
@@ -398,6 +439,9 @@ export class FigmaWebSocketServer {
       lastCommandType: s.lastCommandType,
       msSinceLastCommand: s.lastCommandAt !== undefined ? now - s.lastCommandAt : undefined,
       fileName: plugin.fileInfo?.fileName,
+      peakPending: s.peakPending,
+      peakPendingAt: s.peakPendingAt,
+      avgRttMs: this.avgRtt(s),
     };
     this.disconnects.unshift(record);
     if (this.disconnects.length > DISCONNECT_HISTORY) this.disconnects.length = DISCONNECT_HISTORY;
@@ -407,9 +451,12 @@ export class FigmaWebSocketServer {
       ? `, last: ${record.lastCommandType} ${record.msSinceLastCommand}ms ago`
       : '';
     const pending = this.countPendingFor(plugin.id);
+    // 최고치는 «언제» 가 함께 있어야 쓸모가 있다 — 죽기 직전에 찍힌 피크와 30분 전 피크는
+    // 전혀 다른 이야기다 (022).
+    const peakAgo = record.peakPendingAt !== undefined ? `, peak: ${s.peakPending} (${Math.round((now - record.peakPendingAt) / 1000)}s ago)` : '';
     console.log(
       `[WebSocket] Plugin disconnected (id: ${plugin.id}, code: ${code}${why}, lived: ${record.livedSec}s, ` +
-      `commands: ${s.commands}, in: ${(s.bytesIn / 1024 / 1024).toFixed(1)}MB, avg rtt: ${this.avgRtt(s)}ms${last}, pending: ${pending})`
+      `commands: ${s.commands}, in: ${(s.bytesIn / 1024 / 1024).toFixed(1)}MB, avg rtt: ${this.avgRtt(s)}ms${last}, pending: ${pending}${peakAgo})`
     );
     if (s.byType.size > 0) {
       const top = [...s.byType.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
@@ -679,15 +726,26 @@ export class FigmaWebSocketServer {
     s.lastCommandType = commandType;
     s.lastCommandAt = sentAt;
 
-    if (s.commands % LIFETIME_LOG_EVERY !== 0) return;
+    // 이 명령은 아직 pendingCommands 에 들어가기 전이므로 +1 한다 (호출 순서에 의존한다).
+    const inFlight = this.countPendingFor(plugin.id) + 1;
+    if (inFlight > s.peakPending) {
+      s.peakPending = inFlight;
+      s.peakPendingAt = sentAt;
+    }
+
+    if (!shouldLogLifetime(s, sentAt)) return;
     const livedSec = Math.round((sentAt - plugin.connectedAt.getTime()) / 1000);
     const windowRtt = s.windowRttCount > 0 ? Math.round(s.windowRttMs / s.windowRttCount) : 0;
     console.log(
       `[WebSocket] Plugin lifetime (id: ${plugin.id}, commands: ${s.commands}, lived: ${livedSec}s, ` +
-      `in: ${(s.bytesIn / 1024 / 1024).toFixed(1)}MB, avg rtt: ${this.avgRtt(s)}ms, recent rtt: ${windowRtt}ms)`
+      `in: ${(s.bytesIn / 1024 / 1024).toFixed(1)}MB, avg rtt: ${this.avgRtt(s)}ms, recent rtt: ${windowRtt}ms, ` +
+      `in-flight: ${inFlight}, peak: ${s.peakPending})`
     );
     s.windowRttMs = 0;
     s.windowRttCount = 0;
+    s.lastLifetimeLogAt = sentAt;
+    s.lastLifetimeLogCommands = s.commands;
+    s.lastLifetimeLogBytes = s.bytesIn;
   }
 
   /**

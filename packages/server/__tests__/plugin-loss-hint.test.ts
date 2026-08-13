@@ -17,6 +17,8 @@ function record(over: Partial<PluginDisconnectRecord> = {}): PluginDisconnectRec
     bytesIn: 812 * 1024 * 1024,
     lastCommandType: 'GET_TREE',
     msSinceLastCommand: 16,
+    peakPending: 6,
+    avgRttMs: 1244,
     ...over,
   };
 }
