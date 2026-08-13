@@ -52,6 +52,20 @@ const RESPONSE_CHUNK_END = 'RESPONSE_CHUNK_END';
  */
 const RESPONSE_ASSEMBLY_LIMIT = 256 * 1024 * 1024;
 
+/**
+ * 응답이 **오는 중이면** 타임아웃을 청크마다 다시 건다. 상한은 원래 타임아웃의 이 배수.
+ * 배경: docs/history/023-read-concurrency-did-not-reproduce-the-death.md
+ *
+ * 타임아웃은 «총 경과» 가 아니라 «침묵 시간» 을 재야 한다. 실측(2026-08-13):
+ * 전수 트리 4개 동시 → 순회는 예산(55초)에 맞춰 멈추고 `timedOut` 부분 결과를 만들었는데,
+ * **직렬화+청킹+전송에 80초가 더** 걸렸다. CHUNK_START 는 07:53:14.54 에 왔고 서버는
+ * 07:53:16.46 에 포기했다 — **청크가 흐르기 시작한 1.9초 뒤에 죽인 것이다.**
+ * 그래서 호출자는 015 가 만들어 준 «부분 결과» 를 받지 못하고 아무것도 못 받았다.
+ *
+ * ⚠️ 무한 연장은 안 된다. 진짜로 못 끝내는 요청이 영원히 매달린다 — 그래서 절대 상한을 둔다.
+ */
+const STREAM_TIMEOUT_MAX_FACTOR = 5;
+
 interface ResponseStream {
   streamId: string;
   messageType?: string;
@@ -236,6 +250,12 @@ interface PendingCommand {
   /** 왕복시간 집계용 (020). 없으면 집계만 건너뛴다. */
   pluginId?: string;
   sentAt?: number;
+  /** 아래 넷은 «오는 중이면 기다린다» 연장용 (023). 없으면 연장하지 않는다. */
+  commandType?: string;
+  timeoutMs?: number;
+  fireTimeout?: () => void;
+  hardDeadline?: number;
+  extensions?: number;
 }
 
 export class FigmaWebSocketServer {
@@ -347,6 +367,7 @@ export class FigmaWebSocketServer {
     const streamId = message.streamId as string | undefined;
     if (message.type === RESPONSE_CHUNK_START) {
       if (!streamId) return true;
+      this.extendPendingWhileStreaming(streamId, plugin);
       plugin.responseStreams.set(streamId, {
         streamId,
         messageType: message.messageType as string | undefined,
@@ -365,6 +386,7 @@ export class FigmaWebSocketServer {
         console.warn(`[WebSocket] Orphan response chunk from ${plugin.id} (stream: ${streamId})`);
         return true;
       }
+      this.extendPendingWhileStreaming(streamId, plugin);
       const part = (message.data as string) || '';
       stream.parts.set((message.index as number) || 0, part);
       stream.bytes += Buffer.byteLength(part, 'utf-8');
@@ -406,6 +428,29 @@ export class FigmaWebSocketServer {
     }
 
     return false;
+  }
+
+  /**
+   * 응답이 오는 중이라는 증거(청크)를 받았으니 타임아웃을 다시 건다 — 023.
+   *
+   * ⚠️ 이것을 «타임아웃을 늘리는 우회» 로 읽지 말 것. 늘리는 게 아니라 **재는 대상을 바꾼다** —
+   * 총 경과가 아니라 침묵 시간이다. 청크가 멈추면 원래 타임아웃 그대로 발화한다.
+   */
+  private extendPendingWhileStreaming(streamId: string, plugin: Plugin): void {
+    const pending = this.pendingCommands.get(streamId);
+    if (!pending || !pending.fireTimeout || pending.timeoutMs === undefined) return;
+    if (pending.hardDeadline !== undefined && Date.now() >= pending.hardDeadline) return;
+
+    clearTimeout(pending.timeout);
+    pending.timeout = setTimeout(pending.fireTimeout, pending.timeoutMs);
+    pending.extensions = (pending.extensions ?? 0) + 1;
+
+    // 첫 연장만 남긴다 — 청크마다 찍으면 로그가 묻힌다. «느린 게 정상 범위인지» 를 보려면
+    // 연장이 시작됐다는 사실과 그때의 경과가 있으면 된다(총 연장 횟수는 실패 시 오류에 실린다).
+    if (pending.extensions === 1) {
+      const waited = pending.sentAt !== undefined ? Date.now() - pending.sentAt : 0;
+      console.log(`[WebSocket] Response streaming from ${plugin.id}: ${pending.commandType} — 타임아웃 연장 시작 (${waited}ms 경과)`);
+    }
   }
 
   /** streamId 는 commandId 와 같으므로(응답 청킹) 그대로 pending 을 깨울 수 있다 — 021 */
@@ -658,25 +703,33 @@ export class FigmaWebSocketServer {
     this.countCommand(targetPlugin, commandType, sentAt);
 
     return new Promise<T>((resolve, reject) => {
-      const timeout = setTimeout(() => {
+      const fireTimeout = () => {
+        const pending = this.pendingCommands.get(commandId);
         this.pendingCommands.delete(commandId);
         // 타임아웃 시점의 플러그인 생사는 진단에 결정적이다 — 012 는 «느리다» 로 보고된 것이
         // 사실 «이미 죽었다» 였고, 그 착각이 처방을 통째로 틀리게 했다.
         const alive = this.getPluginById(targetPlugin.id) !== null;
+        const waited = Date.now() - sentAt;
+        const streamed = pending && pending.extensions ? ` — 응답이 ${pending.extensions}회 연장되도록 오는 중이었으나 상한(${STREAM_TIMEOUT_MAX_FACTOR}배)을 넘겼습니다. 범위를 좁혀(nodeId 스코프·limit·fields) 다시 호출하세요.` : '';
         reject(new Error(
           alive
-            ? `Figma Plugin 응답 시간 초과 (${commandType}, ${timeoutMs}ms)`
-            : `Figma Plugin 응답 시간 초과 (${commandType}, ${timeoutMs}ms) — 기다리는 동안 플러그인 연결이 끊겼습니다. ${this.describePluginLoss(targetPlugin.id)}`
+            ? `Figma Plugin 응답 시간 초과 (${commandType}, ${waited}ms 대기)${streamed}`
+            : `Figma Plugin 응답 시간 초과 (${commandType}, ${waited}ms 대기) — 기다리는 동안 플러그인 연결이 끊겼습니다. ${this.describePluginLoss(targetPlugin.id)}`
         ));
-      }, timeoutMs);
+      };
 
       this.pendingCommands.set(commandId, {
         id: commandId,
         resolve: resolve as (result: unknown) => void,
         reject,
-        timeout,
+        timeout: setTimeout(fireTimeout, timeoutMs),
         pluginId: targetPlugin.id,
         sentAt,
+        commandType,
+        timeoutMs,
+        fireTimeout,
+        hardDeadline: sentAt + timeoutMs * STREAM_TIMEOUT_MAX_FACTOR,
+        extensions: 0,
       });
 
       // payload에서 예약 필드(type, commandId) 제거 — 덮어쓰기 방지

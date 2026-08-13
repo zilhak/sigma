@@ -104,6 +104,58 @@ describe('플러그인 → 서버 응답 청킹', () => {
     await pending;
   }, 30000);
 
+  // 배경: docs/history/023-read-concurrency-did-not-reproduce-the-death.md
+  // 실측에서 CHUNK_START 1.9초 뒤에 타임아웃이 터져, 015 가 만들어 준 «부분 결과» 를
+  // 호출자가 통째로 못 받았다. 타임아웃은 총 경과가 아니라 «침묵 시간» 을 재야 한다.
+  it('청크가 흐르는 동안은 타임아웃이 재설정된다 — 총 경과가 타임아웃을 넘겨도 완주한다', async () => {
+    const h = await connect(19854);
+
+    const CHUNKS = 6;
+    const GAP = 700;          // 청크 간격
+    const TIMEOUT = 1500;     // 총 전송(≈4.2초)보다 훨씬 짧다
+
+    h.client.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type !== 'GET_TREE') return;
+      const json = JSON.stringify({ type: 'GET_TREE_RESULT', commandId: msg.commandId, success: true, result: { n: 'y'.repeat(600) } });
+      const size = Math.ceil(json.length / CHUNKS);
+      h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK_START', streamId: msg.commandId, totalChunks: CHUNKS, messageType: 'GET_TREE_RESULT' }));
+      for (let i = 0; i < CHUNKS; i++) {
+        setTimeout(() => {
+          h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK', streamId: msg.commandId, index: i, data: json.slice(i * size, (i + 1) * size) }));
+          if (i === CHUNKS - 1) h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK_END', streamId: msg.commandId }));
+        }, (i + 1) * GAP);
+      }
+    });
+
+    const t0 = Date.now();
+    const result = await h.server.command<{ n: string }>('GET_TREE', {}, { pluginId: h.pluginId, timeoutMs: TIMEOUT });
+    const elapsed = Date.now() - t0;
+
+    expect(result.n.length).toBe(600);
+    expect(elapsed).toBeGreaterThan(TIMEOUT);   // 총 경과가 타임아웃을 넘겼는데도 성공했다
+  }, 30000);
+
+  it('청크가 멈추면 원래 타임아웃 그대로 발화한다 — 무한 대기가 되지 않는다', async () => {
+    const h = await connect(19855);
+
+    h.client.on('message', (raw) => {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type !== 'GET_TREE') return;
+      // START 와 청크 하나만 보내고 침묵한다
+      h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK_START', streamId: msg.commandId, totalChunks: 3, messageType: 'GET_TREE_RESULT' }));
+      h.client.send(JSON.stringify({ type: 'RESPONSE_CHUNK', streamId: msg.commandId, index: 0, data: '{"a"' }));
+    });
+
+    const t0 = Date.now();
+    const err = await h.server.command('GET_TREE', {}, { pluginId: h.pluginId, timeoutMs: 1500 }).catch((e: Error) => e);
+    const elapsed = Date.now() - t0;
+
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('시간 초과');
+    expect(elapsed).toBeLessThan(5000);   // 연장은 침묵과 함께 끝난다
+  }, 30000);
+
   it('청크가 누락되면 조용히 기다리지 않고 즉시 에러로 끝난다', async () => {
     const h = await connect(19853);
 
