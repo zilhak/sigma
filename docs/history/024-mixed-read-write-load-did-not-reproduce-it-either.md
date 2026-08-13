@@ -114,9 +114,15 @@ Response still streaming: GET_TREE — 원래 타임아웃(60000ms)을 넘겼으
 - 실험 설계 교훈: **갓 붙은 플러그인으로 측정하지 말 것.** 대상 페이지를 한 번 완주시켜
   워밍업한 뒤에 재야 한다. 이걸 몰라서 1.74 재검증 1회분을 버렸다.
 
-## 실험장에 대해
+## 실험장에 대해 — **그대로 둔다**
 
-Playground 파일 `Page 1` 에 `LoadTest-0`~`LoadTest-7` 프레임 8개(총 13,355 노드)를 만들었다.
-`.claude-workspace/plugin-budget/build-playground.ts` 로 언제든 다시 만들 수 있고,
-`mixed-load.ts` 가 022 분포로 부하를 건다. **둘 다 Playground 파일에만 바인딩하도록 되어 있다** —
-쓰기가 섞이므로 대상 파일을 잘못 잡으면 남의 작업을 망친다.
+Playground 파일 `Page 1` 에 `LoadTest-0`~`LoadTest-7` 프레임 8개(총 13,355 노드)가 있다.
+이 실험이 만든 것이고, **사용자 확인 하에 상설 실험장으로 남겨 둔 것이다**(2026-08-13).
+지우지 말 것 — 「남은 것」의 **장시간 방치 재현**이 이 규모의 페이지를 그대로 필요로 한다.
+
+- Playground 는 실험 전용 파일이다. 여기서는 마음대로 만들고 고쳐도 된다.
+- `.claude-workspace/plugin-budget/build-playground.ts` 로 언제든 다시 만들 수 있고,
+  `mixed-load.ts` 가 022 분포로 부하를 건다.
+- ⚠️ **둘 다 Playground 파일에만 바인딩하도록 되어 있다** — 쓰기가 섞이므로 대상 파일을
+  잘못 잡으면 남의 작업을 망친다. 파일 선택 로직(`fileName.includes('Playground')`)을
+  느슨하게 바꾸지 말 것.
